@@ -331,7 +331,10 @@ class TestServisi:
                     dusunme="dengeli",
                     max_tokens=400,
                 )
-                return {"basarili": bool(re.search(r"36\s*/\s*7|5[.,]14", c)), "cevap": c[-120:]}
+                return {
+                    "basarili": bool(re.search(r"36\s*/\s*7|\\frac\{36\}\{7\}|5[.,]14", c)),
+                    "cevap": c[-120:],
+                }
 
             async def arac() -> dict:
                 cagrilar: list[str] = []
