@@ -6,12 +6,12 @@ from pathlib import Path
 
 from pydantic import BaseModel, Field, field_validator
 
+from app.config import varsayilan_llm_dizini
 from app.services.depo import json_oku, json_yaz
 from app.services.yerel_llm import (
     DUSUNME_SEVIYELERI,
     MODELLER,
     VARSAYILAN_ADRES,
-    VARSAYILAN_DIZIN,
     VARSAYILAN_MODEL,
 )
 
@@ -19,7 +19,7 @@ from app.services.yerel_llm import (
 class KullaniciAyarlari(BaseModel):
     model: str = VARSAYILAN_MODEL
     dusunme: str = "kapali"
-    llm_dizin: str = str(VARSAYILAN_DIZIN)
+    llm_dizin: str = Field(default_factory=lambda: str(varsayilan_llm_dizini()))
     adres: str = VARSAYILAN_ADRES
     otomatik_baslat: bool = True
     sistem_istemi: str = Field(default="", max_length=4000)

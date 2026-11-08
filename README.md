@@ -30,21 +30,29 @@ listesi, ortada sohbet ve altta mesaj kutusu olan bir masaüstü sohbet uygulama
   gerekir. Oyun/tarayıcı açıkken resim işleme "bellek yetmedi" hatası verebilir.
 
 ## Çalıştırma
+**Portable (önerilen):** `Baslat.bat` ya da `YerelAIStudio.exe`. Kurulum ve yönetici izni gerekmez;
+klasör istenen yere kopyalanır. Ayarlar, sohbetler ve ekler klasörün içindeki `data\` altında durur;
+registry, AppData ya da başlangıç girdisi yazılmaz. Kaldırmak için klasörü silmek yeterli.
+
+Model klasörü şu sırayla aranır: `YEREL_LLM_DIZIN` ortam değişkeni, uygulama klasörünün içindeki ya
+da yanındaki `llm`, kullanıcı klasöründeki `Projects\llm`. Bulunamazsa Ayarlar > Model klasörü.
+
+**Kaynaktan:**
 ```bat
 pip install -r requirements.txt
-baslat.bat              :: pencere
-python -m app --tarayici  :: varsayılan tarayıcıda
+baslat.bat                 :: pencere
+python -m app --tarayici   :: varsayılan tarayıcıda
 python -m app --version
 ```
-Veri (sohbetler, ekler, ayarlar): kaynaktan çalışırken `data\`, kurulu exe'de
-`%LOCALAPPDATA%\YerelAIStudio\`. `YAS_VERI_DIZINI` ortam değişkeniyle değiştirilebilir.
+Kaynaktan çalışırken veri `data\` (proje kökü). `YAS_VERI_DIZINI` ortam değişkeniyle değiştirilebilir.
+Yalnız Windows'ta çalışır (llama-server.exe ve WebView2 Windows'a özel).
 
 ## Geliştirme
 ```bat
 pip install -r requirements-dev.txt
 ruff format . && ruff check .
 pytest --cov
-paketleme\derle.bat     :: temiz venv'de PyInstaller -> dist\YerelAIStudio\YerelAIStudio.exe
+paketleme\derle.bat     :: temiz venv'de PyInstaller -> dist\YerelAIStudio\ (portable klasör)
 ```
 Model istemcisi `app/services/yerel_llm.py`, brain skill'i `yerel-llm-deepseek`'in kopyasıdır.
 

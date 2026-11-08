@@ -1,0 +1,16 @@
+Yerel AI Studio - portable
+==========================
+Urun sahibi: Umut Celik  |  X: https://x.com/umutc6230  |  GitHub: https://github.com/umutc6230
+
+Calistirma: Baslat.bat (ya da YerelAIStudio.exe). Kurulum ve yonetici izni gerekmez.
+Klasoru istediginiz yere kopyalayabilirsiniz; ayarlar, sohbetler ve ekler data\ klasorunde durur.
+Kaldirmak icin klasoru silmeniz yeterli (registry, AppData, baslangic girdisi yazilmaz).
+
+Gereksinimler
+- Windows 10/11 (Microsoft Edge WebView2; Windows 11'de hazir gelir).
+- Yerel model klasoru: llama.cpp\llama-server.exe + models\*.gguf (yaklasik 6-8 GB).
+  Uygulama sirayla su klasorlere bakar: YEREL_LLM_DIZIN ortam degiskeni, bu klasorun icindeki
+  ya da yanindaki "llm", kullanici klasorundeki Projects\llm. Bulamazsa Ayarlar > Model klasoru.
+- Modelin boyutundan 1-2 GB fazla bos RAM (dahili ekran kartinda model RAM'i kullanir).
+
+Yalniz Windows'ta calisir (llama-server.exe ve WebView2 Windows'a ozeldir).

@@ -153,15 +153,32 @@ def test_sistem_bellek_ve_dosyalar(tmp_path, monkeypatch):
     assert sistem.llama_server_durdur() is False
 
 
-def test_config_veri_dizini(tmp_path, monkeypatch):
+def test_config_veri_dizini_portable(tmp_path, monkeypatch):
     hedef = tmp_path / "ozel"
     assert config.veri_dizini(config.OrtamAyarlari(veri_dizini=hedef)) == hedef and hedef.exists()
+    exe = tmp_path / "Portable" / "YerelAIStudio.exe"
+    exe.parent.mkdir()
     monkeypatch.setattr(config.sys, "frozen", True, raising=False)
-    monkeypatch.setenv("LOCALAPPDATA", str(tmp_path))
-    assert config.veri_dizini(config.OrtamAyarlari()) == tmp_path / "YerelAIStudio"
+    monkeypatch.setattr(config.sys, "executable", str(exe))
+    assert config.veri_dizini(config.OrtamAyarlari()) == exe.parent / "data"  # AppData degil
     monkeypatch.delattr(config.sys, "frozen")
-    assert config.veri_dizini(config.OrtamAyarlari()).name == "data"
+    assert config.veri_dizini(config.OrtamAyarlari()) == config.PROJE_KOKU / "data"
     assert (config.web_dizini() / "index.html").exists()
+
+
+def test_varsayilan_llm_dizini_aday_sirasi(tmp_path, monkeypatch):
+    monkeypatch.setenv("YEREL_LLM_DIZIN", str(tmp_path / "env"))
+    assert config.varsayilan_llm_dizini() == tmp_path / "env"
+    monkeypatch.delenv("YEREL_LLM_DIZIN")
+    kok = tmp_path / "Portable" / "YerelAIStudio"
+    kok.mkdir(parents=True)
+    monkeypatch.setattr(config, "uygulama_klasoru", lambda: kok)
+    monkeypatch.setattr(config.Path, "home", classmethod(lambda cls: tmp_path / "ev"))
+    assert config.varsayilan_llm_dizini() == tmp_path / "ev" / "Projects" / "llm"  # hicbiri yok
+    yan = kok.parent / "llm" / "llama.cpp"
+    yan.mkdir(parents=True)
+    (yan / "llama-server.exe").write_bytes(b"")
+    assert config.varsayilan_llm_dizini() == kok.parent / "llm"
 
 
 def test_main_argumanlar_ve_pencere(capsys):
