@@ -130,7 +130,7 @@ async def test_gecmis_mesajlari_ekler_ve_butce(tmp_path):
     # metin bile sigmazsa daha eski mesajlar hic gitmez
     g, dusen = await gecmis_mesajlari(llm, depo, mesajlar, 5, lambda o: None)
     assert len(g) == 1 and "n.txt (baglama sigmadi" in g[0]["content"]  # ekler etiketli
-    assert dusen == ["n.txt", "k.wav"]
+    assert dusen == ["r.png", "n.txt", "k.wav"]  # hic gidemeyen eski mesajin eki de
 
 
 def _png(gen: int, yuk: int) -> bytes:

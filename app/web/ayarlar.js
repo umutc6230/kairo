@@ -56,6 +56,8 @@ export function ayarlarAc(sekme = "ai") {
       <div class="ayar-grup"><label>Sunucu adresi</label><input class="alan" id="ay-adres" value="${kacir(a.adres)}"></div>
       <div class="anahtar-satir"><div><div>Otomatik başlat</div><div class="ayar-not">Model kapalıysa ilk mesajda arka planda açılır; uygulama kapanınca kapanır.</div></div>
         <label class="anahtar"><input type="checkbox" id="ay-oto" ${a.otomatik_baslat ? "checked" : ""}><span></span></label></div>
+      <div class="anahtar-satir"><div><div>Sohbette araçlar</div><div class="ayar-not">Model gerektiğinde bu bilgisayardaki dosya ve klasörleri <b>yalnız okuyabilir</b> (listeleme, okuma, arama), hesap yapabilir, saati öğrenebilir. Silme/yazma aracı yoktur; .env, ssh anahtarı, parola dosyaları okunmaz.</div></div>
+        <label class="anahtar"><input type="checkbox" id="ay-araclar" ${a.sohbet_araclari ? "checked" : ""}><span></span></label></div>
       <div class="ayar-grup"><label>Sistem istemi (isteğe bağlı)</label><textarea class="alan" id="ay-sistem" rows="3" placeholder="Örn: Her zaman Türkçe ve kısa cevap ver.">${kacir(a.sistem_istemi)}</textarea></div>
       <div class="satir"><div class="ayar-grup" style="flex:1"><label>Sıcaklık (${a.sicaklik})</label><input type="range" id="ay-sicaklik" min="0" max="1.5" step="0.1" value="${a.sicaklik}"></div>
         <div class="ayar-grup" style="flex:1"><label>En fazla cevap token</label><input class="alan" id="ay-max" type="number" min="16" max="8192" value="${a.max_tokens}"></div></div>
@@ -105,6 +107,7 @@ export function ayarlarAc(sekme = "ai") {
   alanKaydet("#ay-dizin", "llm_dizin");
   alanKaydet("#ay-adres", "adres");
   alanKaydet("#ay-oto", "otomatik_baslat");
+  alanKaydet("#ay-araclar", "sohbet_araclari");
   alanKaydet("#ay-sistem", "sistem_istemi");
   alanKaydet("#ay-sicaklik", "sicaklik", Number);
   alanKaydet("#ay-max", "max_tokens", Number);

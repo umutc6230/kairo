@@ -22,6 +22,7 @@ class KullaniciAyarlari(BaseModel):
     llm_dizin: str = Field(default_factory=lambda: str(varsayilan_llm_dizini()))
     adres: str = VARSAYILAN_ADRES
     otomatik_baslat: bool = True
+    sohbet_araclari: bool = True  # salt okunur dosya araclari + hesap/saat
     sistem_istemi: str = Field(default="", max_length=4000)
     sicaklik: float = Field(default=0.2, ge=0.0, le=2.0)
     max_tokens: int = Field(default=1024, ge=16, le=8192)

@@ -313,3 +313,17 @@ pre.duz { white-space: pre-wrap; font-family: var(--mono); font-size: 13px; marg
 .bildirim.basari svg { color: var(--yesil); }
 .resim-buyuk { max-width: 90vw; max-height: 86vh; border-radius: 10px; }
 .hakkinda-logo svg { width: 64px; height: 48px; }
+
+/* arac adimlari (dusunce ile cevap arasinda) */
+.arac-adimlari { display: flex; flex-direction: column; gap: 4px; margin-bottom: 10px; }
+.arac-adimlari:empty { display: none; }
+.arac-baslik { display: inline-flex; align-items: center; gap: 8px; padding: 5px 10px 5px 8px; border-radius: 9px; background: var(--yuzey); border: 1px solid var(--cizgi); font-size: 13.5px; color: var(--soluk); max-width: 100%; }
+.arac-baslik:hover { color: var(--metin); }
+.arac-baslik svg { width: 15px; height: 15px; color: var(--turuncu); flex-shrink: 0; }
+.arac-baslik code { font: 13px var(--mono); color: var(--metin); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 460px; }
+.arac-baslik .ozet { white-space: nowrap; }
+.arac-baslik .ozet.hata { color: var(--kirmizi); }
+.arac-baslik .ok svg { width: 13px; height: 13px; color: var(--soluk); transition: transform .15s; }
+.arac-adim.acik .arac-baslik .ok svg { transform: rotate(90deg); }
+.arac-sonuc { display: none; margin: 6px 0 4px; max-height: 280px; }
+.arac-adim.acik .arac-sonuc { display: block; }

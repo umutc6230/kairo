@@ -863,3 +863,91 @@ async def test_zamanlama_sohbet_ve_akista_saklanir():
     llm = istemci(lambda r: httpx.Response(200, text=sse))
     _ = [p async for p in llm.akis([])]
     assert llm.son_zamanlama == {"predicted_n": 3}
+
+
+async def test_akis_olaylari_parcali_arac_cagrisi_birlestirilir():
+    parcalar = [
+        {"choices": [{"delta": {"reasoning_content": "Masaustune bakmaliyim."}}]},
+        {
+            "choices": [
+                {
+                    "delta": {
+                        "tool_calls": [
+                            {
+                                "index": 0,
+                                "id": "c1",
+                                "function": {"name": "klasor_", "arguments": '{"yol": '},
+                            }
+                        ]
+                    }
+                }
+            ]
+        },
+        {
+            "choices": [
+                {
+                    "delta": {
+                        "tool_calls": [
+                            {
+                                "index": 0,
+                                "function": {"name": "listele", "arguments": '"masaustu"}'},
+                            }
+                        ]
+                    }
+                }
+            ]
+        },
+        {
+            "choices": [
+                {
+                    "delta": {
+                        "tool_calls": [
+                            {"index": 1, "function": {"name": "saat_kac", "arguments": "{}"}}
+                        ]
+                    }
+                }
+            ]
+        },
+        {"choices": [{"delta": {}, "finish_reason": "tool_calls"}], "timings": {"predicted_n": 9}},
+    ]
+    sse = "".join(f"data: {json.dumps(p)}\n\n" for p in parcalar) + "data: [DONE]\n\n"
+    gorulen = {}
+
+    def isle(r):
+        gorulen.update(json.loads(r.content))
+        return httpx.Response(200, text=sse)
+
+    llm = istemci(isle)
+    olaylar = [o async for o in llm.akis_olaylari([], tools=[{"x": 1}])]
+    assert olaylar[0] == {"tur": "dusunce", "metin": "Masaustune bakmaliyim."}
+    cagrilar = olaylar[-1]["cagrilar"]
+    assert [c["function"]["name"] for c in cagrilar] == ["klasor_listele", "saat_kac"]
+    assert json.loads(cagrilar[0]["function"]["arguments"]) == {"yol": "masaustu"}
+    assert cagrilar[0]["id"] == "c1" and cagrilar[1]["id"] == "cagri_1"
+    assert gorulen["tools"] == [{"x": 1}] and gorulen["stream"] is True
+    assert llm.son_zamanlama == {"predicted_n": 9}
+
+
+async def test_akis_olaylari_aracsiz_metin_ve_hatalar():
+    sse = 'data: {"choices":[{"delta":{"content":"Merhaba"}}]}\n\ndata: [DONE]\n\n'
+    olaylar = [o async for o in istemci(lambda r: httpx.Response(200, text=sse)).akis_olaylari([])]
+    assert olaylar == [{"tur": "parca", "metin": "Merhaba"}]
+    kes = 'data: {"choices":[{"delta":{"content":"ya"},"finish_reason":"length"}]}\n\n'
+    with pytest.raises(ModelCevapHatasi, match="token sinirina"):
+        _ = [o async for o in istemci(lambda r: httpx.Response(200, text=kes)).akis_olaylari([])]
+    with pytest.raises(GoruntuDesteklenmiyor):
+        _ = [
+            o async for o in istemci(lambda r: httpx.Response(400, text="mmproj")).akis_olaylari([])
+        ]
+
+    def kapali(r):
+        raise httpx.ConnectError("yok", request=r)
+
+    with pytest.raises(SunucuKapali):
+        _ = [o async for o in istemci(kapali).akis_olaylari([])]
+
+    def yavas(r):
+        raise httpx.ReadTimeout("yavas", request=r)
+
+    with pytest.raises(ModelCevapHatasi, match="zamaninda"):
+        _ = [o async for o in istemci(yavas).akis_olaylari([])]

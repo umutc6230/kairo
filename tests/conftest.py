@@ -53,7 +53,7 @@ class SahteSunucu:
             return httpx.Response(self.hata[0], text=self.hata[1])
         icerik, cagrilar = self._cevap(govde)
         if govde.get("stream"):
-            return httpx.Response(200, text=self._sse(icerik))
+            return httpx.Response(200, text=self._sse(icerik, cagrilar))
         mesaj: dict = {"role": "assistant", "content": icerik}
         if cagrilar:
             mesaj["tool_calls"] = cagrilar
@@ -63,11 +63,19 @@ class SahteSunucu:
             json={"choices": [{"message": mesaj, "finish_reason": bitis}], "timings": ZAMANLAMA},
         )
 
-    def _sse(self, icerik: str) -> str:
+    def _sse(self, icerik: str, cagrilar: list | None = None) -> str:
         parcalar = []
         if self.dusunce:
             parcalar.append({"choices": [{"delta": {"reasoning_content": self.dusunce}}]})
-        for kelime in icerik.split(" "):
+        for i, c in enumerate(cagrilar or []):  # arac cagrisi iki parcada akar
+            yarim = len(c["function"]["arguments"]) // 2
+            ilk = {"name": c["function"]["name"], "arguments": c["function"]["arguments"][:yarim]}
+            parcalar.append({"choices": [{"delta": {"tool_calls": [
+                {"index": i, "id": c["id"], "function": ilk}]}}]})  # fmt: skip
+            kalan = {"arguments": c["function"]["arguments"][yarim:]}
+            parcalar.append({"choices": [{"delta": {"tool_calls": [
+                {"index": i, "function": kalan}]}}]})  # fmt: skip
+        for kelime in icerik.split(" ") if icerik else []:
             parcalar.append({"choices": [{"delta": {"content": kelime + " "}}]})
         parcalar.append({"choices": [{"delta": {}, "finish_reason": "stop"}], "timings": ZAMANLAMA})
         return "".join(f"data: {json.dumps(p)}\n\n" for p in parcalar) + "data: [DONE]\n\n"
@@ -81,8 +89,24 @@ class SahteSunucu:
 
     def _cevap(self, govde: dict) -> tuple[str, list | None]:
         metin = self._metin(govde)
-        if govde.get("tools"):
-            arac_sonuclari = [m for m in govde["messages"] if m["role"] == "tool"]
+        kullanici = " ".join(
+            m["content"]
+            for m in govde["messages"]
+            if m["role"] == "user" and isinstance(m["content"], str)
+        ).lower()
+        arac_sonuclari = [m for m in govde["messages"] if m["role"] == "tool"]
+        if govde.get("tools") and "masaustu" in kullanici:
+            if not arac_sonuclari:
+                return "", [
+                    {
+                        "id": "m1",
+                        "type": "function",
+                        "function": {"name": "klasor_listele", "arguments": '{"yol": "masaustu"}'},
+                    }
+                ]
+            liste = json.loads(arac_sonuclari[-1]["content"])
+            return "Masaustunde: " + ", ".join(liste.get("ogeler", [])), None
+        if govde.get("tools") and "dolar" in kullanici:
             if not arac_sonuclari:
                 return "", [
                     {

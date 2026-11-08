@@ -809,6 +809,74 @@ class YerelLLM:
         except httpx.TimeoutException as e:
             raise ModelCevapHatasi(ZAMAN_ASIMI_MESAJI) from e
 
+    async def akis_olaylari(
+        self,
+        mesajlar: list[dict],
+        *,
+        tools: list[dict] | None = None,
+        dusunme: Dusunme | None = None,
+        max_tokens: int = 1024,
+        **ek: Any,
+    ) -> AsyncIterator[dict]:
+        """Akis + arac cagrilari. Olaylar: {"tur": "dusunce"|"parca", "metin"} ve en sonda,
+        model arac istediyse {"tur": "arac_cagrilari", "cagrilar": [{id, function: {name,
+        arguments}}]}. llama-server arac cagrisini parca parca (index'e gore) akitir; burada
+        birlestirilir. Arac calistirip donguyu kurmak cagirana kalir (bkz. SKILL.md 4.3)."""
+        seviye = self._seviye(dusunme) if dusunme else self.dusunme
+        if tools:
+            ek["tools"] = tools
+        govde = self._govde(mesajlar, seviye, max_tokens, stream=True, **ek)
+        self.son_dusunce = ""
+        self.son_zamanlama = {}
+        cagrilar: dict[int, dict] = {}
+        try:
+            async with self._istemci.stream(
+                "POST",
+                f"{self.adres}/chat/completions",
+                json=govde,
+                timeout=self._zaman_asimi(seviye),
+            ) as r:
+                if r.status_code >= 400:
+                    await r.aread()
+                    self._hata_firlat(r.status_code, r.text)
+                async for satir in r.aiter_lines():
+                    if not satir.startswith("data: ") or satir == "data: [DONE]":
+                        continue
+                    parca = json.loads(satir[6:])
+                    if parca.get("timings"):
+                        self.son_zamanlama = parca["timings"]
+                    for c in parca.get("choices", []):
+                        delta = c.get("delta") or {}
+                        if dusunce := delta.get("reasoning_content"):
+                            self.son_dusunce += dusunce
+                            yield {"tur": "dusunce", "metin": dusunce}
+                        if metin := delta.get("content"):
+                            yield {"tur": "parca", "metin": metin}
+                        for tc in delta.get("tool_calls") or []:
+                            k = cagrilar.setdefault(
+                                tc.get("index", len(cagrilar)),
+                                {
+                                    "id": "",
+                                    "type": "function",
+                                    "function": {"name": "", "arguments": ""},
+                                },
+                            )
+                            k["id"] = tc.get("id") or k["id"]
+                            f = tc.get("function") or {}
+                            k["function"]["name"] += f.get("name") or ""
+                            k["function"]["arguments"] += f.get("arguments") or ""
+                        if c.get("finish_reason") == "length":
+                            raise ModelCevapHatasi(KESILDI_MESAJI)
+        except httpx.ConnectError as e:
+            raise SunucuKapali() from e
+        except httpx.TimeoutException as e:
+            raise ModelCevapHatasi(ZAMAN_ASIMI_MESAJI) from e
+        if cagrilar:
+            sirali = [cagrilar[i] for i in sorted(cagrilar)]
+            for i, k in enumerate(sirali):
+                k["id"] = k["id"] or f"cagri_{i}"
+            yield {"tur": "arac_cagrilari", "cagrilar": sirali}
+
     async def arac_dongusu(
         self,
         mesajlar: list[dict],

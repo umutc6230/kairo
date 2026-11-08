@@ -134,6 +134,7 @@ function asistanMesaji() {
       <button class="dusunce-baslik"><span data-ikon="beyin"></span><span class="dusunce-etiket">Düşünüyor…</span><span class="ok" data-ikon="sag"></span></button>
       <div class="dusunce-icerik"></div>
     </div>
+    <div class="arac-adimlari"></div>
     <div class="govde-metin md"></div>
     <div class="uyarilar"></div>
     <div class="mesaj-alt" hidden><button class="ikon-btn" title="Kopyala" data-ikon="kopyala"></button><span class="istat"></span></div>
@@ -187,6 +188,28 @@ function asistanMesaji() {
       g.innerHTML = md(this.metin);
       ikonlariYerlestir(g);
     },
+    aracCagrisi(o) {
+      this.durum("");
+      if (this.sayac) this.dusunceBitir();
+      const arg = Object.entries(o.argumanlar || {}).map(([k, v]) => `${k}=${JSON.stringify(v)}`).join(", ");
+      const a = el(`<div class="arac-adim" data-id="${kacir(o.id)}">
+        <button class="arac-baslik"><span data-ikon="anahtar"></span><code>${kacir(o.ad)}(${kacir(arg)})</code>
+        <span class="ozet parilti">çalışıyor…</span><span class="ok" data-ikon="sag"></span></button>
+        <pre class="duz arac-sonuc"></pre></div>`);
+      a.querySelector(".arac-baslik").onclick = () => a.classList.toggle("acik");
+      d.querySelector(".arac-adimlari").append(a);
+      return a;
+    },
+    aracSonucu(o) {
+      const a = [...d.querySelectorAll(".arac-adim")].find((x) => x.dataset.id === o.id) || this.aracCagrisi(o);
+      const ozet = a.querySelector(".ozet");
+      ozet.classList.remove("parilti");
+      ozet.classList.toggle("hata", o.ozet.startsWith("hata"));
+      ozet.textContent = `${o.ozet.startsWith("hata") ? "✗" : "✓"} ${o.ozet}`;
+      let goster = o.sonuc;
+      try { goster = JSON.stringify(JSON.parse(o.sonuc), null, 1); } catch { /* kesik JSON: oldugu gibi */ }
+      a.querySelector(".arac-sonuc").textContent = goster;
+    },
     uyari(mesaj) {
       d.querySelector(".uyarilar").append(el(`<div class="uyari-kutu">${kacir(mesaj)}</div>`));
     },
@@ -215,6 +238,7 @@ function kaydedilmisAsistan(m) {
     k.hidden = false;
     o.el.querySelector(".dusunce-icerik").textContent = m.dusunce;
   }
+  for (const a of m.araclar || []) o.aracSonucu(a);
   if (m.metin) o.parcaEkle(m.metin);
   if (m.hata) o.hata(m.hata);
   o.bitir({ ...m.istatistik, model: m.istatistik?.model || m.model });
@@ -292,6 +316,14 @@ export async function gonder() {
         case "parca":
           yanit.parcaEkle(o.metin);
           sonaKaydir();
+          break;
+        case "arac_cagrisi":
+          yanit.aracCagrisi(o);
+          ikonlariYerlestir(yanit.el);
+          sonaKaydir();
+          break;
+        case "arac_sonucu":
+          yanit.aracSonucu(o);
           break;
         case "uyari":
           yanit.uyari(o.metin);

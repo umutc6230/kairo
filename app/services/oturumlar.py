@@ -31,6 +31,7 @@ class Mesaj(BaseModel):
     dusunce: str = ""
     model: str = ""
     istatistik: dict = {}
+    araclar: list[dict] = []  # sohbette cagrilan araclar (ad, argumanlar, ozet)
     hata: str = ""
     zaman: str = Field(default_factory=simdi)
 

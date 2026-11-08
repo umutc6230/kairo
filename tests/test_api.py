@@ -103,7 +103,9 @@ async def test_sohbet_akisi_dusunce_cevap_kayit(istemci, sunucu):
     await istemci.put("/api/ayarlar", json={"sistem_istemi": "Kisa cevap ver."})
     await istemci.post(f"/api/oturumlar/{o}/mesaj", json={"metin": "Tekrar", "dusunme": "derin"})
     son_istek = sunucu.istekler[-1]
-    assert son_istek["messages"][0] == {"role": "system", "content": "Kisa cevap ver."}
+    sistem = son_istek["messages"][0]
+    assert sistem["role"] == "system" and sistem["content"].endswith("Kisa cevap ver.")
+    assert "klasor_listele" in sistem["content"] and son_istek["tools"]
     assert [m["role"] for m in son_istek["messages"][1:]] == ["user", "assistant", "user"]
     assert son_istek["chat_template_kwargs"] == {"enable_thinking": True}
 
@@ -305,7 +307,7 @@ async def test_sohbet_devaminda_onceki_resim_ve_pdf_modele_gider(istemci, sunucu
     await istemci.post(f"/api/oturumlar/{o}/mesaj", json={"metin": "Bu da", "ekler": [pdf["id"]]})
     r = await istemci.post(f"/api/oturumlar/{o}/mesaj", json={"metin": "Ilk resimde ne vardi?"})
     assert olaylar(r.text)[-1]["tur"] == "bitti"
-    mesajlar = sunucu.istekler[-1]["messages"]
+    mesajlar = sunucu.istekler[-1]["messages"][1:]  # [0]: arac sistem notu
     assert [m["role"] for m in mesajlar] == ["user", "assistant", "user", "assistant", "user"]
     ilk = mesajlar[0]["content"]
     assert ilk[0]["text"] == "Bu fatura" and ilk[1]["type"] == "image_url"
@@ -335,3 +337,34 @@ async def test_sohbet_baglama_sigmayan_eski_resim_uyarisi(istemci, sunucu):
         if p["type"] == "image_url"
     ]
     assert 1 <= len(gorseller) < 5  # en yeniler gitti, en eskiler dustu
+
+
+async def test_sohbette_arac_masaustunu_listeler(istemci, sunucu, tmp_path, monkeypatch):
+    from app.services import sohbet_araclari
+
+    masa = tmp_path / "Masaustu"
+    (masa / "Projeler").mkdir(parents=True)
+    (masa / "notlar.txt").write_text("merhaba", encoding="utf-8")
+    monkeypatch.setattr(sohbet_araclari, "bilinen_klasor", lambda ad: masa)
+    o = await yeni_oturum(istemci)
+    r = await istemci.post(f"/api/oturumlar/{o}/mesaj", json={"metin": "Masaustumde ne var?"})
+    ol = olaylar(r.text)
+    turler = [x["tur"] for x in ol]
+    assert turler.index("arac_cagrisi") < turler.index("arac_sonucu") < turler.index("parca")
+    cagri = next(x for x in ol if x["tur"] == "arac_cagrisi")
+    assert cagri["ad"] == "klasor_listele" and cagri["argumanlar"] == {"yol": "masaustu"}
+    sonuc = next(x for x in ol if x["tur"] == "arac_sonucu")
+    assert sonuc["ozet"] == "1 klasor, 1 dosya"
+    son = ol[-1]["mesaj"]
+    assert "[klasor] Projeler" in son["metin"] and "notlar.txt" in son["metin"]
+    assert son["araclar"][0]["ad"] == "klasor_listele"
+    tool = [m for m in sunucu.istekler[-1]["messages"] if m["role"] == "tool"][0]
+    assert tool["tool_call_id"] == "m1"
+
+
+async def test_sohbet_araclari_kapatilabilir(istemci, sunucu):
+    await istemci.put("/api/ayarlar", json={"sohbet_araclari": False})
+    o = await yeni_oturum(istemci)
+    await istemci.post(f"/api/oturumlar/{o}/mesaj", json={"metin": "Masaustumde ne var?"})
+    istek = sunucu.istekler[-1]
+    assert "tools" not in istek and istek["messages"][0]["role"] == "user"

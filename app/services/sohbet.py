@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import asyncio
 import base64
+import json
 import time
 from collections.abc import AsyncIterator, Awaitable, Callable
 from typing import Any
@@ -17,6 +18,9 @@ from app.exceptions import Bulunamadi, SesDesteklenmiyor, UygulamaHatasi, YerelL
 from app.services.ekler import Ek, EkDeposu
 from app.services.model_yonetici import ModelYonetici
 from app.services.oturumlar import EkOzet, Mesaj, OturumDeposu, baslik_uret
+from app.services.sohbet_araclari import ARACLAR as SOHBET_ARACLARI
+from app.services.sohbet_araclari import ISLEYICILER as SOHBET_ISLEYICILERI
+from app.services.sohbet_araclari import SISTEM_NOTU, sonuc_ozeti
 from app.services.yerel_llm import (
     DENGELI_BUTCE,
     DERIN_EK_TOKEN,
@@ -35,6 +39,7 @@ GECMIS_RESIM_TOKEN = 1100  # gecmiste 1024 px'e kucultulmus gorsel
 GECMIS_RESIM_KENAR = 1024
 SES_TOKEN = 800  # <= 30 sn ses
 EK_METIN_KARAKTER = 12000
+ARAC_SONUC_KARAKTER = 6000  # tek arac sonucu (~1800 token)
 GECMIS_EK_METIN_KARAKTER = 4000
 
 
@@ -130,11 +135,13 @@ async def gecmis_mesajlari(
     Butceye sigmayan eski ekler gonderilmez ve adlari ikinci degerde doner (kullaniciya uyari)."""
     sonuc: list[dict] = []
     dusenler: list[str] = []
-    for m in reversed(mesajlar):
+    for i in range(len(mesajlar) - 1, -1, -1):
+        m = mesajlar[i]
         if m.hata and not m.metin:
             continue
         maliyet = tahmini_token(m.metin)
-        if maliyet > butce:
+        if maliyet > butce:  # bu ve daha eski mesajlar hic gitmez; ekleri de bildirilir
+            dusenler = [e.ad for eski_m in mesajlar[: i + 1] for e in eski_m.ekler] + dusenler
             break
         butce -= maliyet
         rol = "user" if m.rol == "kullanici" else "assistant"
@@ -183,6 +190,44 @@ def istatistik(llm: YerelLLM, bas: float, ilk: float | None, yukleme: float | No
     }
 
 
+async def arac_calistir(
+    cagri: dict, isleyiciler: dict[str, Any], gonder: Callable[[Olay], None], etiket: dict
+) -> tuple[dict, dict]:
+    """Tek arac cagrisini calistirir; (tool mesaji, arayuz kaydi) dondurur. Hata modele doner."""
+    ad = cagri["function"]["name"]
+    ham = cagri["function"].get("arguments") or "{}"
+    try:
+        argumanlar = json.loads(ham) if isinstance(ham, str) else ham
+    except json.JSONDecodeError:
+        argumanlar = {}
+        sonuc: Any = {"hata": f"Gecersiz arguman JSON'u: {ham[:200]}"}
+    else:
+        sonuc = None
+    gonder({"tur": "arac_cagrisi", "id": cagri["id"], "ad": ad, "argumanlar": argumanlar, **etiket})
+    bas = time.perf_counter()
+    if sonuc is None:
+        fonk = isleyiciler.get(ad)
+        if fonk is None:
+            sonuc = {"hata": f"Bilinmeyen arac: {ad}"}
+        else:
+            try:
+                sonuc = await asyncio.to_thread(fonk, **argumanlar)
+            except (TypeError, ValueError, OSError) as e:
+                sonuc = {"hata": f"{type(e).__name__}: {e}"}
+    metin = json.dumps(sonuc, ensure_ascii=False, default=str)
+    kayit = {
+        "id": cagri["id"],
+        "ad": ad,
+        "argumanlar": argumanlar,
+        "ozet": sonuc_ozeti(ad, sonuc),
+        "sonuc": metin[:ARAC_SONUC_KARAKTER],
+        "sure_ms": round((time.perf_counter() - bas) * 1000),
+    }
+    gonder({"tur": "arac_sonucu", **kayit, **etiket})
+    mesaj = {"role": "tool", "tool_call_id": cagri["id"], "content": metin[:ARAC_SONUC_KARAKTER]}
+    return mesaj, kayit
+
+
 async def cevap_akit(
     llm: YerelLLM,
     mesajlar: list[dict],
@@ -192,29 +237,52 @@ async def cevap_akit(
     max_tokens: int = 1024,
     sicaklik: float = 0.2,
     etiket: dict | None = None,
+    araclar: list[dict] | None = None,
+    isleyiciler: dict[str, Any] | None = None,
+    max_tur: int = 6,
 ) -> dict:
-    """Cevabi parca parca gonderir; sonunda {metin, dusunce, istatistik} dondurur."""
+    """Cevabi parca parca gonderir; araclar verilirse model istedikce arac calistirip devam eder.
+    Sonunda {metin, dusunce, araclar, istatistik} dondurur."""
     etiket = etiket or {}
     bas, ilk = time.perf_counter(), None
     parcalar: list[str] = []
     dusunceler: list[str] = []
-
-    def dusunce(d: str) -> None:
-        dusunceler.append(d)
-        gonder({"tur": "dusunce", "metin": d, **etiket})
-
-    async for p in llm.akis(
-        mesajlar, dusunme=dusunme, max_tokens=max_tokens, temperature=sicaklik, dusunce_cb=dusunce
-    ):
-        ilk = ilk or time.perf_counter()
-        parcalar.append(p)
-        gonder({"tur": "parca", "metin": p, **etiket})
+    kayitlar: list[dict] = []
+    mesajlar = list(mesajlar)
+    for _ in range(max_tur):
+        cagrilar: list[dict] = []
+        tur_metni: list[str] = []
+        async for o in llm.akis_olaylari(
+            mesajlar, tools=araclar, dusunme=dusunme, max_tokens=max_tokens, temperature=sicaklik
+        ):
+            if o["tur"] == "dusunce":
+                dusunceler.append(o["metin"])
+                gonder({"tur": "dusunce", "metin": o["metin"], **etiket})
+            elif o["tur"] == "parca":
+                ilk = ilk or time.perf_counter()
+                parcalar.append(o["metin"])
+                tur_metni.append(o["metin"])
+                gonder({"tur": "parca", "metin": o["metin"], **etiket})
+            elif o["tur"] == "arac_cagrilari":
+                cagrilar = o["cagrilar"]
+        if not cagrilar:
+            break
+        mesajlar.append(
+            {"role": "assistant", "content": "".join(tur_metni), "tool_calls": cagrilar}
+        )
+        for c in cagrilar:
+            mesaj, kayit = await arac_calistir(c, isleyiciler or {}, gonder, etiket)
+            mesajlar.append(mesaj)
+            kayitlar.append(kayit)
+    else:
+        gonder({"tur": "uyari", "metin": f"Model {max_tur} turda araç kullanımını bitiremedi."})
     ist = istatistik(llm, bas, ilk, None)
     if dusunceler:  # dusunme suresi: ilk cevap parcasina kadar (cevap yoksa tum sure)
         ist["dusunce_sn"] = round((ilk or time.perf_counter()) - bas, 1)
     return {
         "metin": "".join(parcalar).strip(),
         "dusunce": "".join(dusunceler).strip(),
+        "araclar": kayitlar,
         "istatistik": ist,
     }
 
@@ -264,6 +332,12 @@ class SohbetServisi:
                     icerik = [{"type": "text", "text": istek.metin}] if istek.metin else []
                     icerik += parcalar
                 seviye = istek.dusunme or ayar.dusunme
+                araclar = SOHBET_ARACLARI if ayar.sohbet_araclari else None
+                sistem = "\n\n".join(
+                    s for s in (SISTEM_NOTU if araclar else "", ayar.sistem_istemi) if s
+                )
+                if araclar:  # arac tanimlari + not + bir arac sonucu icin pay
+                    guncel += tahmini_token(json.dumps(araclar) + SISTEM_NOTU) + 1800
                 butce = BAGLAM_TOKEN - GUVENLIK_TOKEN - guncel
                 butce -= ayrilan_token(ayar.max_tokens, seviye)
                 onceki_mesajlar, dusenler = await gecmis_mesajlari(
@@ -277,11 +351,7 @@ class SohbetServisi:
                             f"cevapta gönderilmedi: {', '.join(dusenler)}",
                         }
                     )
-                mesajlar = (
-                    [{"role": "system", "content": ayar.sistem_istemi}]
-                    if ayar.sistem_istemi
-                    else []
-                )
+                mesajlar = [{"role": "system", "content": sistem}] if sistem else []
                 mesajlar += onceki_mesajlar + [{"role": "user", "content": icerik}]
                 gonder({"tur": "durum", "metin": "Yanitlaniyor..."})
                 sonuc = await cevap_akit(
@@ -291,6 +361,8 @@ class SohbetServisi:
                     dusunme=istek.dusunme,
                     max_tokens=ayar.max_tokens,
                     sicaklik=ayar.sicaklik,
+                    araclar=araclar,
+                    isleyiciler=SOHBET_ISLEYICILERI,
                 )
                 sonuc["istatistik"]["yukleme_sn"] = yukleme
                 return sonuc
@@ -302,6 +374,7 @@ class SohbetServisi:
                     asistan.metin = sonuc["metin"]
                     asistan.dusunce = sonuc["dusunce"]
                     asistan.istatistik = sonuc["istatistik"]
+                    asistan.araclar = sonuc["araclar"]
                     continue
                 if olay["tur"] == "parca":
                     yarim.append(olay["metin"])
