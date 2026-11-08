@@ -18,6 +18,20 @@ listesi, ortada sohbet ve altta mesaj kutusu olan bir masaüstü sohbet uygulama
 - **AI Ayarları:** model seçimi (RAM ihtiyacı, yetenekler, dosya durumu), düşünme seviyesi, sistem
   istemi, sıcaklık, model klasörü, otomatik başlatma, "Test" butonu (süre, sonuç, maliyet: 0).
 - Bellek uyarısı: boş RAM modelin ihtiyacından azsa mesaj kutusunun üstünde uyarı.
+- **Sohbette araçlar (salt okunur):** model masaüstünü ve klasörleri listeleyebilir, metin dosyası
+  okuyabilir, dosya arayabilir; hesap/saat/birim çevirme. Silme/yazma aracı yoktur; `.env`, ssh
+  anahtarı, parola ve tarayıcı profil dosyaları okunmaz. Her araç adımı cevapta açılır satır olarak görünür.
+- **Sohbet devamı:** önceki mesajlardaki resim, PDF/metin yazısı ve ses de modele gider (bağlam
+  bütçesine sığmayan en eski ekler için uyarı).
+- **Skill'ler ve talimatlar (Claude Code mantığı):** `~/.claude/CLAUDE.md` ve `@import`'ları (örn.
+  brain `BRAIN-POLICY.md`) her sohbete talimat olarak eklenir; uygulamanın kendi `AGENTS.md`'si
+  düzenlenebilir. `~/.claude/skills` ve `~/Documents/brain/skills` otomatik bulunur; model uygun
+  skill'i `skill_kullan` ile yükler, çok güçlü eşleşen skill otomatik yüklenir. Uygulamaya özel
+  skill eklenip silinebilir; her skill açılıp kapatılabilir. Skill'ler yalnız okunur.
+- **Modeller (Hugging Face mağazası):** GGUF modelleri ara; her sonuçta bu bilgisayarın RAM ve
+  diskine göre "✓ Çalışır / ⚠ Zorlanır / ✗ Çalışmaz" göstergesi. İndirme arka planda, kaldığı
+  yerden devam eder, SHA256 ile doğrulanır; indirilen model listeye eklenir. Yüklü modeller silinebilir.
+- **Bağlam boyutu:** 8K / 16K / 32K (talimatlar ~3K token yer; 16K önerilir).
 
 ## Gereksinimler
 - Windows 10/11 (WebView2 hazır gelir), Python 3.12 (kaynaktan çalıştırmak için).

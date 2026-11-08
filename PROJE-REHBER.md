@@ -28,10 +28,25 @@ yerel_llm.YerelLLM  --> llama-server (127.0.0.1:8080, Projects\llm)
 - Ayni anda tek model (RAM + port 8080). Model degisince kendi sunucumuz yeniden baslar; kullanicinin
   disaridan actigi sunucuya yalniz acik onayla (modal) dokunulur.
 - `durdur()` kilidi BEKLEMEZ: yukleme/cevap sirasinda da sureci hemen keser.
-- Gecmis mesajlar yalniz metin olarak gider (ekler adiyla); gorsel/ses yalniz son mesajda. 16k karakter.
+- Gecmis mesajlar EKLERIYLE gider (gorsel 1024 px, PDF/metin yazisi 4000 kar., ses): token butcesi
+  (baglam - cevap payi - sistem - araclar) dolunca en eski ekler dusurulur ve kullaniciya uyari olur.
 - Skill metinleri ASCII; arayuzde gorunen Turkce karsiliklar `ortak.js` DUSUNME_TR / MODEL_TR'de.
+- Sohbet araclari YALNIZ OKUR (sohbet_araclari.py); gizli dosya deseni (ssh/.env/anahtar/tarayici) engellenir.
+- Skill sistemi (skiller.py): kaynaklar ~/.claude/skills > ~/Documents/brain/skills > <veri>/skills;
+  ayni dosya/ad bir kez. >=16K baglamda TUM skill'ler (ad + 110 karakter) sabit listede (onbellek),
+  8K'da yalniz kelime puaniyla en uygun 6. Guclu eslesme (puan>=5, ikinciyle fark>=2) otomatik yuklenir.
+- Sistem mesaji sirasi: arac notu -> talimatlar -> sistem istemi -> skill listesi -> (degisken) otomatik
+  skill. Sabit onek llama-server prompt onbellegine girer; "Modeli yukle" sonrasi isitma istegi atilir.
+- Talimatlar (talimatlar.py): ~/.claude/CLAUDE.md + @import (kod blogu haric, 4 seviye, dongu korumali).
+- Model magazasi (model_magaza.py): HF /api/models?expand[]=gguf,siblings; boyut parametre*0.62 GB
+  tahmini; gereken RAM = boyut*1.15+1; calisir <= toplam-5, zorlanir <= toplam-2. Indirme .part +
+  Range ile devam, SHA256 (LFS) dogrulama, data/modeller.json kaydi -> MODELLER'e eklenir.
 
 ## Bulgular
+- Kucuk modeller (E4B) araci metinle "cagiracagim" deyip cagirmayabiliyor -> otomatik skill yukleme.
+- Dahili GPU'da girdi isleme 14-26 tok/sn: 4.8K token sistem mesaji ilk cevabi 3 dk geciktirdi;
+  onbellek + isitma ile mesaj basina ~1K token'a indi.
+- Model skill komutlarini "ben calistiririm" diye uydurdu -> SINIR notu (komut calistiramazsin).
 - pywebview `js_api` nesnesindeki alt cizgisiz ozellikleri ozyinelemeli tarar; pencere (.NET) nesnesi
   koyunca sonsuz ozyineleme + GIL -> arka uc yanit vermedi. Pencere `_pencere` olarak saklanir.
 - Ayarlardaki adres `/v1` ile biter; istemciye ikinci kez `/v1` eklenmemeli (dogrulayici ekler).

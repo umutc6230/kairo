@@ -21,19 +21,31 @@ Python 3.12 + FastAPI + pywebview; arayuz vanilla JS. Paketleme: PORTABLE (kulla
 - [x] AI Ayarlari (model ara/sec, RAM/yetenek etiketleri, dusunme, Test butonu) + Hakkinda (urun sahibi)
 - [x] 91 test (sahte llama-server), coverage %94; pencere + sahte sunucuyla gorsel deneme
 - [x] Gercek E4B olcumu: 10.4 tok/sn, arac/JSON/OCR %100/ses/sansursuz OK; dusunme kapali mantik sorusu token sinirina takildi
+- [x] Sohbet devami: onceki resim/PDF/ses ekleri baglam butcesiyle gider
+- [x] Sohbette salt okunur araclar (klasor_listele, dosya_oku, dosya_ara...): gercek E4B masaustunu listeledi
+- [x] Skill'ler + talimatlar: ~/.claude/skills (54) + CLAUDE.md/@BRAIN-POLICY; skill_kullan, otomatik yukleme,
+      onbellek dostu sira + isitma; gercek E4B markitdown skill'ini kullandi
+- [x] Model magazasi (HF): ara, calisir/zorlanir/calismaz gostergesi, indirme (devam, SHA256), silme
 - [x] Portable derleme (72 MB): teslim klasorunden Baslat.bat ile acildi, veri data'da, AppData temiz, X ile tam kapandi
 
 ## Son oturum
+- 2026-11-08 (2): sohbet devami ekleri, sohbet araclari, skill/talimat sistemi, HF model magazasi,
+  baglam ayari (16K varsayilan). 139 test, %94. Portable yeniden derlendi ve teslim klasorunde denendi.
 - 2026-11-08: proje sifirdan kuruldu. Bulgular: pywebview js_api'de pencere nesnesi -> sonsuz
   ozyineleme (alt cizgili ad); adres /v1 cift ekleniyordu; "İ".lower() hatasi; durdur kilitte asiliydi.
 
 ## Siradaki adim
+- GitHub push (kullanici onayi bekleniyor; 5 commit yerelde).
+- Dahili GPU'da ilk token yavas (talimatlar ~3K token, girdi isleme ~14-26 tok/sn): isitma var;
+  gerekirse BRAIN-POLICY'nin ozet surumu ya da talimati sohbet bazinda kapatma.
 - Gemma 4'te 'dusunme kapali' (enable_thinking false) gercekten kapaniyor mu incele.
 - E4B ve (RAM bosken) 12B olcumlerini skill tablosuna isle.
 
 ## Acik sorunlar
 - Backend hata metinleri ASCII Turkce (yerel_llm skill'inden); arayuz metinleri duzgun Turkce.
 - Dahili GPU: bos RAM az iken gorsel istekler duser (BellekYetersiz mesaji gosterilir).
+- Kucuk modeller araci 'cagiracagim' deyip cagirmayabiliyor (otomatik skill yukleme bunu azaltir).
+- Skill'lerdeki komutlar calistirilamaz (komut araci yok); model buna gore uyariliyor.
 
 ## Dokunulmayacak kararlar
 - pywebview + FastAPI (Electron degil). Ayni anda tek model. Native dialog yok (in-app modal).
