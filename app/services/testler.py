@@ -124,6 +124,7 @@ class TestServisi:
         """Her model icin: hazirla -> is_ -> sonuc. Bir modelin hatasi digerlerini durdurmaz."""
         for model in modeller:
             uyari = bellek_uyarisi(model)
+            bas = time.perf_counter()
             yield {"tur": "model_basladi", "model": model, "uyari": uyari}
 
             async def uret(gonder: Callable[[Olay], None], model: str = model) -> Any:
@@ -137,11 +138,13 @@ class TestServisi:
             try:
                 async for olay in kuyruktan_akit(uret):
                     if isinstance(olay, tuple):
-                        yield {"tur": "model_bitti", "model": model, **olay[1]}
+                        toplam = round(time.perf_counter() - bas, 1)
+                        yield {"tur": "model_bitti", "model": model, "toplam_sn": toplam, **olay[1]}
                     else:
                         yield olay
             except YerelLLMHatasi as e:
-                yield {"tur": "model_hata", "model": model, "mesaj": str(e)}
+                toplam = round(time.perf_counter() - bas, 1)
+                yield {"tur": "model_hata", "model": model, "mesaj": str(e), "toplam_sn": toplam}
 
     # ---- karsilastirma: ayni soru, sirayla modeller ----
     async def karsilastir(self, istek: KarsilastirmaIstegi) -> AsyncIterator[Olay]:

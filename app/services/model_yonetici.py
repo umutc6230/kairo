@@ -57,6 +57,7 @@ class ModelYonetici:
                 await llm._kapanana_kadar_bekle()
         if await llm.saglikli() and model in (await llm._acik_modeller() or [model]):
             self.durum, self.yuklenen_model = "hazir", model
+            self.yukleme_sn = 0  # zaten acikti: bu istek icin yukleme yok
             return llm
         self.durum, self.son_hata = "yukleniyor", ""
         bas = time.perf_counter()

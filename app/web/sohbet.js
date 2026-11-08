@@ -2,7 +2,7 @@
 import { ikon, ikonlariYerlestir } from "./ikonlar.js";
 import { kacir, md } from "./md.js";
 import {
-  $, api, bildir, durum, el, istatistikMetni, modal, modelAdi, modelProfil, sayi, sseOku,
+  $, api, bildir, canliSayac, durum, el, istatistikCipleri, modal, modelAdi, modelProfil, sayi, sseOku,
 } from "./ortak.js";
 
 const bekleyenEkler = []; // {id?, ad, tur, onizleme, yukleniyor}
@@ -129,7 +129,7 @@ function kullaniciMesaji(m) {
 /** Asistan mesaji: ustte dusunce blogu, altta cevap ve istatistik. Canli guncellenebilir. */
 function asistanMesaji() {
   const d = el(`<div class="mesaj asistan">
-    <div class="durum-satiri" hidden><span class="parilti"></span></div>
+    <div class="durum-satiri" hidden><span class="parilti"></span><span class="sayac soluk"></span></div>
     <div class="dusunce" hidden>
       <button class="dusunce-baslik"><span data-ikon="beyin"></span><span class="dusunce-etiket">Düşünüyor…</span><span class="ok" data-ikon="sag"></span></button>
       <div class="dusunce-icerik"></div>
@@ -137,7 +137,7 @@ function asistanMesaji() {
     <div class="arac-adimlari"></div>
     <div class="govde-metin md"></div>
     <div class="uyarilar"></div>
-    <div class="mesaj-alt" hidden><button class="ikon-btn" title="Kopyala" data-ikon="kopyala"></button><span class="istat"></span></div>
+    <div class="mesaj-alt" hidden><button class="ikon-btn" title="Kopyala" data-ikon="kopyala"></button><span class="istat istat-cipleri"></span></div>
   </div>`);
   const dusunceKutu = d.querySelector(".dusunce");
   d.querySelector(".dusunce-baslik").onclick = () => dusunceKutu.classList.toggle("acik");
@@ -147,6 +147,16 @@ function asistanMesaji() {
     dusunce: "",
     dusunceBas: null,
     sayac: null,
+    sayacDurdur: null,
+    model: "",
+    canliBaslat(model) {
+      // beklerken "Model hazirlaniyor... 8 sn" gibi canli sayac
+      this.model = model;
+      this.sayacDurdur = canliSayac(d.querySelector(".durum-satiri .sayac"), "· ");
+    },
+    gecen() {
+      return this.sayacDurdur ? this.sayacDurdur() : null;
+    },
     durum(metin) {
       const s = d.querySelector(".durum-satiri");
       s.hidden = !metin;
@@ -215,15 +225,19 @@ function asistanMesaji() {
     },
     hata(mesaj) {
       clearInterval(this.sayac);
+      this.hataVar = true;
       this.durum("");
       d.querySelector(".uyarilar").append(el(`<div class="hata-kutu">${kacir(mesaj)}</div>`));
     },
     bitir(ist) {
+      const gecen = this.gecen();
+      this.sayacDurdur = null;
       this.durum("");
       this.dusunceBitir(ist?.dusunce_sn);
+      if (!ist && gecen != null) ist = { model: this.model, sure_sn: Math.round(gecen * 10) / 10, durduruldu: true };
       const alt = d.querySelector(".mesaj-alt");
       alt.hidden = false;
-      alt.querySelector(".istat").textContent = istatistikMetni(ist);
+      alt.querySelector(".istat").innerHTML = istatistikCipleri(ist);
       alt.querySelector(".ikon-btn").onclick = () => kopyala(this.metin);
     },
   };
@@ -289,6 +303,7 @@ export async function gonder() {
   const oturumId = durum.oturumId;
   const s = sutun();
   const yanit = asistanMesaji();
+  yanit.canliBaslat(durum.ayarlar?.model);
   let kullaniciCizildi = false;
   akisKontrol = new AbortController();
   gonderDurumu();

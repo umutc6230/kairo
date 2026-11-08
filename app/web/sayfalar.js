@@ -2,8 +2,19 @@
 import { ikon, ikonlariYerlestir } from "./ikonlar.js";
 import { kacir, md } from "./md.js";
 import {
-  $, api, bildir, durum, el, istatistikMetni, modelAdi, modelCipleri, sayi, seciliModeller, sseOku,
+  $, api, bildir, canliSayac, durum, el, istatistikCipleri, istatistikMetni, modelAdi, modelCipleri, sayi, seciliModeller, sseOku,
 } from "./ortak.js";
+
+const sayaclar = {}; // anahtar -> durdurma fonksiyonu
+function sayacBaslat(anahtar, hedef, onEk = "") {
+  sayaclar[anahtar]?.();
+  sayaclar[anahtar] = canliSayac(hedef, onEk);
+}
+function sayacBitir(anahtar, hedef, toplamSn) {
+  sayaclar[anahtar]?.();
+  delete sayaclar[anahtar];
+  if (hedef && toplamSn != null) hedef.textContent = `toplam ${sayi(toplamSn)} sn`;
+}
 
 let isKontrol = null; // ayni anda tek test
 
@@ -46,7 +57,7 @@ async function karsilastir() {
   kap.innerHTML = "";
   const kartlar = {};
   for (const m of modeller) {
-    const k = el(`<div class="sonuc-kart"><header><span>${kacir(modelAdi(m))}</span>${rozet("", "sırada")}</header>
+    const k = el(`<div class="sonuc-kart"><header><span>${kacir(modelAdi(m))}</span><span class="sayac soluk kucuk"></span>${rozet("", "sırada")}</header>
       <div class="icerik"><div class="dusunce" hidden><button class="dusunce-baslik"><span data-ikon="beyin"></span><span class="dusunce-etiket">Düşünce</span><span class="ok" data-ikon="sag"></span></button><div class="dusunce-icerik"></div></div><div class="md"></div></div><footer></footer></div>`);
     k.querySelector(".dusunce-baslik").onclick = () => k.querySelector(".dusunce").classList.toggle("acik");
     kartlar[m] = { el: k, metin: "", dusunce: "" };
@@ -58,6 +69,7 @@ async function karsilastir() {
       const k = kartlar[o.model];
       if (o.tur === "model_basladi") {
         rozetAyarla(o.model, "sari", "yükleniyor");
+        sayacBaslat(`k-${o.model}`, k.el.querySelector("header .sayac"));
         if (o.uyari) k.el.querySelector(".icerik").prepend(el(`<div class="uyari-kutu">${kacir(o.uyari)}</div>`));
       } else if (o.tur === "durum") {
         rozetAyarla(o.model, "sari", o.metin.replace("...", "").toLowerCase());
@@ -73,16 +85,12 @@ async function karsilastir() {
         k.el.querySelector(".md").innerHTML = md(k.metin);
       } else if (o.tur === "model_bitti") {
         rozetAyarla(o.model, "yesil", "bitti");
-        const i = o.istatistik || {};
-        k.el.querySelector("footer").innerHTML = [
-          o.yukleme_sn ? `yükleme ${sayi(o.yukleme_sn)} sn` : "zaten açıktı",
-          `yanıt ${sayi(i.sure_sn)} sn`,
-          i.ilk_token_sn != null ? `ilk token ${sayi(i.ilk_token_sn)} sn` : "",
-          i.uretim_tok_sn ? `${sayi(i.uretim_tok_sn)} tok/sn` : "",
-          i.token ? `${i.token} token` : "",
-        ].filter(Boolean).map((x) => `<span>${x}</span>`).join("");
+        sayacBitir(`k-${o.model}`, k.el.querySelector("header .sayac"), o.toplam_sn);
+        const i = { ...(o.istatistik || {}), model: null, yukleme_sn: o.yukleme_sn };
+        k.el.querySelector("footer").innerHTML = `<span class="istat-cipleri">${istatistikCipleri(i)}${o.yukleme_sn ? "" : '<span class="istat-cip">model zaten açıktı</span>'}</span>`;
       } else if (o.tur === "model_hata") {
         rozetAyarla(o.model, "kirmizi", "hata");
+        sayacBitir(`k-${o.model}`, k.el.querySelector("header .sayac"), o.toplam_sn);
         k.el.querySelector(".icerik").append(el(`<div class="hata-kutu">${kacir(o.mesaj)}</div>`));
       } else if (o.tur === "hata") {
         bildir(o.mesaj, "hata");
@@ -148,7 +156,7 @@ async function ocrCalistir() {
   kap.innerHTML = "";
   const kartlar = {};
   for (const m of modeller) {
-    const k = el(`<div class="sonuc-kart"><header><span>${kacir(modelAdi(m))}</span>${rozet("", "sırada")}</header>
+    const k = el(`<div class="sonuc-kart"><header><span>${kacir(modelAdi(m))}</span><span class="sayac soluk kucuk"></span>${rozet("", "sırada")}</header>
       <div class="icerik"><div class="olcum-satiri"></div></div></div>`);
     kartlar[m] = k;
     kap.append(k);
@@ -167,13 +175,16 @@ async function ocrCalistir() {
       const k = kartlar[o.model];
       if (o.tur === "model_basladi") {
         rozetAyarla(o.model, "sari", "yükleniyor");
+        sayacBaslat(`o-${o.model}`, k.querySelector("header .sayac"));
         if (o.uyari) k.querySelector(".icerik").prepend(el(`<div class="uyari-kutu">${kacir(o.uyari)}</div>`));
       } else if (o.tur === "durum" || o.tur === "ilerleme") {
         rozetAyarla(o.model, "sari", o.metin.replace("...", "").toLowerCase());
       } else if (o.tur === "model_bitti") {
         rozetAyarla(o.model, "yesil", "bitti");
+        sayacBitir(`o-${o.model}`, k.querySelector("header .sayac"), o.toplam_sn);
         const olc = [
-          `<span class="rozet">${sayi(o.sure_sn)} sn</span>`,
+          `<span class="rozet" title="Yalnız okuma (OCR) süresi">okuma ${sayi(o.sure_sn)} sn</span>`,
+          `<span class="rozet" title="Model yükleme dahil">toplam ${sayi(o.toplam_sn)} sn</span>`,
           o.yukleme_sn ? `<span class="rozet">yükleme ${sayi(o.yukleme_sn)} sn</span>` : "",
           o.benzerlik != null ? rozet(o.benzerlik >= 95 ? "yesil" : o.benzerlik >= 80 ? "sari" : "kirmizi", `doğruluk %${sayi(o.benzerlik)}`) : "",
           `<span class="rozet">Türkçe harf: ${o.turkce_harf}</span>`,
@@ -188,6 +199,7 @@ async function ocrCalistir() {
         }
       } else if (o.tur === "model_hata") {
         rozetAyarla(o.model, "kirmizi", "hata");
+        sayacBitir(`o-${o.model}`, k.querySelector("header .sayac"), o.toplam_sn);
         k.querySelector(".icerik").append(el(`<div class="hata-kutu">${kacir(o.mesaj)}</div>`));
       } else if (o.tur === "hata") {
         bildir(o.mesaj, "hata");
@@ -233,7 +245,8 @@ async function aracCalistir() {
   try {
     for await (const o of sseOku("/api/arac-testi", { istem }, isKontrol.signal)) {
       if (o.tur === "model_basladi") {
-        adim("", `Model: <b>${kacir(modelAdi(o.model))}</b>`, o.uyari ? `<div class="uyari-kutu">${kacir(o.uyari)}</div>` : "");
+        const a = adim("", `Model: <b>${kacir(modelAdi(o.model))}</b> · <span class="sayac"></span>`, o.uyari ? `<div class="uyari-kutu">${kacir(o.uyari)}</div>` : "");
+        sayacBaslat("arac", a.querySelector(".sayac"), "geçen ");
       } else if (o.tur === "durum") {
         if (!durumAdim) durumAdim = adim("", "", `<span class="parilti"></span>`);
         durumAdim.querySelector(".parilti").textContent = o.metin;
@@ -247,7 +260,8 @@ async function aracCalistir() {
       } else if (o.tur === "model_bitti") {
         durumAdim?.remove();
         durumAdim = null;
-        adim("son", `Cevap · ${o.tur_sayisi} tur · ${o.cagri_sayisi} araç çağrısı · ${sayi(o.sure_sn)} sn${o.yukleme_sn ? ` · yükleme ${sayi(o.yukleme_sn)} sn` : ""}`, `<div class="md">${md(o.cevap)}</div>`);
+        sayacBitir("arac", akis.querySelector(".adim .sayac"), o.toplam_sn);
+        adim("son", `Cevap · ${o.tur_sayisi} tur · ${o.cagri_sayisi} araç çağrısı · çalışma ${sayi(o.sure_sn)} sn · toplam ${sayi(o.toplam_sn)} sn${o.yukleme_sn ? ` · yükleme ${sayi(o.yukleme_sn)} sn` : ""}`, `<div class="md">${md(o.cevap)}</div>`);
       } else if (o.tur === "model_hata" || o.tur === "hata") {
         durumAdim?.remove();
         durumAdim = null;
@@ -257,6 +271,8 @@ async function aracCalistir() {
   } catch (e) {
     adim("hata", "Hata", `<div class="hata-kutu">${kacir(hataMesaji(e))}</div>`);
   } finally {
+    sayaclar.arac?.();
+    delete sayaclar.arac;
     durumAdim?.remove();
     bitir();
   }
@@ -286,7 +302,7 @@ function tabloCiz(modeller, sonuclar) {
   const puan = `<tr><th>Puan</th>${modeller.map((m) => {
     const r = sonuclar[m];
     if (r?._hata) return `<td class="yok">hata<span class="soluk">${kacir(r._hata)}</span></td>`;
-    return `<td>${r?._puan != null ? `<b>${r._puan}/${TESTLER.length}</b>${r._yukleme ? `<span class="soluk">yükleme ${sayi(r._yukleme)} sn</span>` : ""}` : "…"}</td>`;
+    return `<td>${r?._puan != null ? `<b>${r._puan}/${TESTLER.length}</b><span class="soluk">toplam ${sayi(r._toplam)} sn</span>${r._yukleme ? `<span class="soluk">yükleme ${sayi(r._yukleme)} sn</span>` : ""}` : "…"}</td>`;
   }).join("")}</tr>`;
   $("#p-tablo").innerHTML = `<table class="tablo"><thead>${bas}</thead><tbody>${satirlar}${puan}</tbody></table>`;
 }
@@ -297,6 +313,7 @@ async function paketCalistir() {
   const bitir = isBaslat($("#p-baslat"));
   if (!bitir) return;
   const sonuclar = {};
+  sayacBaslat("paket", $("#p-sure"), "Geçen süre: ");
   const gunluk = $("#p-gunluk");
   gunluk.textContent = "";
   const yaz = (s) => { gunluk.textContent += `${new Date().toLocaleTimeString("tr-TR")}  ${s}\n`; gunluk.scrollTop = gunluk.scrollHeight; };
@@ -306,7 +323,7 @@ async function paketCalistir() {
       if (o.tur === "model_basladi") { sonuclar[o.model] = {}; yaz(`${o.model}: başladı${o.uyari ? ` (UYARI: ${o.uyari})` : ""}`); }
       else if (o.tur === "durum") yaz(`${o.model}: ${o.metin}`);
       else if (o.tur === "test_sonucu") { sonuclar[o.model][o.test] = o; yaz(`${o.model}: ${o.test} -> ${o.basarili ? "BAŞARILI" : "BAŞARISIZ"} (${sayi(o.sure_sn)} sn)`); }
-      else if (o.tur === "model_bitti") { Object.assign(sonuclar[o.model], { _puan: o.puan, _yukleme: o.yukleme_sn }); yaz(`${o.model}: puan ${o.puan}/${o.toplam}`); }
+      else if (o.tur === "model_bitti") { Object.assign(sonuclar[o.model], { _puan: o.puan, _yukleme: o.yukleme_sn, _toplam: o.toplam_sn }); yaz(`${o.model}: puan ${o.puan}/${o.toplam} (toplam ${sayi(o.toplam_sn)} sn)`); }
       else if (o.tur === "model_hata") { sonuclar[o.model] = { ...(sonuclar[o.model] || {}), _hata: o.mesaj }; yaz(`${o.model}: HATA ${o.mesaj}`); }
       else if (o.tur === "hata") bildir(o.mesaj, "hata");
       tabloCiz(modeller, sonuclar);
@@ -314,6 +331,8 @@ async function paketCalistir() {
   } catch (e) {
     yaz(hataMesaji(e));
   } finally {
+    sayaclar.paket?.();
+    delete sayaclar.paket;
     bitir();
   }
 }

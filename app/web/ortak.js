@@ -212,6 +212,35 @@ export function istatistikMetni(i) {
   return p.join(" · ");
 }
 
+function cip(etiket, deger, aciklama) {
+  return `<span class="istat-cip" title="${kacir(aciklama)}">${kacir(etiket)} <b>${kacir(deger)}</b></span>`;
+}
+
+/** Cevabin sure bilgileri (etiketli cipler). i: sunucu istatistigi; eksik alanlar atlanir. */
+export function istatistikCipleri(i) {
+  if (!i) return "";
+  const c = [];
+  if (i.model) c.push(`<span class="istat-model">${kacir(modelAdi(i.model))}</span>`);
+  if (i.sure_sn != null) c.push(cip("Toplam", `${sayi(i.sure_sn)} sn`, "İsteği gönderdiğinden cevabın bitmesine kadar geçen süre"));
+  if (i.ilk_token_sn != null) c.push(cip("İlk yanıt", `${sayi(i.ilk_token_sn)} sn`, "Cevabın ilk kelimesi gelene kadar bekleme (girdi işleme + düşünme)"));
+  if (i.dusunce_sn) c.push(cip("Düşünme", `${sayi(i.dusunce_sn)} sn`, `Düşünme seviyesi: ${i.dusunme || ""}`));
+  if (i.yukleme_sn) c.push(cip("Model yükleme", `${sayi(i.yukleme_sn)} sn`, "Model bu istek için yeniden açıldı"));
+  if (i.uretim_tok_sn) c.push(cip("Hız", `${sayi(i.uretim_tok_sn)} token/sn`, "Cevap üretme hızı"));
+  if (i.token) c.push(cip("Cevap", `${i.token} token`, "Üretilen token sayısı"));
+  if (i.prompt_token) c.push(cip("Girdi", `${sayi(i.prompt_token, 0)} token${i.prompt_tok_sn ? ` · ${sayi(i.prompt_tok_sn)}/sn` : ""}`, "Bu istekte işlenen girdi (önbellekteki kısım hariç) ve işleme hızı"));
+  if (i.durduruldu) c.push(`<span class="istat-cip">durduruldu</span>`);
+  return c.join("");
+}
+
+/** hedef ogeye her yarim saniyede "N sn" yazar; durdurma fonksiyonu dondurur. */
+export function canliSayac(hedef, onEk = "") {
+  const bas = performance.now();
+  const yaz = () => { hedef.textContent = `${onEk}${Math.round((performance.now() - bas) / 1000)} sn`; };
+  yaz();
+  const id = setInterval(yaz, 500);
+  return () => { clearInterval(id); return (performance.now() - bas) / 1000; };
+}
+
 /** Model secim cipleri (karsilastir, OCR, paket sayfalari). */
 export function modelCipleri(kap, { coklu = true, ad = "m" } = {}) {
   const modeller = durum.sunucu?.modeller || [];

@@ -349,3 +349,12 @@ pre.duz { white-space: pre-wrap; font-family: var(--mono); font-size: 13px; marg
 .ilerleme { height: 6px; border-radius: 99px; background: var(--yuzey3); overflow: hidden; }
 .ilerleme div { height: 100%; background: var(--turuncu); transition: width .4s; }
 .ilerleme div.hata { background: var(--kirmizi); }
+
+/* sure bilgileri */
+.istat-cipleri { display: inline-flex; flex-wrap: wrap; gap: 4px; align-items: center; }
+.istat-cip { font-size: 12px; padding: 1px 7px; border-radius: 6px; background: var(--yuzey); color: var(--cok-soluk); cursor: help; white-space: nowrap; }
+.istat-cip b { color: var(--soluk); font-weight: 500; }
+.istat-model { font-size: 12px; color: var(--soluk); margin-right: 2px; }
+.durum-satiri .sayac { font-size: 13px; }
+.sonuc-kart header .sayac { margin-left: auto; font-weight: 400; }
+.sonuc-kart footer .istat-cip { background: var(--bg); }
