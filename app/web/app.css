@@ -343,3 +343,9 @@ pre.duz { white-space: pre-wrap; font-family: var(--mono); font-size: 13px; marg
 .skill-bilgi .ust { display: flex; gap: 8px; align-items: center; font-size: 14.5px; }
 .skill-bilgi .alt { font-size: 13px; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
 .skill-eylem { display: flex; align-items: center; gap: 4px; }
+
+/* modeller */
+.indirme { display: flex; flex-direction: column; gap: 6px; padding: 8px; border-radius: 8px; background: var(--bg); }
+.ilerleme { height: 6px; border-radius: 99px; background: var(--yuzey3); overflow: hidden; }
+.ilerleme div { height: 100%; background: var(--turuncu); transition: width .4s; }
+.ilerleme div.hata { background: var(--kirmizi); }

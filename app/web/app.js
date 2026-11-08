@@ -4,10 +4,11 @@ import { kacir } from "./md.js";
 import { aramaAc, ayarKaydet, ayarlarAc, ayarlarKur, modelYukle, sunucuDurdur } from "./ayarlar.js";
 import { $, $$, api, bildir, durum, el, menuAc, modelAdi, modelProfil, onayla, sayi, sor, turkcelestir } from "./ortak.js";
 import { sayfaModelleriniYenile, sayfalarKur } from "./sayfalar.js";
+import { modelSayfasiYukle, modellerKur } from "./modeller.js";
 import { skillSayfasiYukle, skillerKur } from "./skiller.js";
 import { akisVar, durdur, mesajlariCiz, sohbetKur, yeniSohbetEkrani } from "./sohbet.js";
 
-const BASLIKLAR = { karsilastir: "Karşılaştır", ocr: "OCR testi", arac: "Araç testi", paket: "Test paketi", skiller: "Skill'ler ve talimatlar" };
+const BASLIKLAR = { karsilastir: "Karşılaştır", ocr: "OCR testi", arac: "Araç testi", paket: "Test paketi", skiller: "Skill'ler ve talimatlar", modeller: "Modeller" };
 const gecmis = [];
 let gecmisKonum = -1;
 
@@ -31,6 +32,7 @@ function git(hedef, { kaydetme = false } = {}) {
   else {
     gorunumGoster(hedef.tur);
     if (hedef.tur === "skiller") skillSayfasiYukle();
+    if (hedef.tur === "modeller") modelSayfasiYukle();
   }
   $("#btn-geri").disabled = gecmisKonum <= 0;
   $("#btn-ileri").disabled = gecmisKonum >= gecmis.length - 1;
@@ -258,6 +260,7 @@ async function baslat() {
   ayarlarKur(hepsiniYenile);
   sayfalarKur();
   skillerKur(hepsiniYenile);
+  modellerKur(hepsiniYenile);
 
   $$(".nav-oge").forEach((n) => {
     n.onclick = () => (n.dataset.git === "ara" ? aramaAc(oturumAc) : git({ tur: n.dataset.git }));

@@ -18,9 +18,11 @@ from pydantic import BaseModel, Field, ValidationError
 from app import URUN_ADI, URUN_SAHIBI, URUN_SAHIBI_GITHUB, URUN_SAHIBI_X, __version__
 from app.config import web_dizini
 from app.exceptions import UygulamaHatasi, YerelLLMHatasi
+from app.services import sistem
 from app.services.araclar import ARACLAR, ORNEK_ISTEMLER
 from app.services.ayarlar import AyarDeposu
 from app.services.ekler import EkDeposu
+from app.services.model_magaza import Indirici, Magaza, ModelKaydi, uyumluluk
 from app.services.model_yonetici import LLMFabrikasi, ModelYonetici
 from app.services.oturumlar import OturumDeposu
 from app.services.skiller import SkillDeposu
@@ -35,7 +37,7 @@ from app.services.testler import (
     TestServisi,
     ornek_belge,
 )
-from app.services.yerel_llm import DUSUNME_SECENEKLERI, YerelLLM
+from app.services.yerel_llm import DUSUNME_SECENEKLERI, MODELLER, YerelLLM
 
 
 class AdIstegi(BaseModel):
@@ -48,6 +50,10 @@ class ModelIstegi(BaseModel):
 
 class DurdurIstegi(BaseModel):
     harici: bool = False
+
+
+class IndirIstegi(BaseModel):
+    repo: str = Field(pattern=r"^[\w.-]+/[\w.-]+$", max_length=200)
 
 
 class TalimatIstegi(BaseModel):
@@ -90,7 +96,10 @@ def uygulama_olustur(
     veri_dizini: Path,
     fabrika: LLMFabrikasi = YerelLLM,
     skill_deposu: SkillDeposu | None = None,
+    magaza: Magaza | None = None,
 ) -> FastAPI:
+    kayit = ModelKaydi(veri_dizini)
+    kayit.yukle()  # magazadan indirilen modeller MODELLER'e (ayar dogrulamasindan once)
     ayarlar = AyarDeposu(veri_dizini)
     oturumlar = OturumDeposu(veri_dizini)
     ekler = EkDeposu(veri_dizini)
@@ -99,12 +108,15 @@ def uygulama_olustur(
     skiller = skill_deposu or SkillDeposu(veri_dizini)
     sohbet = SohbetServisi(yonetici, oturumlar, ekler, talimatlar, skiller)
     isitmalar: set[asyncio.Task] = set()
+    magaza = magaza or Magaza()
+    indirici = Indirici(magaza, kayit, lambda: Path(ayarlar.oku().llm_dizin))
     testler = TestServisi(yonetici, ekler)
 
     @asynccontextmanager
     async def omur(_: FastAPI):
         yield
         await yonetici.kapat()  # yalniz bizim baslattigimiz model sunucusunu durdurur
+        await magaza.kapat()
 
     app = FastAPI(title=URUN_ADI, version=__version__, lifespan=omur)
     app.state.yonetici = yonetici
@@ -228,6 +240,72 @@ def uygulama_olustur(
     async def ek_ornek() -> dict:
         ek = ekler.kaydet("ornek-hakedis.png", ornek_belge())
         return {**ek.model_dump(exclude={"metin"}), "beklenen": "\n".join(ORNEK_SATIRLAR)}
+
+    # ---- model magazasi (Hugging Face) ----
+    def _sistem_bilgisi() -> dict:
+        b = sistem.bellek()
+        return {
+            "toplam_ram_gb": b.get("toplam_gb"),
+            "bos_ram_gb": b.get("bos_gb"),
+            "disk_bos_gb": indirici.disk_bos_gb(),
+            "model_klasoru": str(indirici.model_klasoru),
+        }
+
+    @app.get("/api/magaza/ara")
+    async def magaza_ara(q: str = "heretic", gorsel: bool = True) -> dict:
+        s = _sistem_bilgisi()
+        bellek = {"toplam_gb": s["toplam_ram_gb"], "bos_gb": s["bos_ram_gb"]}
+        yuklu = {p.dosya for p in MODELLER.values()}
+        sonuclar = []
+        for a in await magaza.ara(q or "heretic"):
+            if gorsel and not a["gorsel"]:
+                continue
+            a = {**a, "uyumluluk": uyumluluk(a["tahmini_gb"], bellek, s["disk_bos_gb"])}
+            a["yuklu"] = a["model_dosyasi"] in yuklu
+            sonuclar.append(a)
+        return {"sistem": s, "sonuclar": sonuclar}
+
+    @app.get("/api/magaza/yuklu")
+    async def magaza_yuklu() -> dict:
+        klasor = indirici.model_klasoru / "models"
+        liste = []
+        for p in MODELLER.values():
+            dosyalar = [klasor / d for d in (p.dosya, p.mmproj) if d]
+            boyut = sum(d.stat().st_size for d in dosyalar if d.exists())
+            liste.append(
+                {
+                    "anahtar": p.anahtar,
+                    "ad": p.ad,
+                    "aciklama": p.aciklama,
+                    "ses": p.ses,
+                    "gorsel": bool(p.mmproj) and (klasor / p.mmproj).exists(),
+                    "dosya_var": (klasor / p.dosya).exists(),
+                    "boyut_gb": round(boyut / 1024**3, 1),
+                    "yerlesik": p.anahtar in kayit.yerlesik,
+                    "repo": kayit.kaynak(p.anahtar),
+                    "acik": yonetici.yuklenen_model == p.anahtar,
+                }
+            )
+        return {"sistem": _sistem_bilgisi(), "modeller": liste}
+
+    @app.delete("/api/magaza/yuklu/{anahtar}")
+    async def magaza_sil(anahtar: str) -> dict:
+        if yonetici.yuklenen_model == anahtar:
+            await yonetici.durdur()  # acik modelin dosyasi silinemez
+        return indirici.sil(anahtar)
+
+    @app.post("/api/magaza/indir")
+    async def magaza_indir(istek: IndirIstegi) -> dict:
+        return (await indirici.baslat(istek.repo)).ozet()
+
+    @app.get("/api/magaza/indirmeler")
+    async def magaza_indirmeler() -> list[dict]:
+        return [i.ozet() for i in indirici.indirmeler.values()]
+
+    @app.post("/api/magaza/indirmeler/{indirme_id}/iptal")
+    async def magaza_iptal(indirme_id: str) -> dict:
+        indirici.iptal(indirme_id)
+        return {"iptal": indirme_id}
 
     # ---- talimatlar ve skill'ler ----
     @app.get("/api/talimatlar")

@@ -37,6 +37,7 @@
           <button class="nav-oge" data-git="ocr"><span data-ikon="tara"></span>OCR testi</button>
           <button class="nav-oge" data-git="arac"><span data-ikon="anahtar"></span>Araç testi</button>
           <button class="nav-oge" data-git="paket"><span data-ikon="sise"></span>Test paketi</button>
+          <button class="nav-oge" data-git="modeller"><span data-ikon="model"></span>Modeller</button>
           <button class="nav-oge" data-git="skiller"><span data-ikon="sihir"></span>Skill'ler ve talimatlar</button>
         </nav>
         <div class="kenar-oturumlar" id="oturum-listesi"></div>
@@ -153,6 +154,29 @@
             <div class="gunluk" id="p-gunluk"></div>
           </div>
         </section>
+        <!-- MODELLER -->
+        <section class="gorunum sayfa" id="g-modeller" hidden>
+          <div class="sayfa-ic">
+            <h1>Modeller</h1>
+            <p class="soluk">Yüklü modelleri yönet; Hugging Face'teki GGUF modelleri bu bilgisayarın RAM ve diskine göre değerlendir, indir ya da sil. İndirilen dosyalar SHA256 ile doğrulanır, hiçbir şey çalıştırılmaz.</p>
+            <div class="olcum-satiri" id="m-sistem"></div>
+            <div class="kart"><div class="kart-baslik"><b>Yüklü modeller</b></div><div id="m-yuklu" class="skill-liste"></div></div>
+            <div class="kart" hidden><div class="kart-baslik"><b>İndirmeler</b></div><div id="m-indirmeler" class="kaynak-liste"></div></div>
+            <div class="kart">
+              <div class="kart-baslik"><b>Hugging Face'te ara</b><span class="soluk kucuk">en çok indirilenler önce</span></div>
+              <div class="satir"><input class="alan" id="m-ara" placeholder="heretic, abliterated, uncensored, gemma 4..." value="heretic">
+                <button class="btn ana" id="m-ara-btn"><span data-ikon="ara"></span>Ara</button></div>
+              <div class="satir-arasi"><div class="ornekler" id="m-hazir">
+                <button class="ornek" data-q="heretic">heretic</button><button class="ornek" data-q="abliterated">abliterated</button>
+                <button class="ornek" data-q="uncensored">uncensored</button><button class="ornek" data-q="gemma-4 heretic">Gemma 4</button>
+                <button class="ornek" data-q="qwen3.5 heretic">Qwen 3.5</button></div>
+                <label class="onay"><input type="checkbox" id="m-gorsel" checked> Yalnız resim/OCR destekleyenler</label></div>
+              <div class="ayar-not">Gösterge: gereken RAM ≈ model boyutu × 1,15 + 1 GB. "Çalışır": Windows ve diğer programlara 5 GB bırakır; "Zorlanır": diğer programlar kapalıyken açılır.</div>
+              <div id="m-sonuclar" class="skill-liste"></div>
+            </div>
+          </div>
+        </section>
+
         <!-- SKILL'LER VE TALIMATLAR -->
         <section class="gorunum sayfa" id="g-skiller" hidden>
           <div class="sayfa-ic">
