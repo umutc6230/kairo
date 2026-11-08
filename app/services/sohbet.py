@@ -132,18 +132,22 @@ async def gecmis_mesajlari(
     mesajlar: list[Mesaj],
     butce: int,
     gonder: Callable[[Olay], None],
+    simdiki_ekler: set[str] | None = None,
 ) -> tuple[list[dict], list[str]]:
     """Onceki mesajlari EKLERIYLE (gorsel, PDF/metin yazisi, ses) sondan basa butceye kadar alir.
-    Butceye sigmayan eski ekler gonderilmez ve adlari ikinci degerde doner (kullaniciya uyari)."""
+    Ayni ek birden cok mesajda varsa yalniz EN YENI kopyasi gonderilir (eskiler icin uyari yok;
+    model eki zaten goruyor). Butceye sigmayan ve hic gonderilemeyen ekler ikinci degerde doner."""
     sonuc: list[dict] = []
     dusenler: list[str] = []
+    gonderilen: set[str] = set(simdiki_ekler or ())  # model bu ekleri zaten goruyor
     for i in range(len(mesajlar) - 1, -1, -1):
         m = mesajlar[i]
         if m.hata and not m.metin:
             continue
         maliyet = tahmini_token(m.metin)
         if maliyet > butce:  # bu ve daha eski mesajlar hic gitmez; ekleri de bildirilir
-            dusenler = [e.ad for eski_m in mesajlar[: i + 1] for e in eski_m.ekler] + dusenler
+            eskiler = [e for eski_m in mesajlar[: i + 1] for e in eski_m.ekler]
+            dusenler = [e.ad for e in eskiler if e.id not in gonderilen] + dusenler
             break
         butce -= maliyet
         rol = "user" if m.rol == "kullanici" else "assistant"
@@ -154,6 +158,9 @@ async def gecmis_mesajlari(
         etiketler: list[str] = []
         mesaj_dusen: list[str] = []
         for ozet in m.ekler:
+            if ozet.id in gonderilen:  # ayni ek daha yeni bir mesajda zaten gidiyor
+                etiketler.append(f"[Ek: {ozet.ad} (ayni dosya asagida tekrar gonderildi)]")
+                continue
             try:
                 ek = depo.getir(ozet.id)
             except Bulunamadi:
@@ -163,6 +170,7 @@ async def gecmis_mesajlari(
             if c <= butce:
                 parcalar += p
                 butce -= c
+                gonderilen.add(ozet.id)
             else:
                 mesaj_dusen.append(ek.ad)
                 etiketler.append(f"[Ek: {ek.ad} (baglama sigmadi, gonderilmedi)]")
@@ -174,7 +182,7 @@ async def gecmis_mesajlari(
         else:
             icerik = metin or "[ek]"
         sonuc.append({"role": "user", "content": icerik})
-    return list(reversed(sonuc)), dusenler
+    return list(reversed(sonuc)), list(dict.fromkeys(dusenler))  # ayni ad bir kez
 
 
 def istatistik(llm: YerelLLM, bas: float, ilk: float | None, yukleme: float | None) -> dict:
@@ -434,7 +442,7 @@ class SohbetServisi:
                         }
                     )
                 onceki_mesajlar, dusenler = await gecmis_mesajlari(
-                    llm, self.ekler, onceki, max(butce, 0), gonder
+                    llm, self.ekler, onceki, max(butce, 0), gonder, {e.id for e in ekler}
                 )
                 if dusenler:
                     gonder(

@@ -368,3 +368,35 @@ async def test_sohbet_araclari_kapatilabilir(istemci, sunucu):
     await istemci.post(f"/api/oturumlar/{o}/mesaj", json={"metin": "Masaustumde ne var?"})
     istek = sunucu.istekler[-1]
     assert "tools" not in istek and istek["messages"][0]["role"] == "user"
+
+
+async def test_ayni_resim_tekrar_eklenince_eskisi_gonderilmez_uyari_yok(istemci, sunucu):
+    resim = (await istemci.post("/api/ekler", files={"dosya": ("ayni.png", png(), "x")})).json()
+    o = await yeni_oturum(istemci)
+    for metin in ("ilk", "tekrar"):
+        await istemci.post(
+            f"/api/oturumlar/{o}/mesaj", json={"metin": metin, "ekler": [resim["id"]]}
+        )
+    r = await istemci.post(f"/api/oturumlar/{o}/mesaj", json={"metin": "bu resim ne?"})
+    assert not [x for x in olaylar(r.text) if x["tur"] == "uyari"]
+    mesajlar = sunucu.istekler[-1]["messages"][1:]
+    gorseller = [
+        p
+        for m in mesajlar
+        if isinstance(m["content"], list)
+        for p in m["content"]
+        if p["type"] == "image_url"
+    ]
+    assert len(gorseller) == 1  # yalniz en yeni kopya
+    assert "asagida tekrar gonderildi" in mesajlar[0]["content"]
+    # simdiki mesajda da varsa gecmisteki hic gonderilmez
+    await istemci.post(f"/api/oturumlar/{o}/mesaj", json={"metin": "yine", "ekler": [resim["id"]]})
+    son = sunucu.istekler[-1]["messages"]
+    gecmis_gorsel = [
+        p
+        for m in son[1:-1]
+        if isinstance(m["content"], list)
+        for p in m["content"]
+        if p["type"] == "image_url"
+    ]
+    assert gecmis_gorsel == [] and son[-1]["content"][1]["type"] == "image_url"
