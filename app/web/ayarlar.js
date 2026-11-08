@@ -53,6 +53,9 @@ export function ayarlarAc(sekme = "ai") {
         <div class="satir"><button class="btn" id="ay-test"><span data-ikon="oynat"></span>Seçili modeli test et</button><span id="ay-test-sonuc" class="ayar-not">Uygulamanın kullandığı biçimde (JSON şema) kısa bir istek atar.</span></div></div>
       <div class="ayar-grup"><label>Model klasörü</label><input class="alan" id="ay-dizin" value="${kacir(a.llm_dizin)}">
         <div class="ayar-not">llama.cpp\\llama-server.exe ve models\\*.gguf bu klasörde olmalı. ${s.motor_var ? "✓ llama.cpp bulundu" : "✗ llama.cpp bulunamadı"}</div></div>
+      <div class="ayar-grup"><label>Bağlam boyutu</label>
+        <select class="secim" id="ay-baglam"><option value="8192">8K token (en az RAM)</option><option value="16384">16K token (önerilen; talimatlar ~3K yer)</option><option value="32768">32K token (daha çok RAM)</option></select>
+        <div class="ayar-not">Değişince model bir sonraki mesajda yeni bağlamla yeniden açılır. Talimat ve skill ayarları: Skill'ler ve talimatlar sayfası.</div></div>
       <div class="ayar-grup"><label>Sunucu adresi</label><input class="alan" id="ay-adres" value="${kacir(a.adres)}"></div>
       <div class="anahtar-satir"><div><div>Otomatik başlat</div><div class="ayar-not">Model kapalıysa ilk mesajda arka planda açılır; uygulama kapanınca kapanır.</div></div>
         <label class="anahtar"><input type="checkbox" id="ay-oto" ${a.otomatik_baslat ? "checked" : ""}><span></span></label></div>
@@ -108,6 +111,8 @@ export function ayarlarAc(sekme = "ai") {
   alanKaydet("#ay-adres", "adres");
   alanKaydet("#ay-oto", "otomatik_baslat");
   alanKaydet("#ay-araclar", "sohbet_araclari");
+  $("#ay-baglam", govde).value = String(a.baglam_token);
+  alanKaydet("#ay-baglam", "baglam_token", Number);
   alanKaydet("#ay-sistem", "sistem_istemi");
   alanKaydet("#ay-sicaklik", "sicaklik", Number);
   alanKaydet("#ay-max", "max_tokens", Number);

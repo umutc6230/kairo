@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import json
 import time
 from collections.abc import AsyncIterator
@@ -12,7 +13,7 @@ from fastapi import FastAPI, Request, UploadFile
 from fastapi.responses import FileResponse, JSONResponse, Response, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from loguru import logger
-from pydantic import BaseModel, ValidationError
+from pydantic import BaseModel, Field, ValidationError
 
 from app import URUN_ADI, URUN_SAHIBI, URUN_SAHIBI_GITHUB, URUN_SAHIBI_X, __version__
 from app.config import web_dizini
@@ -22,7 +23,9 @@ from app.services.ayarlar import AyarDeposu
 from app.services.ekler import EkDeposu
 from app.services.model_yonetici import LLMFabrikasi, ModelYonetici
 from app.services.oturumlar import OturumDeposu
+from app.services.skiller import SkillDeposu
 from app.services.sohbet import MesajIstegi, SohbetServisi
+from app.services.talimatlar import TalimatDeposu
 from app.services.testler import (
     ORNEK_SATIRLAR,
     AracIstegi,
@@ -47,6 +50,20 @@ class DurdurIstegi(BaseModel):
     harici: bool = False
 
 
+class TalimatIstegi(BaseModel):
+    metin: str = Field(default="", max_length=40000)
+
+
+class SkillIstegi(BaseModel):
+    ad: str = Field(min_length=1, max_length=64)
+    aciklama: str = Field(min_length=1, max_length=600)
+    icerik: str = Field(min_length=1, max_length=40000)
+
+
+class SkillDurumIstegi(BaseModel):
+    acik: bool
+
+
 def dogrulama_mesaji(e: ValidationError) -> str:
     """pydantic hatasini kullaniciya gosterilebilir kisa metne cevirir."""
     return (
@@ -69,12 +86,19 @@ def sse(olaylar: AsyncIterator[dict]) -> StreamingResponse:
     )
 
 
-def uygulama_olustur(veri_dizini: Path, fabrika: LLMFabrikasi = YerelLLM) -> FastAPI:
+def uygulama_olustur(
+    veri_dizini: Path,
+    fabrika: LLMFabrikasi = YerelLLM,
+    skill_deposu: SkillDeposu | None = None,
+) -> FastAPI:
     ayarlar = AyarDeposu(veri_dizini)
     oturumlar = OturumDeposu(veri_dizini)
     ekler = EkDeposu(veri_dizini)
     yonetici = ModelYonetici(ayarlar, fabrika)
-    sohbet = SohbetServisi(yonetici, oturumlar, ekler)
+    talimatlar = TalimatDeposu(veri_dizini)
+    skiller = skill_deposu or SkillDeposu(veri_dizini)
+    sohbet = SohbetServisi(yonetici, oturumlar, ekler, talimatlar, skiller)
+    isitmalar: set[asyncio.Task] = set()
     testler = TestServisi(yonetici, ekler)
 
     @asynccontextmanager
@@ -120,7 +144,10 @@ def uygulama_olustur(veri_dizini: Path, fabrika: LLMFabrikasi = YerelLLM) -> Fas
 
     @app.post("/api/model/hazirla")
     async def model_hazirla(istek: ModelIstegi) -> dict:
-        return await yonetici.hazirla(istek.model)
+        sonuc = await yonetici.hazirla(istek.model)
+        isitmalar.add(gorev := asyncio.create_task(sohbet.isit()))  # arka planda onbellek
+        gorev.add_done_callback(isitmalar.discard)
+        return sonuc
 
     @app.post("/api/model/durdur")
     async def model_durdur(istek: DurdurIstegi) -> dict:
@@ -201,6 +228,57 @@ def uygulama_olustur(veri_dizini: Path, fabrika: LLMFabrikasi = YerelLLM) -> Fas
     async def ek_ornek() -> dict:
         ek = ekler.kaydet("ornek-hakedis.png", ornek_belge())
         return {**ek.model_dump(exclude={"metin"}), "beklenen": "\n".join(ORNEK_SATIRLAR)}
+
+    # ---- talimatlar ve skill'ler ----
+    @app.get("/api/talimatlar")
+    async def talimat_oku() -> dict:
+        a = ayarlar.oku()
+        kaynaklar = talimatlar.kaynaklar(claude=True, uygulama=False)
+        return {
+            "claude": [{**k, "metin": k["metin"][:4000]} for k in kaynaklar],
+            "claude_acik": a.claude_talimatlari,
+            "uygulama": talimatlar.uygulama_oku(),
+            "uygulama_acik": a.uygulama_talimati,
+            "uygulama_yol": str(talimatlar.uygulama_yolu),
+            "baglam_token": a.baglam_token,
+        }
+
+    @app.put("/api/talimatlar")
+    async def talimat_yaz(istek: TalimatIstegi) -> dict:
+        return {"uygulama": talimatlar.uygulama_yaz(istek.metin)}
+
+    @app.get("/api/skiller")
+    async def skill_liste() -> dict:
+        kapali = set(ayarlar.oku().kapali_skiller)
+        liste = [{**s.ozet(), "acik": s.ad not in kapali} for s in skiller.kesfet()]
+        return {
+            "skiller": liste,
+            "kaynaklar": [
+                {"kaynak": k, "yol": str(p), "var": p.is_dir()} for k, p in skiller.kaynak_listesi
+            ],
+        }
+
+    @app.get("/api/skiller/{ad}")
+    async def skill_getir(ad: str) -> dict:
+        s = skiller.getir(ad)
+        return {**s.ozet(), "icerik": s.dosya.read_text(encoding="utf-8", errors="replace")[:20000]}
+
+    @app.post("/api/skiller")
+    async def skill_ekle(istek: SkillIstegi) -> dict:
+        return skiller.olustur(istek.ad, istek.aciklama, istek.icerik).ozet()
+
+    @app.delete("/api/skiller/{ad}")
+    async def skill_sil(ad: str) -> dict:
+        skiller.sil(ad)
+        return {"silindi": ad}
+
+    @app.put("/api/skiller/{ad}/durum")
+    async def skill_durum(ad: str, istek: SkillDurumIstegi) -> dict:
+        skiller.getir(ad)
+        kapali = set(ayarlar.oku().kapali_skiller)
+        kapali = kapali - {ad} if istek.acik else kapali | {ad}
+        ayarlar.guncelle({"kapali_skiller": sorted(kapali)})
+        return {"ad": ad, "acik": istek.acik}
 
     # ---- testler ----
     @app.post("/api/karsilastir")

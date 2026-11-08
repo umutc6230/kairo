@@ -15,12 +15,14 @@ from typing import Any
 from pydantic import BaseModel, Field
 
 from app.exceptions import Bulunamadi, SesDesteklenmiyor, UygulamaHatasi, YerelLLMHatasi
+from app.services import skiller as skl
 from app.services.ekler import Ek, EkDeposu
 from app.services.model_yonetici import ModelYonetici
 from app.services.oturumlar import EkOzet, Mesaj, OturumDeposu, baslik_uret
 from app.services.sohbet_araclari import ARACLAR as SOHBET_ARACLARI
 from app.services.sohbet_araclari import ISLEYICILER as SOHBET_ISLEYICILERI
 from app.services.sohbet_araclari import SISTEM_NOTU, sonuc_ozeti
+from app.services.talimatlar import TalimatDeposu
 from app.services.yerel_llm import (
     DENGELI_BUTCE,
     DERIN_EK_TOKEN,
@@ -288,10 +290,80 @@ async def cevap_akit(
 
 
 class SohbetServisi:
-    def __init__(self, yonetici: ModelYonetici, oturumlar: OturumDeposu, ekler: EkDeposu) -> None:
+    def __init__(
+        self,
+        yonetici: ModelYonetici,
+        oturumlar: OturumDeposu,
+        ekler: EkDeposu,
+        talimatlar: TalimatDeposu,
+        skiller: skl.SkillDeposu,
+    ) -> None:
         self.yonetici = yonetici
         self.oturumlar = oturumlar
         self.ekler = ekler
+        self.talimatlar = talimatlar
+        self.skiller = skiller
+
+    def baglam_hazirla(
+        self, ayar, istek_metni: str, onceki: list[Mesaj]
+    ) -> tuple[str, list, dict, str | None]:
+        """(sistem metni, araclar, isleyiciler, otomatik yuklenen skill adi).
+        Sira onbellek icin: SABIT kisim once (arac notu, talimatlar, sistem istemi), mesaja gore
+        DEGISEN skill listesi en sonda; llama-server sabit oneki onbellekten kullanir."""
+        araclar: list = list(SOHBET_ARACLARI) if ayar.sohbet_araclari else []
+        isleyiciler: dict = dict(SOHBET_ISLEYICILERI)
+        skill_metni = ""
+        skill_listesi = ""
+        otomatik: str | None = None
+        if ayar.skiller_acik:
+            kapali = set(ayar.kapali_skiller)
+            etkin = [s for s in self.skiller.kesfet() if s.ad not in kapali]
+            if etkin:
+                sorgu = " ".join(
+                    [istek_metni] + [m.metin for m in onceki[-4:] if m.rol == "kullanici"]
+                )
+                if (
+                    ayar.baglam_token >= 16384
+                ):  # Claude Code gibi: tum skill'ler (sabit, onbellekte)
+                    skill_listesi = skl.tam_liste_metni(etkin)
+                else:  # 8K: yer yok, yalniz mesaja en uygunlar (degisken)
+                    skill_metni = skl.sistem_metni(skl.uygun_skiller(etkin, sorgu))
+                if secilen := skl.otomatik_skill(etkin, istek_metni or sorgu):
+                    otomatik = secilen.ad
+                    skill_metni = f"{skill_metni}\n\n{skl.otomatik_metin(secilen)}".strip()
+                araclar += skl.ARACLAR
+                isleyiciler |= skl.arac_isleyicileri(self.skiller, kapali)
+        talimat = self.talimatlar.sistem_metni(
+            claude=ayar.claude_talimatlari, uygulama=ayar.uygulama_talimati
+        )
+        not_ = SISTEM_NOTU if ayar.sohbet_araclari else ""
+        parcalar = (
+            not_,
+            talimat,
+            ayar.sistem_istemi,
+            skill_listesi,
+            skill_metni,
+        )  # sabit -> degisken
+        sistem = "\n\n".join(s for s in parcalar if s)
+        return sistem, araclar, isleyiciler, otomatik
+
+    async def isit(self) -> None:
+        """Model yuklenince sabit sistem onekini (talimatlar + araclar) bir kez isletir; ilk
+        sohbet mesaji bu kismi llama-server onbelleginden kullanir (dahili GPU'da dakikalar)."""
+        ayar = self.yonetici.ayarlar.oku()
+        sistem, araclar, _, _ = self.baglam_hazirla(ayar, "", [])
+        if not sistem:
+            return
+        try:
+            async with self.yonetici.kullan(ayar.model) as llm:
+                await llm.sohbet(
+                    [{"role": "system", "content": sistem}, {"role": "user", "content": "."}],
+                    tools=araclar or None,
+                    max_tokens=1,
+                    dusunme="kapali",
+                )
+        except (YerelLLMHatasi, UygulamaHatasi):
+            pass  # isitma basarisizsa sohbet yine calisir, yalniz ilk mesaj yavas olur
 
     async def mesaj_gonder(self, oturum_id: str, istek: MesajIstegi) -> AsyncIterator[Olay]:
         if not istek.metin.strip() and not istek.ekler:
@@ -314,6 +386,7 @@ class SohbetServisi:
         asistan = Mesaj(rol="asistan", model=ayar.model)
         yarim: list[str] = []
         yarim_dusunce: list[str] = []
+        otomatik_kayit: list[dict] = []
 
         async def uret(gonder: Callable[[Olay], None]) -> dict:
             if self.yonetici.mesgul:
@@ -332,14 +405,34 @@ class SohbetServisi:
                     icerik = [{"type": "text", "text": istek.metin}] if istek.metin else []
                     icerik += parcalar
                 seviye = istek.dusunme or ayar.dusunme
-                araclar = SOHBET_ARACLARI if ayar.sohbet_araclari else None
-                sistem = "\n\n".join(
-                    s for s in (SISTEM_NOTU if araclar else "", ayar.sistem_istemi) if s
+                sistem, araclar, isleyiciler, otomatik = self.baglam_hazirla(
+                    ayar, istek.metin, onceki
                 )
-                if araclar:  # arac tanimlari + not + bir arac sonucu icin pay
-                    guncel += tahmini_token(json.dumps(araclar) + SISTEM_NOTU) + 1800
-                butce = BAGLAM_TOKEN - GUVENLIK_TOKEN - guncel
+                if otomatik:  # arayuzde arac adimi olarak gorunsun
+                    kayit = {
+                        "id": "otomatik",
+                        "ad": "skill_kullan",
+                        "argumanlar": {"ad": otomatik},
+                        "ozet": "otomatik yüklendi",
+                        "sonuc": "",
+                        "sure_ms": 0,
+                    }
+                    gonder({"tur": "arac_cagrisi", **kayit})
+                    gonder({"tur": "arac_sonucu", **kayit})
+                    otomatik_kayit.append(kayit)
+                guncel += tahmini_token(sistem) - tahmini_token(ayar.sistem_istemi)
+                if araclar:  # arac tanimlari + bir arac sonucu icin pay
+                    guncel += tahmini_token(json.dumps(araclar)) + 1800
+                butce = ayar.baglam_token - GUVENLIK_TOKEN - guncel
                 butce -= ayrilan_token(ayar.max_tokens, seviye)
+                if butce < 0:
+                    gonder(
+                        {
+                            "tur": "uyari",
+                            "metin": "Talimatlar ve araçlar bağlamı dolduruyor; cevap kesilebilir. "
+                            "Ayarlar'dan bağlamı büyütün ya da talimatları kapatın.",
+                        }
+                    )
                 onceki_mesajlar, dusenler = await gecmis_mesajlari(
                     llm, self.ekler, onceki, max(butce, 0), gonder
                 )
@@ -347,8 +440,8 @@ class SohbetServisi:
                     gonder(
                         {
                             "tur": "uyari",
-                            "metin": "Bağlama (8192 token) sığmadığı için şu eski ekler bu "
-                            f"cevapta gönderilmedi: {', '.join(dusenler)}",
+                            "metin": f"Bağlama ({ayar.baglam_token} token) sığmadığı için şu "
+                            f"eski ekler bu cevapta gönderilmedi: {', '.join(dusenler)}",
                         }
                     )
                 mesajlar = [{"role": "system", "content": sistem}] if sistem else []
@@ -361,8 +454,8 @@ class SohbetServisi:
                     dusunme=istek.dusunme,
                     max_tokens=ayar.max_tokens,
                     sicaklik=ayar.sicaklik,
-                    araclar=araclar,
-                    isleyiciler=SOHBET_ISLEYICILERI,
+                    araclar=araclar or None,
+                    isleyiciler=isleyiciler,
                 )
                 sonuc["istatistik"]["yukleme_sn"] = yukleme
                 return sonuc
@@ -374,7 +467,7 @@ class SohbetServisi:
                     asistan.metin = sonuc["metin"]
                     asistan.dusunce = sonuc["dusunce"]
                     asistan.istatistik = sonuc["istatistik"]
-                    asistan.araclar = sonuc["araclar"]
+                    asistan.araclar = otomatik_kayit + sonuc["araclar"]
                     continue
                 if olay["tur"] == "parca":
                     yarim.append(olay["metin"])

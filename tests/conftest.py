@@ -164,11 +164,25 @@ def llm_dizin(tmp_path: Path) -> Path:
 
 
 @pytest.fixture
-def app(veri: Path, sunucu: SahteSunucu, llm_dizin: Path):
+def skill_klasoru(tmp_path: Path, monkeypatch) -> Path:
+    """Testler kullanicinin gercek ~/.claude skill'lerini ve CLAUDE.md'sini okumasin."""
+    from app.services import talimatlar
+
+    d = tmp_path / "claude_skills"
+    d.mkdir()
+    monkeypatch.setattr(talimatlar, "claude_md_yolu", lambda: tmp_path / "CLAUDE.md")
+    return d
+
+
+@pytest.fixture
+def app(veri: Path, sunucu: SahteSunucu, llm_dizin: Path, skill_klasoru: Path):
+    from app.services.skiller import SkillDeposu
+
     def fabrika(**kw) -> YerelLLM:
         return YerelLLM(transport=httpx.MockTransport(sunucu), **kw)
 
-    uyg = uygulama_olustur(veri, fabrika)
+    depo = SkillDeposu(veri, [("claude", skill_klasoru), ("uygulama", veri / "skills")])
+    uyg = uygulama_olustur(veri, fabrika, depo)
     from app.services.ayarlar import AyarDeposu
 
     AyarDeposu(veri).guncelle({"llm_dizin": str(llm_dizin)})

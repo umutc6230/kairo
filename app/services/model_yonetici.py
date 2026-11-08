@@ -41,7 +41,7 @@ class ModelYonetici:
         if self._llm is None or anahtar != self._anahtar:
             if self._llm is not None:
                 await self._llm.kapat()
-            self._llm = self._fabrika(adres=a.adres, dizin=Path(a.llm_dizin))
+            self._llm = self._fabrika(adres=a.adres, dizin=Path(a.llm_dizin), baglam=a.baglam_token)
             self._anahtar = anahtar
         self._llm.dusunme = a.dusunme
         return self._llm
@@ -49,6 +49,12 @@ class ModelYonetici:
     async def _hazirla(self, model: str) -> YerelLLM:
         llm = await self._istemci()
         llm.model = model
+        baglam = self.ayarlar.oku().baglam_token
+        if llm.baglam != baglam:  # bagalam degisti: kendi sunucumuz yeni -c ile acilsin
+            llm.baglam = baglam
+            if llm._surec and llm._surec.poll() is None:
+                await llm._sureci_durdur()
+                await llm._kapanana_kadar_bekle()
         if await llm.saglikli() and model in (await llm._acik_modeller() or [model]):
             self.durum, self.yuklenen_model = "hazir", model
             return llm
@@ -110,6 +116,7 @@ class ModelYonetici:
             "yukleme_sn": self.yukleme_sn,
             "secili_model": a.model,
             "dusunme": a.dusunme,
+            "baglam_token": a.baglam_token,
             "bellek": sistem.bellek(),
             "motor_var": sistem.motor_var(dizin),
             "modeller": [

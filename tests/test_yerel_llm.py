@@ -951,3 +951,13 @@ async def test_akis_olaylari_aracsiz_metin_ve_hatalar():
 
     with pytest.raises(ModelCevapHatasi, match="zamaninda"):
         _ = [o async for o in istemci(yavas).akis_olaylari([])]
+
+
+def test_baglam_boyutu_komuta_gider(tmp_path):
+    (tmp_path / "llama.cpp").mkdir()
+    (tmp_path / "models").mkdir()
+    (tmp_path / "llama.cpp" / "llama-server.exe").write_bytes(b"")
+    (tmp_path / "models" / ANA_MODEL).write_bytes(b"")
+    komut = YerelLLM(dizin=tmp_path, baglam=16384)._baslat_komutu(8080, goruntu=False)
+    assert komut[komut.index("-c") + 1] == "16384"
+    assert "8192" in YerelLLM(dizin=tmp_path)._baslat_komutu(8080, goruntu=False)

@@ -322,7 +322,7 @@ async def test_sohbet_baglama_sigmayan_eski_resim_uyarisi(istemci, sunucu):
         (await istemci.post("/api/ekler", files={"dosya": (f"r{i}.png", png(), "x")})).json()
         for i in range(5)
     ]
-    await istemci.put("/api/ayarlar", json={"max_tokens": 4096})  # butce: ~3 gorsel
+    await istemci.put("/api/ayarlar", json={"max_tokens": 4096, "baglam_token": 8192})
     o = await yeni_oturum(istemci)
     for ek in ekler:
         await istemci.post(f"/api/oturumlar/{o}/mesaj", json={"metin": "bak", "ekler": [ek["id"]]})
@@ -363,7 +363,7 @@ async def test_sohbette_arac_masaustunu_listeler(istemci, sunucu, tmp_path, monk
 
 
 async def test_sohbet_araclari_kapatilabilir(istemci, sunucu):
-    await istemci.put("/api/ayarlar", json={"sohbet_araclari": False})
+    await istemci.put("/api/ayarlar", json={"sohbet_araclari": False, "skiller_acik": False})
     o = await yeni_oturum(istemci)
     await istemci.post(f"/api/oturumlar/{o}/mesaj", json={"metin": "Masaustumde ne var?"})
     istek = sunucu.istekler[-1]

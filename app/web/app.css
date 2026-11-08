@@ -327,3 +327,19 @@ pre.duz { white-space: pre-wrap; font-family: var(--mono); font-size: 13px; marg
 .arac-adim.acik .arac-baslik .ok svg { transform: rotate(90deg); }
 .arac-sonuc { display: none; margin: 6px 0 4px; max-height: 280px; }
 .arac-adim.acik .arac-sonuc { display: block; }
+
+/* skill'ler ve talimatlar */
+.kart { border: 1px solid var(--cizgi2); border-radius: var(--yaricap); background: var(--yuzey); padding: 14px 16px; display: flex; flex-direction: column; gap: 12px; }
+.kart-baslik { display: flex; align-items: center; gap: 10px; font-size: 15.5px; }
+.kaynak-liste { display: flex; flex-direction: column; gap: 4px; }
+.kaynak-satir { display: flex; align-items: center; gap: 8px; padding: 6px 8px; border-radius: 8px; background: var(--bg); font-size: 13.5px; }
+.kaynak-satir svg { width: 15px; height: 15px; color: var(--soluk); }
+.kaynak-satir .yol { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ornek.secili { background: var(--yuzey3); color: var(--metin); }
+.skill-liste { display: flex; flex-direction: column; max-height: 560px; overflow-y: auto; border-top: 1px solid var(--cizgi); }
+.skill-satir { display: flex; gap: 12px; align-items: center; padding: 10px 4px; border-bottom: 1px solid var(--cizgi); }
+.skill-satir.kapali { opacity: .5; }
+.skill-bilgi { flex: 1; min-width: 0; }
+.skill-bilgi .ust { display: flex; gap: 8px; align-items: center; font-size: 14.5px; }
+.skill-bilgi .alt { font-size: 13px; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.skill-eylem { display: flex; align-items: center; gap: 4px; }

@@ -23,6 +23,11 @@ class KullaniciAyarlari(BaseModel):
     adres: str = VARSAYILAN_ADRES
     otomatik_baslat: bool = True
     sohbet_araclari: bool = True  # salt okunur dosya araclari + hesap/saat
+    claude_talimatlari: bool = True  # ~/.claude/CLAUDE.md + @importlar (brain policy)
+    uygulama_talimati: bool = True  # <veri>/AGENTS.md
+    skiller_acik: bool = True  # Claude Code / brain / uygulama skill'leri
+    kapali_skiller: list[str] = []
+    baglam_token: int = 16384  # llama-server -c; talimatlar ~3k token yer
     sistem_istemi: str = Field(default="", max_length=4000)
     sicaklik: float = Field(default=0.2, ge=0.0, le=2.0)
     max_tokens: int = Field(default=1024, ge=16, le=8192)
@@ -39,6 +44,13 @@ class KullaniciAyarlari(BaseModel):
     def _dusunme(cls, v: str) -> str:
         if v not in DUSUNME_SEVIYELERI:
             raise ValueError(f"Gecersiz dusunme seviyesi: {v}")
+        return v
+
+    @field_validator("baglam_token")
+    @classmethod
+    def _baglam(cls, v: int) -> int:
+        if v not in (8192, 16384, 32768):
+            raise ValueError("Baglam 8192, 16384 ya da 32768 olabilir.")
         return v
 
     @field_validator("adres")

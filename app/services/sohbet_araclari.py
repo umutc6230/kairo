@@ -246,7 +246,8 @@ SISTEM_NOTU = (
     "Bu bilgisayardaki dosya ve klasorlere salt okunur araclarla erisebilirsin: klasor_listele, "
     "dosya_oku, dosya_ara. Kullanici dosya, klasor ya da masaustu hakkinda sorarsa 'yapamam' deme, "
     "uygun araci cagir (masaustu icin yol='masaustu'). Hesap icin hesapla, saat icin saat_kac. "
-    "Dosya silme, yazma ya da tasima aracin yok; istenirse bunu acikca soyle."
+    "Dosya silme, yazma ya da tasima aracin yok; istenirse bunu acikca soyle. "
+    "Bir araci kullanacaksan bunu metin olarak yazma ('cagiracagim' deme), araci dogrudan cagir."
 )
 
 

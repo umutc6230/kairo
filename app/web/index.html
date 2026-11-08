@@ -37,6 +37,7 @@
           <button class="nav-oge" data-git="ocr"><span data-ikon="tara"></span>OCR testi</button>
           <button class="nav-oge" data-git="arac"><span data-ikon="anahtar"></span>Araç testi</button>
           <button class="nav-oge" data-git="paket"><span data-ikon="sise"></span>Test paketi</button>
+          <button class="nav-oge" data-git="skiller"><span data-ikon="sihir"></span>Skill'ler ve talimatlar</button>
         </nav>
         <div class="kenar-oturumlar" id="oturum-listesi"></div>
         <div class="kenar-alt">
@@ -150,6 +151,38 @@
             </div>
             <div id="p-tablo"></div>
             <div class="gunluk" id="p-gunluk"></div>
+          </div>
+        </section>
+        <!-- SKILL'LER VE TALIMATLAR -->
+        <section class="gorunum sayfa" id="g-skiller" hidden>
+          <div class="sayfa-ic">
+            <h1>Skill'ler ve talimatlar</h1>
+            <p class="soluk">Claude Code mantığı: talimatlar her sohbete eklenir; skill'lerden mesaja uygun olanlar modele listelenir, model gerekirse <code>skill_kullan</code> ile tam talimatı yükler. Skill'ler yalnız okunur, içlerindeki betikler çalıştırılmaz.</p>
+
+            <div class="kart">
+              <div class="kart-baslik"><b>Talimatlar</b><span class="soluk kucuk">CLAUDE.md / AGENTS.md</span></div>
+              <div class="anahtar-satir"><div><div>Claude Code ve brain talimatları</div>
+                <div class="ayar-not">~/.claude/CLAUDE.md ve içindeki @import'lar (BRAIN-POLICY.md gibi). <span id="t-claude-ozet"></span></div></div>
+                <label class="anahtar"><input type="checkbox" id="t-claude-acik"><span></span></label></div>
+              <div id="t-claude-liste" class="kaynak-liste"></div>
+              <div class="anahtar-satir"><div><div>Uygulama talimatı (AGENTS.md)</div><div class="ayar-not">Yalnız bu uygulamadaki sohbetlere eklenir. <span id="t-uygulama-token"></span></div></div>
+                <label class="anahtar"><input type="checkbox" id="t-uygulama-acik"><span></span></label></div>
+              <textarea class="alan" id="t-uygulama" rows="5" placeholder="Örn: Her zaman Türkçe cevap ver. Hakediş sorularında önce hakedis-kontrol skill'ini kullan."></textarea>
+              <div class="satir-arasi"><div class="satir"><label class="soluk kucuk" for="t-baglam">Bağlam</label>
+                <select class="secim" id="t-baglam"><option value="8192">8K token (en az RAM)</option><option value="16384">16K token (önerilen)</option><option value="32768">32K token (daha çok RAM)</option></select>
+                <span id="t-baglam-not"></span></div>
+                <button class="btn ana" id="t-kaydet">Talimatı kaydet</button></div>
+            </div>
+
+            <div class="kart">
+              <div class="kart-baslik"><b>Skill'ler</b><span class="soluk kucuk" id="s-sayi"></span>
+                <label class="anahtar" title="Skill'leri kullan" style="margin-left:auto"><input type="checkbox" id="s-acik"><span></span></label></div>
+              <div class="satir"><input class="alan" id="s-ara" placeholder="Skill ara...">
+                <button class="btn" id="s-yeni"><span data-ikon="arti"></span>Yeni skill</button></div>
+              <div class="ornekler" id="s-filtre"><button class="ornek secili" data-f="hepsi">Tümü</button><button class="ornek" data-f="claude">Claude Code</button><button class="ornek" data-f="brain">Brain</button><button class="ornek" data-f="uygulama">Uygulama</button></div>
+              <div class="ayar-not" id="s-kaynaklar"></div>
+              <div id="s-liste" class="skill-liste"></div>
+            </div>
           </div>
         </section>
       </main>

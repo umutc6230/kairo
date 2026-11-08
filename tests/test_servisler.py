@@ -270,6 +270,7 @@ async def test_durdur_kilidi_beklemez(tmp_path):
 
     class SahteLLM:
         def __init__(self, **kw):
+            self.baglam = kw.get("baglam", 8192)
             self.durduruldu = asyncio.Event()
             self.dusunme = "kapali"
             self.model = ""

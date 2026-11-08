@@ -355,10 +355,12 @@ class YerelLLM:
         okuma_zaman_asimi: float | None = None,
         transport: httpx.AsyncBaseTransport | None = None,
         cokunce_kapat: bool = True,
+        baglam: int = 8192,
     ) -> None:
         """okuma_zaman_asimi None ise dusunme seviyesine gore secilir (ZAMAN_ASIMI_SN).
         cokunce_kapat: bu nesnenin baslattigi sunucu, uygulama cokse de kapanir (Windows Job)."""
         self.cokunce_kapat = cokunce_kapat
+        self.baglam = baglam  # llama-server -c (token); degisirse sunucu yeniden baslatilmali
         self._is_nesnesi: int | None = None
         self.adres = adres.rstrip("/")
         self.kok = self.adres.removesuffix("/v1")
@@ -436,7 +438,7 @@ class YerelLLM:
         if not model.exists():
             raise SunucuBaslamadi(f"Model dosyasi bulunamadi: {model.name} ({model.parent})")
         komut = [str(exe), "-m", str(model), "--host", "127.0.0.1", "--port", str(port)]
-        komut += ["-ngl", "99", "-c", "8192", "--jinja", "--alias", self.model]
+        komut += ["-ngl", "99", "-c", str(self.baglam), "--jinja", "--alias", self.model]
         mmproj = self.dizin / "models" / self.profil.mmproj
         if goruntu and mmproj.exists():
             komut += ["--mmproj", str(mmproj)]
