@@ -42,6 +42,11 @@ yerel_llm.YerelLLM  --> llama-server (127.0.0.1:8080, Projects\llm)
   tahmini; gereken RAM = boyut*1.15+1; calisir <= toplam-5, zorlanir <= toplam-2. Indirme .part +
   Range ile devam, SHA256 (LFS) dogrulama, data/modeller.json kaydi -> MODELLER'e eklenir.
 
+- Yerel sunucu (agecidi.py): ayni portta Ollama (/api/*) + OpenAI (/v1/*). UI sunucusuyla AYNI
+  event loop'ta ikinci uvicorn.Server (ModelYonetici kilidi ve httpx istemcisi loop'a bagli; ayri
+  thread olmaz). Port onceden denenir; doluysa kimin kullandigi /api/version ile soylenir. Ollama
+  istemcileri dusunme istemezse enable_thinking=false. --sunucu: pencere yok, /api/yerel/kapat ile biter.
+
 ## Bulgular
 - Kucuk modeller (E4B) araci metinle "cagiracagim" deyip cagirmayabiliyor -> otomatik skill yukleme.
 - Dahili GPU'da girdi isleme 14-26 tok/sn: 4.8K token sistem mesaji ilk cevabi 3 dk geciktirdi;

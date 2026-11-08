@@ -31,6 +31,12 @@ listesi, ortada sohbet ve altta mesaj kutusu olan bir masaüstü sohbet uygulama
 - **Modeller (Hugging Face mağazası):** GGUF modelleri ara; her sonuçta bu bilgisayarın RAM ve
   diskine göre "✓ Çalışır / ⚠ Zorlanır / ✗ Çalışmaz" göstergesi. İndirme arka planda, kaldığı
   yerden devam eder, SHA256 ile doğrulanır; indirilen model listeye eklenir. Yüklü modeller silinebilir.
+- **Yerel sunucu (Ollama gibi):** Studio açıkken modeller diğer uygulamalara sunulur.
+  Ollama uyumlu `http://127.0.0.1:11434` (`/api/tags`, `/api/show`, `/api/chat`, `/api/generate`) ve
+  OpenAI uyumlu `http://127.0.0.1:11434/v1` (`/v1/models`, `/v1/chat/completions`). İstenen model
+  kapalıysa Studio açar/değiştirir. Ollama destekli uygulamalar (GridMind: AI motoru → *Local model
+  (Ollama)*) ayar değiştirmeden bağlanır; OpenAI/OpenRouter kullananlar yalnız adresi değiştirir.
+  Pencere olmadan arka planda: `Sunucu.bat`, kapatmak: `Sunucu-Durdur.bat`.
 - **Bağlam boyutu:** 8K / 16K / 32K (talimatlar ~3K token yer; 16K önerilir).
 
 ## Gereksinimler
