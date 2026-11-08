@@ -32,6 +32,8 @@ Yerel sunucu (Ollama gibi)
 - Studio acikken modeller diger uygulamalara sunulur: Ollama uyumlu http://127.0.0.1:11434 ,
   OpenAI uyumlu http://127.0.0.1:11434/v1 . GridMind: AI motoru -> Local model (Ollama).
 - Pencere olmadan arka planda: Sunucu.bat ; kapatmak: Sunucu-Durdur.bat
+- Claude Code yerel modelle: Claude-Yerel.bat [model] (calisilacak klasorde acin).
+  TermFlow Agent IDE: Ayarlar > AI Providers > Add Local Models.
 
 Yalniz Windows'ta calisir (llama-server.exe ve WebView2 Windows'a ozeldir).
 

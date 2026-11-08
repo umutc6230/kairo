@@ -47,6 +47,11 @@ yerel_llm.YerelLLM  --> llama-server (127.0.0.1:8080, Projects\llm)
   thread olmaz). Port onceden denenir; doluysa kimin kullandigi /api/version ile soylenir. Ollama
   istemcileri dusunme istemezse enable_thinking=false. --sunucu: pencere yok, /api/yerel/kapat ile biter.
 
+- Anthropic uclari (/v1/messages, count_tokens) llama-server'in kendi Anthropic API'sine aynen
+  aktarilir (SSE dahil). Claude Code her istekte `thinking: adaptive` gonderir: yalniz `enabled`
+  dusunmeyi acar. Sistemdeki `x-anthropic-billing-header` blogu atilir (cch= degisirse onbellek bozulur).
+  `claude-*` adlari acik modele gider (arka plan haiku istekleri model degistirmesin).
+
 ## Bulgular
 - Kucuk modeller (E4B) araci metinle "cagiracagim" deyip cagirmayabiliyor -> otomatik skill yukleme.
 - Dahili GPU'da girdi isleme 14-26 tok/sn: 4.8K token sistem mesaji ilk cevabi 3 dk geciktirdi;
@@ -56,4 +61,7 @@ yerel_llm.YerelLLM  --> llama-server (127.0.0.1:8080, Projects\llm)
   koyunca sonsuz ozyineleme + GIL -> arka uc yanit vermedi. Pencere `_pencere` olarak saklanir.
 - Ayarlardaki adres `/v1` ile biter; istemciye ikinci kez `/v1` eklenmemeli (dogrulayici ekler).
 - `"İstanbul".lower()` -> `i̇` (birlesen nokta): Turkce harfleri lower()'dan ONCE cevir.
+- Claude Code ilk istegi --tools ile 6 aracla bile 5-10K token: dahili GPU'da ilk cevap 5-12 dk;
+  onek onbellegiyle sonraki turlar ~10 sn. CLAUDE_CODE_MAX_CONTEXT_TOKENS 16384 verilince Claude Code
+  istek gondermeden 'Prompt is too long' der (cikti + sikistirma payi): 32768 ve Studio baglami 32K.
 - Dahili GPU: bos RAM ~1 GB'a dusunce gorsel istekleri `failed to process mtmd chunk` verir.

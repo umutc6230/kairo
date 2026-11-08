@@ -14,7 +14,7 @@ from app.main import bos_port
 from app.services import agecidi as ag
 from app.services.ayarlar import AyarDeposu
 from app.services.model_yonetici import ModelYonetici
-from app.services.yerel_llm import YerelLLM
+from app.services.yerel_llm import YerelLLM, YerelLLMHatasi
 
 PNG_B64 = base64.b64encode(b"\x89PNG\r\n\x1a\n" + b"0" * 20).decode()
 
@@ -252,3 +252,59 @@ async def test_ayarlardan_sunucu_ac_kapat(istemci, app):
     assert not (await istemci.get("/api/sunucu")).json()["acik"]
     r = await istemci.put("/api/ayarlar", json={"sunucu_port": 80})
     assert r.status_code == 422
+
+
+async def test_anthropic_uclari_claude_code_icin(gi, sunucu, gecit, monkeypatch):
+    govde = {
+        "model": "gemma4-e4b-heretic",
+        "max_tokens": 100,
+        "messages": [{"role": "user", "content": "selam"}],
+    }
+    r = (await gi.post("/v1/messages", json=govde)).json()
+    assert r["content"][0]["text"] == "selam" and r["model"] == "gemma4-e4b-heretic"
+    assert sunucu.istekler[-1]["chat_template_kwargs"] == {"enable_thinking": False}
+    # Claude Code arka plan isleri 'claude-haiku-...' ister: acik model kullanilir (degisim yok)
+    ek = {"model": "claude-haiku-4-5", "thinking": {"type": "enabled", "budget_tokens": 50}}
+    await gi.post("/v1/messages", json={**govde, **ek})
+    assert sunucu.istekler[-1]["model"] == "gemma4-e4b-heretic"
+    assert "chat_template_kwargs" not in sunucu.istekler[-1]
+    # Claude Code her istekte 'adaptive' ister: yerel modelde dusunme kapali kalir,
+    # her istekte degisebilen billing satiri onbellegi bozmasin diye atilir
+    claude_code = {
+        "thinking": {"type": "adaptive"},
+        "system": [
+            {"type": "text", "text": "x-anthropic-billing-header: cc_version=2.1; cch=ab12;"},
+            {"type": "text", "text": "You are Claude Code."},
+        ],
+    }
+    await gi.post("/v1/messages", json={**govde, **claude_code})
+    giden = sunucu.istekler[-1]
+    assert "thinking" not in giden and giden["chat_template_kwargs"] == {"enable_thinking": False}
+    assert giden["system"] == [{"type": "text", "text": "You are Claude Code."}]
+    await gi.post("/v1/messages", json={**govde, "system": "x-anthropic-billing-header: a\nSen."})
+    assert sunucu.istekler[-1]["system"] == "Sen."
+    akis = await gi.post("/v1/messages", json={**govde, "stream": True})
+    assert "event: message_start" in akis.text and "selam" in akis.text
+    assert akis.headers["content-type"].startswith("text/event-stream")
+    say = (await gi.post("/v1/messages/count_tokens", json=govde)).json()
+    assert say == {"input_tokens": 42}
+    r = await gi.post("/v1/messages", json={**govde, "model": "bilinmeyen-model"})
+    assert r.status_code == 404 and r.json()["error"]["type"] == "not_found_error"
+    m = (await gi.get("/v1/models")).json()["data"][0]
+    assert m["type"] == "model" and m["display_name"]
+    sunucu.hata = (500, "boom")
+    assert (await gi.post("/v1/messages", json=govde)).status_code == 500
+    akis = await gi.post("/v1/messages", json={**govde, "stream": True})
+    assert "boom" in akis.text  # llama-server hatasi aynen gecer
+    sunucu.hata = None
+
+    async def acilamaz(model):
+        raise YerelLLMHatasi("Model acilamadi")
+
+    monkeypatch.setattr(gecit.state.yonetici, "_hazirla", acilamaz)
+    r = await gi.post("/v1/messages", json={**govde, "model": "deepseek-heretic"})
+    assert r.status_code == 503 and r.json()["type"] == "error"
+    akis = await gi.post(
+        "/v1/messages", json={**govde, "model": "deepseek-heretic", "stream": True}
+    )
+    assert akis.text.startswith("event: error")

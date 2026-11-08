@@ -37,6 +37,12 @@ listesi, ortada sohbet ve altta mesaj kutusu olan bir masaüstü sohbet uygulama
   kapalıysa Studio açar/değiştirir. Ollama destekli uygulamalar (GridMind: AI motoru → *Local model
   (Ollama)*) ayar değiştirmeden bağlanır; OpenAI/OpenRouter kullananlar yalnız adresi değiştirir.
   Pencere olmadan arka planda: `Sunucu.bat`, kapatmak: `Sunucu-Durdur.bat`.
+- **Claude Code yerel modelle:** sunucu Anthropic uyumlu uçları da verir (`/v1/messages`,
+  `/v1/messages/count_tokens`), yani Claude Code bulut ve API anahtarı olmadan yerel modelle çalışır.
+  Portable klasörde `Claude-Yerel.bat [model]` (çalışılacak klasörde açın). TermFlow Agent IDE:
+  Ayarlar > AI Providers > **Add Local Models**. Claude Code'un `adaptive` düşünme isteği yerel
+  modelde kapalı tutulur. Not: dahili GPU'da ilk tur (~5K token) birkaç dakika sürer; küçük model
+  basit dosya işlerinde iyi, uzun ajan görevlerinde zorlanır.
 - **Bağlam boyutu:** 8K / 16K / 32K (talimatlar ~3K token yer; 16K önerilir).
 
 ## Gereksinimler

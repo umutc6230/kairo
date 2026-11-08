@@ -408,6 +408,8 @@ def agecidi_uygulamasi(
                     "id": p.anahtar,
                     "object": "model",
                     "owned_by": "yerel-ai-studio",
+                    "type": "model",  # Anthropic /v1/models bicimi (Claude Code model kesfi)
+                    "display_name": p.ad,
                     "name": p.ad,
                     "yetenekler": yetenekler(p),
                     "context_length": ayarlar.oku().baglam_token,
@@ -443,6 +445,84 @@ def agecidi_uygulamasi(
             yield b"data: [DONE]\n\n"
 
         return StreamingResponse(akis(), media_type="text/event-stream")
+
+    # ---- Anthropic uyumlu (Claude Code: ANTHROPIC_BASE_URL) ----
+    def anthropic_hata(mesaj: str, tur: str, durum: int) -> JSONResponse:
+        return JSONResponse(
+            {"type": "error", "error": {"type": tur, "message": mesaj}}, status_code=durum
+        )
+
+    def anthropic_model(ad: str | None) -> str | None:
+        """Claude Code arka plan isleri icin 'claude-...' adlari da gonderebilir: bilinmeyen ad
+        acik modele (yoksa secili modele) gider; boylece gereksiz model degisimi olmaz."""
+        if anahtar := model_coz(ad, ayarlar.oku().model):
+            return anahtar
+        if ad and ad.lower().startswith("claude"):
+            return yonetici.yuklenen_model or ayarlar.oku().model
+        return None
+
+    def anthropic_duzenle(govde: dict) -> None:
+        """Claude Code isteklerini yerel modele uygun hale getirir.
+        - Dusunme yalniz acikca `enabled` istenirse acilir: Claude Code her istekte `adaptive`
+          gonderir; kucuk yerel modelde dusunme cevabi dakikalarca uzatir.
+        - Sistem mesajinin basindaki `x-anthropic-billing-header` blogu atilir: bazi surumlerde
+          her istekte degisen `cch=` ozeti tasir ve llama-server'in onek onbellegini bozar
+          (her tur ~5K token bastan islenir)."""
+        if govde.get("thinking", {}).get("type") != "enabled":
+            govde.pop("thinking", None)
+            govde.setdefault("chat_template_kwargs", {"enable_thinking": False})
+        sistem = govde.get("system")
+        if isinstance(sistem, list):
+            govde["system"] = [
+                b
+                for b in sistem
+                if not str(b.get("text", "")).startswith("x-anthropic-billing-header")
+            ]
+        elif isinstance(sistem, str) and sistem.startswith("x-anthropic-billing-header"):
+            govde["system"] = sistem.split("\n", 1)[1] if "\n" in sistem else ""
+
+    async def anthropic_ileri(request: Request, yol: str) -> Response:
+        govde = await request.json()
+        ad = govde.get("model")
+        anahtar = anthropic_model(ad)
+        kaydet(yol, anahtar or ad, request.headers.get("user-agent", ""))
+        if not anahtar:
+            return anthropic_hata(f"model '{ad}' not found", "not_found_error", 404)
+        govde["model"] = anahtar
+        anthropic_duzenle(govde)
+        if not govde.get("stream"):
+            try:
+                async with yonetici.kullan(anahtar) as llm:
+                    r = await llm._istemci.post(f"{llm.kok}{yol}", json=govde, timeout=ZAMAN_ASIMI)
+            except YerelLLMHatasi as e:
+                return anthropic_hata(str(e), "api_error", 503)
+            return Response(r.content, status_code=r.status_code, media_type="application/json")
+
+        async def akis() -> AsyncIterator[bytes]:
+            try:
+                async with (
+                    yonetici.kullan(anahtar) as llm,
+                    llm._istemci.stream(
+                        "POST", f"{llm.kok}{yol}", json=govde, timeout=ZAMAN_ASIMI
+                    ) as r,
+                ):
+                    async for parca in r.aiter_bytes():  # Anthropic SSE olaylari aynen gecer
+                        yield parca
+            except YerelLLMHatasi as e:
+                hata = json.dumps(
+                    {"type": "error", "error": {"type": "api_error", "message": str(e)}}
+                )
+                yield f"event: error\ndata: {hata}\n\n".encode()
+
+        return StreamingResponse(akis(), media_type="text/event-stream")
+
+    @app.post("/v1/messages")
+    async def anthropic_mesaj(request: Request) -> Response:
+        return await anthropic_ileri(request, "/v1/messages")
+
+    @app.post("/v1/messages/count_tokens")
+    async def anthropic_say(request: Request) -> Response:
+        return await anthropic_ileri(request, "/v1/messages/count_tokens")
 
     @app.post("/api/yerel/kapat")
     async def yerel_kapat() -> dict:

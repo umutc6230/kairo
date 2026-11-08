@@ -49,6 +49,10 @@ class SahteSunucu:
             return httpx.Response(200, json={"tokens": [1, 2, 3]})
         govde = json.loads(r.content)
         self.istekler.append(govde)
+        if yol == "/v1/messages/count_tokens":
+            return httpx.Response(200, json={"input_tokens": 42})
+        if yol == "/v1/messages":  # llama-server'in Anthropic ucu
+            return self._anthropic(govde)
         if self.hata:
             return httpx.Response(self.hata[0], text=self.hata[1])
         icerik, cagrilar = self._cevap(govde)
@@ -62,6 +66,22 @@ class SahteSunucu:
             200,
             json={"choices": [{"message": mesaj, "finish_reason": bitis}], "timings": ZAMANLAMA},
         )
+
+    def _anthropic(self, govde: dict) -> httpx.Response:
+        if self.hata:
+            return httpx.Response(self.hata[0], text=self.hata[1])
+        if govde.get("stream"):
+            olaylar = [
+                ("message_start", {"type": "message_start"}),
+                ("content_block_delta", {"type": "content_block_delta",
+                                         "delta": {"type": "text_delta", "text": "selam"}}),
+                ("message_stop", {"type": "message_stop"}),
+            ]  # fmt: skip
+            metin = "".join(f"event: {o}\ndata: {json.dumps(v)}\n\n" for o, v in olaylar)
+            return httpx.Response(200, text=metin)
+        return httpx.Response(200, json={
+            "type": "message", "role": "assistant", "model": govde["model"],
+            "content": [{"type": "text", "text": "selam"}], "stop_reason": "end_turn"})  # fmt: skip
 
     def _sse(self, icerik: str, cagrilar: list | None = None) -> str:
         parcalar = []
