@@ -1,0 +1,231 @@
+// Ortak durum ve yardimcilar: API, SSE akisi, bildirim, modal, menu. Native dialog YOK.
+import { ikon, ikonlariYerlestir } from "./ikonlar.js";
+import { kacir } from "./md.js";
+
+export const durum = {
+  bilgi: null, // /api/bilgi
+  sunucu: null, // /api/durum
+  ayarlar: null, // /api/ayarlar
+  oturumId: null,
+  oturumlar: [],
+  gorunum: "sohbet",
+};
+
+// Skill'den gelen ASCII metinlerin arayuzde gorunen Turkce karsiliklari.
+const DUSUNME_TR = {
+  kapali: { ad: "Kapalı (hızlı)", kisa: "Kapalı", aciklama: "Cevap hemen gelir. OCR, özet, çeviri, veri çıkarma için yeterli.", sure: "birkaç saniye" },
+  dengeli: { ad: "Dengeli", kisa: "Dengeli", aciklama: "Kısa düşünür (en fazla 1024 token). Hesap ve mantık sorularında daha doğru.", sure: "~30 sn - 3 dk" },
+  derin: { ad: "Derin (en iyi sonuç)", kisa: "Derin", aciklama: "Sınırsız düşünür. Zor problem, karar ve analiz için; bekleme uzun olabilir.", sure: "~1 - 10 dk" },
+};
+const MODEL_TR = {
+  "deepseek-heretic": "Varsayılan. Metin, OCR, araç çağırma, JSON.",
+  "gemma4-12b-heretic": "En güçlü. Metin, OCR, araç, ses. ~9-10 GB boş RAM ister.",
+  "gemma4-e4b-heretic": "Hafif. Metin, OCR, araç, ses.",
+};
+
+/** /api/bilgi ve /api/durum metinlerini Turkcelestirir (anahtar/deger ayni kalir). */
+export function turkcelestir(bilgi, sunucu) {
+  if (bilgi) bilgi.dusunme_secenekleri = bilgi.dusunme_secenekleri.map((d) => ({ ...d, ...(DUSUNME_TR[d.deger] || {}) }));
+  if (sunucu) for (const m of sunucu.modeller || []) m.aciklama = MODEL_TR[m.anahtar] || m.aciklama;
+}
+
+export const $ = (s, kok = document) => kok.querySelector(s);
+export const $$ = (s, kok = document) => [...kok.querySelectorAll(s)];
+
+export function el(html) {
+  const t = document.createElement("template");
+  t.innerHTML = html.trim();
+  const e = t.content.firstElementChild;
+  ikonlariYerlestir(e);
+  return e;
+}
+
+export async function api(yol, { method = "GET", govde, form } = {}) {
+  const secenek = { method, headers: {} };
+  if (form) secenek.body = form;
+  else if (govde !== undefined) {
+    secenek.headers["Content-Type"] = "application/json";
+    secenek.body = JSON.stringify(govde);
+  }
+  let r;
+  try {
+    r = await fetch(yol, secenek);
+  } catch {
+    throw new Error("Uygulama sunucusuna ulasilamadi.");
+  }
+  const veri = await r.json().catch(() => ({}));
+  if (!r.ok) throw new Error(veri.hata || hataMetni(veri) || `Hata (${r.status})`);
+  return veri;
+}
+
+function hataMetni(veri) {
+  if (Array.isArray(veri.detail)) return veri.detail.map((d) => d.msg).join("; ");
+  return typeof veri.detail === "string" ? veri.detail : "";
+}
+
+/** POST + text/event-stream: her "data: {...}" olayini verir. signal ile durdurulur. */
+export async function* sseOku(yol, govde, signal) {
+  const r = await fetch(yol, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(govde),
+    signal,
+  });
+  if (!r.ok) {
+    const veri = await r.json().catch(() => ({}));
+    throw new Error(veri.hata || hataMetni(veri) || `Hata (${r.status})`);
+  }
+  const okuyucu = r.body.getReader();
+  const cozucu = new TextDecoder();
+  let tampon = "";
+  for (;;) {
+    const { value, done } = await okuyucu.read();
+    if (done) break;
+    tampon += cozucu.decode(value, { stream: true });
+    let i;
+    while ((i = tampon.indexOf("\n\n")) >= 0) {
+      const blok = tampon.slice(0, i);
+      tampon = tampon.slice(i + 2);
+      const satir = blok.split("\n").find((s) => s.startsWith("data: "));
+      if (satir) yield JSON.parse(satir.slice(6));
+    }
+  }
+}
+
+export function bildir(metin, tur = "bilgi", sureMs = 4500) {
+  const ikonAdi = { hata: "uyari", basari: "tik", bilgi: "bilgi" }[tur] || "bilgi";
+  const b = el(`<div class="bildirim ${tur}">${ikon(ikonAdi)}<div>${kacir(metin)}</div></div>`);
+  $("#bildirimler").append(b);
+  setTimeout(() => b.remove(), sureMs);
+}
+
+export function modal({ baslik, icerik, dugmeler = [], genis = false, kapaninca }) {
+  const arka = el(`<div class="modal-arka"><div class="modal ${genis ? "genis" : ""}">
+    <header><span>${kacir(baslik)}</span><button class="ikon-btn" data-ikon="x" title="Kapat"></button></header>
+    <div class="modal-govde"></div><footer hidden></footer></div></div>`);
+  const govde = $(".modal-govde", arka);
+  if (typeof icerik === "string") govde.innerHTML = icerik;
+  else if (icerik) govde.append(icerik);
+  ikonlariYerlestir(govde);
+  const ayak = $("footer", arka);
+  const kapat = () => {
+    arka.remove();
+    document.removeEventListener("keydown", tus);
+    kapaninca?.();
+  };
+  for (const d of dugmeler) {
+    const b = el(`<button class="btn ${d.tur || ""}">${kacir(d.metin)}</button>`);
+    b.onclick = () => d.eylem?.(kapat, b) ?? kapat();
+    ayak.append(b);
+    ayak.hidden = false;
+  }
+  const tus = (e) => { if (e.key === "Escape") kapat(); };
+  document.addEventListener("keydown", tus);
+  $("header .ikon-btn", arka).onclick = kapat;
+  arka.addEventListener("mousedown", (e) => { if (e.target === arka) kapat(); });
+  $("#modal-kok").append(arka);
+  return { kapat, govde, arka };
+}
+
+export function onayla(baslik, metin, { evet = "Evet", tehlike = false } = {}) {
+  return new Promise((coz) => {
+    let sonuc = false;
+    modal({
+      baslik,
+      icerik: `<p style="margin:0">${kacir(metin)}</p>`,
+      dugmeler: [
+        { metin: "Vazgeç" },
+        { metin: evet, tur: tehlike ? "tehlike" : "ana", eylem: (k) => { sonuc = true; k(); } },
+      ],
+      kapaninca: () => coz(sonuc),
+    });
+  });
+}
+
+export function sor(baslik, varsayilan = "") {
+  return new Promise((coz) => {
+    let sonuc = null;
+    const girdi = el(`<input class="alan" value="${kacir(varsayilan)}">`);
+    const tamam = (k) => { sonuc = girdi.value; k(); };
+    const m = modal({
+      baslik,
+      icerik: girdi,
+      dugmeler: [{ metin: "Vazgeç" }, { metin: "Kaydet", tur: "ana", eylem: tamam }],
+      kapaninca: () => coz(sonuc),
+    });
+    girdi.onkeydown = (e) => { if (e.key === "Enter") tamam(m.kapat); };
+    setTimeout(() => { girdi.focus(); girdi.select(); }, 10);
+  });
+}
+
+let acikMenu = null;
+export function menuKapat() {
+  acikMenu?.remove();
+  acikMenu = null;
+}
+
+/** ogeler: {metin, ikon, sag, secili, tehlike, eylem} | "ayrac" | {baslik} */
+export function menuAc(capa, ogeler, { yukari = false, sagaHizali = false } = {}) {
+  menuKapat();
+  const m = el(`<div class="menu"></div>`);
+  for (const o of ogeler) {
+    if (o === "ayrac") { m.append(el(`<div class="menu-ayrac"></div>`)); continue; }
+    if (o.baslik) { m.append(el(`<div class="menu-baslik">${kacir(o.baslik)}</div>`)); continue; }
+    const b = el(`<button class="menu-oge ${o.secili ? "secili" : ""} ${o.tehlike ? "tehlike" : ""}" ${o.pasif ? "disabled" : ""}>
+      ${o.ikon ? `<span data-ikon="${o.ikon}"></span>` : ""}<span>${kacir(o.metin)}</span>
+      ${o.sag ? `<span class="sag">${kacir(o.sag)}</span>` : ""}${o.secili ? `<span class="tik sag" data-ikon="tik"></span>` : ""}</button>`);
+    b.onclick = (e) => { e.stopPropagation(); menuKapat(); o.eylem?.(); };
+    m.append(b);
+  }
+  document.body.append(m);
+  const r = capa.getBoundingClientRect();
+  const mr = m.getBoundingClientRect();
+  let sol = sagaHizali ? r.right - mr.width : r.left;
+  sol = Math.max(8, Math.min(sol, innerWidth - mr.width - 8));
+  const ust = yukari ? r.top - mr.height - 6 : r.bottom + 6;
+  m.style.left = `${sol}px`;
+  m.style.top = `${Math.max(8, Math.min(ust, innerHeight - mr.height - 8))}px`;
+  acikMenu = m;
+  setTimeout(() => document.addEventListener("click", menuKapat, { once: true }), 0);
+}
+
+export function modelProfil(anahtar) {
+  return durum.sunucu?.modeller?.find((m) => m.anahtar === anahtar);
+}
+
+export function modelAdi(anahtar) {
+  return modelProfil(anahtar)?.ad || anahtar || "";
+}
+
+export function sayi(n, basamak = 1) {
+  return n == null ? "-" : Number(n).toLocaleString("tr-TR", { maximumFractionDigits: basamak });
+}
+
+export function istatistikMetni(i) {
+  if (!i) return "";
+  const p = [modelAdi(i.model)];
+  if (i.dusunme && i.dusunme !== "kapali") p.push(`düşünme: ${i.dusunme}`);
+  if (i.sure_sn != null) p.push(`${sayi(i.sure_sn)} sn`);
+  if (i.uretim_tok_sn) p.push(`${sayi(i.uretim_tok_sn)} tok/sn`);
+  if (i.token) p.push(`${i.token} token`);
+  if (i.yukleme_sn) p.push(`yükleme ${sayi(i.yukleme_sn)} sn`);
+  return p.join(" · ");
+}
+
+/** Model secim cipleri (karsilastir, OCR, paket sayfalari). */
+export function modelCipleri(kap, { coklu = true, ad = "m" } = {}) {
+  const modeller = durum.sunucu?.modeller || [];
+  const onceki = new Set($$("input:checked", kap).map((i) => i.value));
+  kap.innerHTML = "";
+  for (const m of modeller) {
+    const secili = onceki.size ? onceki.has(m.anahtar) : m.dosya_var && (coklu || m.anahtar === durum.ayarlar?.model);
+    const c = el(`<label class="model-cip ${m.dosya_var ? "" : "yok"}" title="${kacir(m.aciklama)}">
+      <input type="${coklu ? "checkbox" : "radio"}" name="${ad}" value="${m.anahtar}" ${secili && m.dosya_var ? "checked" : ""} ${m.dosya_var ? "" : "disabled"}>
+      <span>${kacir(m.ad)}</span><span class="soluk">${m.dosya_var ? `~${m.ram_gb} GB` : "indirilmedi"}</span></label>`);
+    kap.append(c);
+  }
+}
+
+export function seciliModeller(kap) {
+  return $$("input:checked", kap).map((i) => i.value);
+}

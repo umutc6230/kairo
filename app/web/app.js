@@ -1,0 +1,293 @@
+// Giris noktasi: acilis, gezinme, kenar cubugu, durum cubugu, menuler, kisayollar.
+import { ikon, ikonlariYerlestir } from "./ikonlar.js";
+import { kacir } from "./md.js";
+import { aramaAc, ayarKaydet, ayarlarAc, ayarlarKur, modelYukle, sunucuDurdur } from "./ayarlar.js";
+import { $, $$, api, bildir, durum, el, menuAc, modelAdi, modelProfil, onayla, sayi, sor, turkcelestir } from "./ortak.js";
+import { sayfaModelleriniYenile, sayfalarKur } from "./sayfalar.js";
+import { akisVar, durdur, mesajlariCiz, sohbetKur, yeniSohbetEkrani } from "./sohbet.js";
+
+const BASLIKLAR = { karsilastir: "Karşılaştır", ocr: "OCR testi", arac: "Araç testi", paket: "Test paketi" };
+const gecmis = [];
+let gecmisKonum = -1;
+
+// ---------------- gezinme ----------------
+function gorunumGoster(ad) {
+  durum.gorunum = ad;
+  $$(".gorunum").forEach((g) => { g.hidden = g.id !== `g-${ad}`; });
+  $$(".nav-oge").forEach((n) => n.classList.toggle("aktif", n.dataset.git === ad));
+  $$(".oturum").forEach((o) => o.classList.toggle("aktif", ad === "sohbet" && o.dataset.id === durum.oturumId));
+  if (BASLIKLAR[ad]) baslikAyarla(BASLIKLAR[ad]);
+}
+
+function git(hedef, { kaydetme = false } = {}) {
+  if (!kaydetme) {
+    gecmis.splice(gecmisKonum + 1);
+    gecmis.push(hedef);
+    gecmisKonum = gecmis.length - 1;
+  }
+  if (hedef.tur === "oturum") oturumAc(hedef.id, true);
+  else if (hedef.tur === "yeni") { yeniSohbetEkrani(); gorunumGoster("sohbet"); baslikAyarla("Yeni sohbet"); oturumListesiCiz(); }
+  else gorunumGoster(hedef.tur);
+  $("#btn-geri").disabled = gecmisKonum <= 0;
+  $("#btn-ileri").disabled = gecmisKonum >= gecmis.length - 1;
+}
+
+function baslikAyarla(metin) {
+  $("#sayfa-basligi").textContent = metin || "Yeni sohbet";
+  document.title = `${metin || "Yeni sohbet"} - Yerel AI Studio`;
+}
+
+async function oturumAc(id, kaydetme = false) {
+  if (!kaydetme) return git({ tur: "oturum", id });
+  if (akisVar() && durum.oturumId !== id) durdur();
+  try {
+    const o = await api(`/api/oturumlar/${id}`);
+    durum.oturumId = o.id;
+    gorunumGoster("sohbet");
+    mesajlariCiz(o);
+    baslikAyarla(o.baslik);
+    oturumListesiCiz();
+  } catch (e) {
+    bildir(e.message, "hata");
+  }
+}
+
+// ---------------- oturum listesi ----------------
+const kapaliGruplar = new Set(JSON.parse(localStorage.getItem("kapaliGruplar") || "[]"));
+
+function grupAdi(iso) {
+  const t = new Date(iso);
+  const bugun = new Date();
+  bugun.setHours(0, 0, 0, 0);
+  const gun = Math.floor((bugun - new Date(t.getFullYear(), t.getMonth(), t.getDate())) / 864e5);
+  if (gun <= 0) return "Bugün";
+  if (gun === 1) return "Dün";
+  if (gun < 7) return "Bu hafta";
+  if (gun < 30) return "Bu ay";
+  return "Daha eski";
+}
+
+async function oturumlariYenile() {
+  try {
+    durum.oturumlar = await api("/api/oturumlar");
+  } catch { /* sessiz */ }
+  oturumListesiCiz();
+}
+
+function oturumListesiCiz() {
+  const kap = $("#oturum-listesi");
+  kap.innerHTML = "";
+  const gruplar = new Map();
+  for (const o of durum.oturumlar) {
+    if (!o.mesaj_sayisi && o.id !== durum.oturumId) continue;
+    const g = grupAdi(o.guncelleme);
+    if (!gruplar.has(g)) gruplar.set(g, []);
+    gruplar.get(g).push(o);
+  }
+  for (const [ad, liste] of gruplar) {
+    const grup = el(`<div class="grup ${kapaliGruplar.has(ad) ? "kapali" : ""}"><div class="grup-baslik"><span>${ad}</span><span data-ikon="asagi"></span></div><div class="grup-ogeler"></div></div>`);
+    grup.querySelector(".grup-baslik").onclick = () => {
+      grup.classList.toggle("kapali");
+      kapaliGruplar[grup.classList.contains("kapali") ? "add" : "delete"](ad);
+      localStorage.setItem("kapaliGruplar", JSON.stringify([...kapaliGruplar]));
+    };
+    for (const o of liste) {
+      const s = el(`<div class="oturum ${durum.gorunum === "sohbet" && o.id === durum.oturumId ? "aktif" : ""}" data-id="${o.id}">
+        <span class="ad" title="${kacir(o.baslik)}">${kacir(o.baslik)}</span><button class="ikon-btn daha" title="Diger" data-ikon="daha"></button></div>`);
+      s.onclick = () => oturumAc(o.id);
+      s.querySelector(".daha").onclick = (e) => {
+        e.stopPropagation();
+        menuAc(e.currentTarget, [
+          { metin: "Yeniden adlandır", ikon: "kalem", eylem: () => yenidenAdlandir(o) },
+          { metin: "Sil", ikon: "cop", tehlike: true, eylem: () => oturumSil(o) },
+        ]);
+      };
+      grup.querySelector(".grup-ogeler").append(s);
+    }
+    kap.append(grup);
+  }
+  if (!gruplar.size) kap.append(el(`<div class="ayar-not" style="padding:16px 10px">Henüz sohbet yok.</div>`));
+  ikonlariYerlestir(kap);
+}
+
+async function yenidenAdlandir(o) {
+  const yeni = await sor("Sohbeti yeniden adlandır", o.baslik);
+  if (yeni == null || !yeni.trim()) return;
+  try {
+    await api(`/api/oturumlar/${o.id}`, { method: "PATCH", govde: { baslik: yeni } });
+    if (o.id === durum.oturumId) baslikAyarla(yeni);
+    oturumlariYenile();
+  } catch (e) { bildir(e.message, "hata"); }
+}
+
+async function oturumSil(o) {
+  if (!(await onayla("Sohbeti sil", `"${o.baslik}" kalıcı olarak silinecek.`, { evet: "Sil", tehlike: true }))) return;
+  try {
+    await api(`/api/oturumlar/${o.id}`, { method: "DELETE" });
+    if (o.id === durum.oturumId) git({ tur: "yeni" });
+    oturumlariYenile();
+  } catch (e) { bildir(e.message, "hata"); }
+}
+
+// ---------------- durum / model ----------------
+const DURUM_METNI = { hazir: "hazır", yukleniyor: "yükleniyor", kapali: "kapalı", hata: "hata", bilinmiyor: "…" };
+
+async function durumYenile() {
+  try {
+    durum.sunucu = await api("/api/durum");
+    turkcelestir(null, durum.sunucu);
+  } catch {
+    $("#sunucu-metni").textContent = "Uygulama sunucusu yanıt vermiyor";
+    return;
+  }
+  const s = durum.sunucu;
+  const a = durum.ayarlar;
+  const aktif = s.yuklenen_model || a.model;
+  $("#sunucu-nokta").className = `nokta ${s.durum}`;
+  $("#hap-nokta").className = `nokta buyuk ${s.durum}`;
+  $("#sunucu-metni").textContent = s.durum === "kapali" ? "Model kapalı" : `${modelAdi(aktif)} · ${DURUM_METNI[s.durum] || s.durum}`;
+  const b = s.bellek || {};
+  $("#ram-metni").textContent = b.bos_gb != null ? `RAM ${sayi(b.bos_gb)}/${sayi(b.toplam_gb, 0)} GB boş` : "";
+  $("#hap-model-metni").textContent = modelAdi(a.model);
+  const dus = durum.bilgi.dusunme_secenekleri.find((d) => d.deger === a.dusunme);
+  $("#hap-dusunme-metni").textContent = dus ? dus.kisa : a.dusunme;
+  $("#klasor-metni").textContent = `Model klasörü: ${a.llm_dizin}`;
+  $("#hap-klasor-metni").textContent = a.llm_dizin.split(/[\\/]/).pop() || a.llm_dizin;
+  bantGuncelle();
+  bosDurumKartlari();
+}
+
+function bantGuncelle() {
+  const s = durum.sunucu;
+  const a = durum.ayarlar;
+  const p = modelProfil(a.model);
+  const bant = $("#uyari-bandi");
+  let html = "";
+  const bos = s.bellek?.bos_gb;
+  if (!s.motor_var) {
+    html = `<span class="vurgu">${ikon("uyari")}llama.cpp bulunamadı</span><span>${kacir(a.llm_dizin)} içinde llama.cpp\\llama-server.exe yok.</span><button class="btn kucuk" data-eylem="ayar">Ayarlar</button>`;
+  } else if (p && !p.dosya_var) {
+    html = `<span class="vurgu">${ikon("uyari")}Model dosyası yok</span><span>${kacir(p.ad)} indirilmemiş. Başka model seç.</span><button class="btn kucuk" data-eylem="ayar">Model seç</button>`;
+  } else if (s.durum === "hata" && s.son_hata) {
+    html = `<span class="vurgu">${ikon("uyari")}Model açılamadı</span><span>${kacir(s.son_hata)}</span><button class="btn kucuk" data-eylem="yukle">Tekrar dene</button>`;
+  } else if (s.sunucu_acik && !s.bizim_sunucu && s.acik_modeller.length && !s.acik_modeller.includes(a.model)) {
+    html = `<span class="vurgu sari">${ikon("uyari")}Başka model açık</span><span>Dışarıda ${kacir(s.acik_modeller.join(", "))} çalışıyor; ${kacir(p?.ad || a.model)} için kapatılmalı.</span><button class="btn kucuk" data-eylem="harici">Kapat</button>`;
+  } else if (p && bos != null && s.yuklenen_model !== a.model && bos < p.ram_gb + 1) {
+    html = `<span class="vurgu sari">${ikon("uyari")}Bellek az</span><span>${sayi(bos)} GB boş; ${kacir(p.ad)} ~${sayi(p.ram_gb + 1, 0)} GB istiyor. Oyun, tarayıcı gibi programları kapat.</span>`;
+  }
+  bant.hidden = !html;
+  bant.innerHTML = html;
+  bant.querySelectorAll("[data-eylem]").forEach((btn) => {
+    btn.onclick = () => ({ ayar: () => ayarlarAc(), yukle: () => modelYukle(), harici: () => sunucuDurdur(true) })[btn.dataset.eylem]();
+  });
+}
+
+function bosDurumKartlari() {
+  const kap = $("#model-kartlari");
+  const a = durum.ayarlar;
+  kap.innerHTML = "";
+  for (const m of durum.sunucu.modeller) {
+    const k = el(`<button class="kart-satir ${m.anahtar === a.model ? "secili" : ""} ${m.dosya_var ? "" : "pasif"}">
+      <span data-ikon="model"></span><span>${kacir(m.ad)}</span>
+      <span class="sag">${m.dosya_var ? `~${m.ram_gb} GB${m.ses ? " · ses" : ""}` : "indirilmedi"}</span>
+      ${m.anahtar === a.model ? '<span class="tik" data-ikon="tik"></span>' : ""}</button>`);
+    k.onclick = () => m.dosya_var ? ayarKaydet({ model: m.anahtar }, true) : bildir("Bu model indirilmemiş.", "hata");
+    kap.append(k);
+  }
+  kap.append(el(`<div class="kart-ayrac"></div>`));
+  const dus = durum.bilgi.dusunme_secenekleri.find((d) => d.deger === a.dusunme);
+  const d = el(`<button class="kart-satir"><span data-ikon="beyin"></span><span>Düşünme: ${kacir(dus?.ad || a.dusunme)}</span><span data-ikon="asagi" class="kucuk-ikon"></span></button>`);
+  d.onclick = (e) => dusunmeMenusu(e.currentTarget, false);
+  kap.append(d);
+  ikonlariYerlestir(kap);
+}
+
+function dusunmeMenusu(capa, yukari = true) {
+  menuAc(capa, durum.bilgi.dusunme_secenekleri.map((d) => ({
+    metin: d.ad, sag: d.sure, secili: d.deger === durum.ayarlar.dusunme, eylem: () => ayarKaydet({ dusunme: d.deger }, true),
+  })), { yukari });
+}
+
+function modelMenusu(capa) {
+  const a = durum.ayarlar;
+  const ogeler = [{ baslik: "Model" }];
+  for (const m of durum.sunucu.modeller) {
+    ogeler.push({
+      metin: m.ad, sag: m.dosya_var ? `~${m.ram_gb} GB` : "yok", secili: m.anahtar === a.model, pasif: !m.dosya_var,
+      eylem: () => ayarKaydet({ model: m.anahtar }, true),
+    });
+  }
+  ogeler.push("ayrac", { baslik: "Düşünme" });
+  for (const d of durum.bilgi.dusunme_secenekleri) {
+    ogeler.push({ metin: d.ad, sag: d.sure, secili: d.deger === a.dusunme, eylem: () => ayarKaydet({ dusunme: d.deger }, true) });
+  }
+  ogeler.push("ayrac", { metin: "AI Ayarları", ikon: "disli", eylem: () => ayarlarAc() });
+  menuAc(capa, ogeler, { yukari: true, sagaHizali: true });
+}
+
+function sunucuMenusu(capa, yukari) {
+  const s = durum.sunucu;
+  menuAc(capa, [
+    { baslik: s.sunucu_acik ? `Açık: ${s.acik_modeller.join(", ") || "?"}` : "Model sunucusu kapalı" },
+    { metin: `Modeli yükle (${modelAdi(durum.ayarlar.model)})`, ikon: "guc", eylem: () => modelYukle() },
+    { metin: "Sunucuyu durdur", ikon: "durdur", pasif: !s.bizim_sunucu, eylem: () => sunucuDurdur(false) },
+    ...(s.sunucu_acik && !s.bizim_sunucu ? [{ metin: "Dışarıdan açılanı kapat", ikon: "x", tehlike: true, eylem: () => sunucuDurdur(true) }] : []),
+    "ayrac",
+    { metin: "AI Ayarları", ikon: "disli", eylem: () => ayarlarAc() },
+  ], { yukari, sagaHizali: !yukari });
+}
+
+async function hepsiniYenile() {
+  durum.ayarlar = await api("/api/ayarlar");
+  await durumYenile();
+  sayfaModelleriniYenile();
+}
+
+// ---------------- acilis ----------------
+async function baslat() {
+  ikonlariYerlestir();
+  durum.bilgi = await api("/api/bilgi");
+  turkcelestir(durum.bilgi, null);
+  durum.ayarlar = await api("/api/ayarlar");
+  await durumYenile();
+  sohbetKur({ oturumlarYenile: oturumlariYenile, baslikAyarla });
+  ayarlarKur(hepsiniYenile);
+  sayfalarKur();
+
+  $$(".nav-oge").forEach((n) => {
+    n.onclick = () => (n.dataset.git === "ara" ? aramaAc(oturumAc) : git({ tur: n.dataset.git }));
+  });
+  $("#btn-kenar").onclick = () => $("#kok").classList.toggle("kenar-kapali");
+  $("#btn-geri").onclick = () => { if (gecmisKonum > 0) git(gecmis[--gecmisKonum], { kaydetme: true }); };
+  $("#btn-ileri").onclick = () => { if (gecmisKonum < gecmis.length - 1) git(gecmis[++gecmisKonum], { kaydetme: true }); };
+  $("#btn-ayarlar").onclick = () => ayarlarAc();
+  $("#btn-hakkinda").onclick = () => ayarlarAc("hakkinda");
+  $("#klasor-satiri").onclick = () => ayarlarAc();
+  $("#hap-model").onclick = (e) => modelMenusu(e.currentTarget);
+  $("#hap-bilgisayar").onclick = (e) => sunucuMenusu(e.currentTarget, true);
+  $("#sunucu-hapi").onclick = (e) => sunucuMenusu(e.currentTarget, false);
+
+  document.addEventListener("keydown", (e) => {
+    if (!e.ctrlKey) return;
+    const k = e.key.toLowerCase();
+    if (k === "n") { e.preventDefault(); git({ tur: "yeni" }); }
+    else if (k === "k") { e.preventDefault(); aramaAc(oturumAc); }
+    else if (k === "b") { e.preventDefault(); $("#kok").classList.toggle("kenar-kapali"); }
+    else if (k === ",") { e.preventDefault(); ayarlarAc(); }
+  });
+
+  await oturumlariYenile();
+  git({ tur: "yeni" });
+  setInterval(() => { if (!document.hidden) durumYenile(); }, 3000);
+}
+
+// Cercevesiz pencere: kendi kucult/buyut/kapat butonlarimiz (yalniz pywebview icinde).
+window.addEventListener("pywebviewready", () => {
+  $("#pencere-btnleri").hidden = false;
+  $("#btn-kucult").onclick = () => window.pywebview.api.kucult();
+  $("#btn-buyut").onclick = () => window.pywebview.api.buyut();
+  $("#btn-kapat").onclick = () => window.pywebview.api.kapat();
+  $(".baslik-orta").ondblclick = () => window.pywebview.api.buyut();
+});
+
+baslat().catch((e) => bildir(`Açılış hatası: ${e.message}`, "hata", 15000));

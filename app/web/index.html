@@ -1,0 +1,163 @@
+<!doctype html>
+<html lang="tr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Yerel AI Studio</title>
+  <link rel="stylesheet" href="/web/app.css">
+</head>
+<body>
+  <div id="kok">
+    <header class="baslik">
+      <div class="baslik-sol">
+        <button class="ikon-btn" id="btn-kenar" title="Kenar cubugunu ac/kapat (Ctrl+B)" data-ikon="panel"></button>
+        <button class="ikon-btn" id="btn-geri" title="Geri" data-ikon="sol"></button>
+        <button class="ikon-btn" id="btn-ileri" title="Ileri" data-ikon="sag"></button>
+      </div>
+      <div class="baslik-orta pywebview-drag-region"><span id="sayfa-basligi" class="pywebview-drag-region">Yeni sohbet</span></div>
+      <div class="baslik-sag">
+        <button id="sunucu-hapi" class="hap" title="Model sunucusu">
+          <span class="nokta" id="sunucu-nokta"></span><span id="sunucu-metni">Kontrol ediliyor...</span>
+        </button>
+        <span id="ram-metni" class="soluk kucuk"></span>
+        <div class="pencere-btnleri" id="pencere-btnleri" hidden>
+          <button class="pencere-btn" id="btn-kucult" title="Kucult" data-ikon="eksi"></button>
+          <button class="pencere-btn" id="btn-buyut" title="Buyut" data-ikon="kare"></button>
+          <button class="pencere-btn kapat" id="btn-kapat" title="Kapat" data-ikon="x"></button>
+        </div>
+      </div>
+    </header>
+
+    <div class="govde">
+      <aside id="kenar">
+        <nav class="kenar-nav">
+          <button class="nav-oge vurgulu" data-git="yeni"><span data-ikon="arti"></span>Yeni sohbet</button>
+          <button class="nav-oge" data-git="ara"><span data-ikon="ara"></span>Ara</button>
+          <button class="nav-oge" data-git="karsilastir"><span data-ikon="sutun"></span>Karşılaştır</button>
+          <button class="nav-oge" data-git="ocr"><span data-ikon="tara"></span>OCR testi</button>
+          <button class="nav-oge" data-git="arac"><span data-ikon="anahtar"></span>Araç testi</button>
+          <button class="nav-oge" data-git="paket"><span data-ikon="sise"></span>Test paketi</button>
+        </nav>
+        <div class="kenar-oturumlar" id="oturum-listesi"></div>
+        <div class="kenar-alt">
+          <button class="kullanici" id="btn-hakkinda" title="Hakkinda">
+            <span class="avatar">U</span><span>umut</span><span class="soluk">· Yerel</span>
+          </button>
+          <button class="ikon-btn" id="btn-ayarlar" title="AI Ayarlari" data-ikon="disli"></button>
+        </div>
+      </aside>
+
+      <main id="ana">
+        <!-- SOHBET -->
+        <section class="gorunum" id="g-sohbet">
+          <div class="mesajlar" id="mesajlar">
+            <div class="bos-durum" id="bos-durum">
+              <div class="logo" data-ikon="logo"></div>
+              <div class="kart-liste" id="model-kartlari"></div>
+              <button class="kart-satir" id="klasor-satiri"><span data-ikon="klasor"></span><span id="klasor-metni">Model klasoru</span></button>
+            </div>
+          </div>
+          <div class="yazma-kap">
+            <div class="bant" id="uyari-bandi" hidden></div>
+            <div class="yazma" id="yazma">
+              <div class="ek-listesi" id="ek-listesi"></div>
+              <div class="yazma-satir">
+                <button class="ikon-btn" id="btn-ek" title="Dosya ekle: resim, PDF, ses, metin" data-ikon="arti"></button>
+                <textarea id="girdi" rows="1" placeholder="Bir görev yaz ya da soru sor"></textarea>
+                <button class="gonder" id="btn-gonder" title="Gonder (Enter)" data-ikon="yukari" disabled></button>
+              </div>
+            </div>
+            <div class="alt-satir">
+              <div class="alt-sol">
+                <button class="hap duz" id="hap-bilgisayar"><span data-ikon="ekran"></span><span>Bu bilgisayar</span><span data-ikon="asagi" class="kucuk-ikon"></span></button>
+                <span class="hap duz" id="hap-klasor"><span data-ikon="klasor"></span><span id="hap-klasor-metni">llm</span></span>
+              </div>
+              <div class="alt-sag">
+                <button class="hap duz" id="hap-model"><span id="hap-model-metni">Model</span><span class="soluk" id="hap-dusunme-metni">Kapalı</span></button>
+                <span class="nokta buyuk" id="hap-nokta" title="Sunucu durumu"></span>
+              </div>
+            </div>
+            <input type="file" id="dosya-sec" multiple hidden accept=".png,.jpg,.jpeg,.webp,.bmp,.gif,.pdf,.wav,.mp3,.txt,.md,.csv,.json,.py,.js,.html,.xml,.log,.ini">
+          </div>
+        </section>
+
+        <!-- KARSILASTIR -->
+        <section class="gorunum sayfa" id="g-karsilastir" hidden>
+          <div class="sayfa-ic">
+            <h1>Karşılaştır</h1>
+            <p class="soluk">Aynı soruyu seçtiğin modellere sırayla sorar. Aynı anda tek model açık olabildiği için her model sırayla yüklenir.</p>
+            <textarea id="k-istem" class="alan" rows="4" placeholder="Modellere sorulacak soru..."></textarea>
+            <div class="satir-arasi">
+              <div class="model-secimi" id="k-modeller"></div>
+              <div class="satir">
+                <select id="k-dusunme" class="secim"></select>
+                <button class="btn ana" id="k-baslat"><span data-ikon="oynat"></span>Karşılaştır</button>
+              </div>
+            </div>
+            <div class="karsilastirma-izgara" id="k-sonuclar"></div>
+          </div>
+        </section>
+
+        <!-- OCR -->
+        <section class="gorunum sayfa" id="g-ocr" hidden>
+          <div class="sayfa-ic genis">
+            <h1>OCR testi</h1>
+            <p class="soluk">Resim ya da PDF'teki yazıyı modellere okut; beklenen metni yazarsan doğruluk yüzdesi hesaplanır.</p>
+            <div class="ocr-duzen">
+              <div class="ocr-sol">
+                <div class="birak" id="o-birak">
+                  <div id="o-onizleme" class="onizleme"><span data-ikon="tara" class="buyuk-ikon"></span><span>Resim ya da PDF bırak veya tıkla</span></div>
+                </div>
+                <button class="btn" id="o-ornek"><span data-ikon="sihir"></span>Örnek belge üret</button>
+                <label class="etiket">Beklenen metin (isteğe bağlı)</label>
+                <textarea id="o-beklenen" class="alan" rows="5" placeholder="Belgede olması gereken metin, satır satır"></textarea>
+                <label class="etiket">Talimat (boş: tüm yazıyı satır satır yaz)</label>
+                <input id="o-talimat" class="alan" placeholder="Örn: Sadece toplam tutarı yaz">
+                <label class="onay"><input type="checkbox" id="o-json"> Ardından JSON olarak alanları çıkar</label>
+                <label class="onay"><input type="checkbox" id="o-katman"> PDF'te seçilebilir yazı varsa onu kullan (OCR'ı atla)</label>
+                <div class="model-secimi" id="o-modeller"></div>
+                <button class="btn ana" id="o-baslat" disabled><span data-ikon="oynat"></span>OCR'ı çalıştır</button>
+                <input type="file" id="o-dosya" hidden accept=".png,.jpg,.jpeg,.webp,.bmp,.gif,.pdf">
+              </div>
+              <div class="ocr-sag" id="o-sonuclar"><div class="bos-not soluk">Sonuçlar burada görünecek.</div></div>
+            </div>
+          </div>
+        </section>
+
+        <!-- ARAC -->
+        <section class="gorunum sayfa" id="g-arac" hidden>
+          <div class="sayfa-ic">
+            <h1>Araç testi</h1>
+            <p class="soluk">Model gerekirse demo araçları çağırır; her çağrıyı ve sonucunu canlı izlersin. Kur ve hava verileri sabit örnek veridir.</p>
+            <div class="arac-listesi" id="a-araclar"></div>
+            <div class="ornekler" id="a-ornekler"></div>
+            <div class="satir">
+              <input id="a-istem" class="alan" placeholder="Örn: 1250 dolar kaç TL eder?">
+              <button class="btn ana" id="a-baslat"><span data-ikon="oynat"></span>Çalıştır</button>
+            </div>
+            <div class="zaman-cizelgesi" id="a-akis"></div>
+          </div>
+        </section>
+
+        <!-- TEST PAKETI -->
+        <section class="gorunum sayfa" id="g-paket" hidden>
+          <div class="sayfa-ic">
+            <h1>Test paketi</h1>
+            <p class="soluk">Her modele aynı 5 testi uygular: mantık sorusu (dengeli düşünme), araç çağırma, JSON çıktı, Türkçe OCR ve sansürsüzlük. Model başına birkaç dakika sürebilir.</p>
+            <div class="satir-arasi">
+              <div class="model-secimi" id="p-modeller"></div>
+              <button class="btn ana" id="p-baslat"><span data-ikon="oynat"></span>Testleri başlat</button>
+            </div>
+            <div id="p-tablo"></div>
+            <div class="gunluk" id="p-gunluk"></div>
+          </div>
+        </section>
+      </main>
+    </div>
+    <div id="modal-kok"></div>
+    <div id="bildirimler"></div>
+    <div id="menu-kok"></div>
+  </div>
+  <script type="module" src="/web/app.js"></script>
+</body>
+</html>
