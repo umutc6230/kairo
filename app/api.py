@@ -5,7 +5,7 @@ from __future__ import annotations
 import asyncio
 import json
 import time
-from collections.abc import AsyncIterator
+from collections.abc import AsyncIterator, Callable
 from contextlib import asynccontextmanager
 from pathlib import Path
 
@@ -19,6 +19,7 @@ from app import URUN_ADI, URUN_SAHIBI, URUN_SAHIBI_GITHUB, URUN_SAHIBI_X, __vers
 from app.config import web_dizini
 from app.exceptions import UygulamaHatasi, YerelLLMHatasi
 from app.services import sistem
+from app.services.agecidi import AgGecidi, agecidi_uygulamasi
 from app.services.araclar import ARACLAR, ORNEK_ISTEMLER
 from app.services.ayarlar import AyarDeposu
 from app.services.ekler import EkDeposu
@@ -97,6 +98,7 @@ def uygulama_olustur(
     fabrika: LLMFabrikasi = YerelLLM,
     skill_deposu: SkillDeposu | None = None,
     magaza: Magaza | None = None,
+    kapat: Callable[[], None] | None = None,
 ) -> FastAPI:
     kayit = ModelKaydi(veri_dizini)
     kayit.yukle()  # magazadan indirilen modeller MODELLER'e (ayar dogrulamasindan once)
@@ -108,18 +110,24 @@ def uygulama_olustur(
     skiller = skill_deposu or SkillDeposu(veri_dizini)
     sohbet = SohbetServisi(yonetici, oturumlar, ekler, talimatlar, skiller)
     isitmalar: set[asyncio.Task] = set()
+    agecidi = AgGecidi(agecidi_uygulamasi(yonetici, ayarlar, kapat))
     magaza = magaza or Magaza()
     indirici = Indirici(magaza, kayit, lambda: Path(ayarlar.oku().llm_dizin))
     testler = TestServisi(yonetici, ekler)
 
     @asynccontextmanager
     async def omur(_: FastAPI):
+        a = ayarlar.oku()
+        if a.sunucu_acik:
+            await agecidi.baslat(a.sunucu_port)
         yield
+        await agecidi.durdur()
         await yonetici.kapat()  # yalniz bizim baslattigimiz model sunucusunu durdurur
         await magaza.kapat()
 
     app = FastAPI(title=URUN_ADI, version=__version__, lifespan=omur)
     app.state.yonetici = yonetici
+    app.state.agecidi = agecidi
 
     @app.exception_handler(UygulamaHatasi)
     async def _uygulama_hatasi(_: Request, e: UygulamaHatasi) -> JSONResponse:
@@ -172,7 +180,25 @@ def uygulama_olustur(
 
     @app.put("/api/ayarlar")
     async def ayar_yaz(degisiklik: dict) -> dict:
-        return ayarlar.guncelle(degisiklik).model_dump()
+        once = ayarlar.oku()
+        yeni = ayarlar.guncelle(degisiklik)
+        if (once.sunucu_acik, once.sunucu_port) != (yeni.sunucu_acik, yeni.sunucu_port):
+            if yeni.sunucu_acik:
+                await agecidi.baslat(yeni.sunucu_port)
+            else:
+                await agecidi.durdur()
+        return yeni.model_dump()
+
+    @app.get("/api/sunucu")
+    async def sunucu_durumu() -> dict:
+        a = ayarlar.oku()
+        return {**agecidi.durum(), "ayar_acik": a.sunucu_acik, "ayar_port": a.sunucu_port}
+
+    @app.post("/api/sunucu/yeniden")
+    async def sunucu_yeniden() -> dict:
+        a = ayarlar.oku()
+        await agecidi.baslat(a.sunucu_port)
+        return agecidi.durum()
 
     @app.post("/api/ayarlar/test")
     async def ayar_test(istek: ModelIstegi) -> dict:

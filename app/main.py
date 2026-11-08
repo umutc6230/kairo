@@ -70,6 +70,11 @@ def arg_ayristir(argv: list[str] | None = None) -> argparse.Namespace:
         "--version", action="version", version=f"{URUN_ADI} {__version__} - {YARDIM_SONU}"
     )
     p.add_argument("--tarayici", action="store_true", help="Pencere yerine tarayicida ac")
+    p.add_argument(
+        "--sunucu",
+        action="store_true",
+        help="Pencere acmadan yalniz yerel model sunucusunu calistir (Ollama gibi, arka planda)",
+    )
     p.add_argument("--port", type=int, default=0, help="Yerel arayuz portu (0: bos port)")
     return p.parse_args(argv)
 
@@ -84,13 +89,18 @@ def main(argv: list[str] | None = None) -> int:
     logger.add(dizin / "uygulama.log", level="INFO", rotation="2 MB", retention=3, encoding="utf-8")
 
     port = args.port or ortam.port or bos_port()
+
+    def kapat() -> None:  # --sunucu modunda /api/yerel/kapat ile
+        sunucu.should_exit = True
+
     sunucu = uvicorn.Server(
         uvicorn.Config(
-            uygulama_olustur(dizin),
+            uygulama_olustur(dizin, kapat=kapat if args.sunucu else None),
             host="127.0.0.1",
             port=port,
             log_level="warning",
             log_config=None,
+            ws="none",
         )
     )
     is_parcacigi = threading.Thread(target=sunucu.run, daemon=True)
@@ -102,7 +112,11 @@ def main(argv: list[str] | None = None) -> int:
     adres = f"http://127.0.0.1:{port}/"
     logger.info("{} {} acildi: {} (veri: {})", URUN_ADI, __version__, adres, dizin)
 
-    if args.tarayici:
+    if args.sunucu:
+        logger.info("Pencere yok; yalniz yerel sunucu calisiyor. Kapatmak: Sunucu-Durdur.bat")
+        with contextlib.suppress(KeyboardInterrupt):
+            is_parcacigi.join()
+    elif args.tarayici:
         webbrowser.open(adres)
         with contextlib.suppress(KeyboardInterrupt):
             is_parcacigi.join()

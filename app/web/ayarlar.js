@@ -64,6 +64,13 @@ export function ayarlarAc(sekme = "ai") {
       <div class="ayar-grup"><label>Sistem istemi (isteğe bağlı)</label><textarea class="alan" id="ay-sistem" rows="3" placeholder="Örn: Her zaman Türkçe ve kısa cevap ver.">${kacir(a.sistem_istemi)}</textarea></div>
       <div class="satir"><div class="ayar-grup" style="flex:1"><label>Sıcaklık (${a.sicaklik})</label><input type="range" id="ay-sicaklik" min="0" max="1.5" step="0.1" value="${a.sicaklik}"></div>
         <div class="ayar-grup" style="flex:1"><label>En fazla cevap token</label><input class="alan" id="ay-max" type="number" min="16" max="8192" value="${a.max_tokens}"></div></div>
+      <div class="ayar-grup" id="ay-agecidi"><label>Yerel sunucu (Ollama gibi): modelleri diğer uygulamalar kullansın</label>
+        <div class="anahtar-satir"><div><div>Sunucuyu aç</div><div class="ayar-not">Studio açıkken buradaki modeller <b>Ollama uyumlu</b> ve <b>OpenAI uyumlu</b> adresten diğer uygulamalara sunulur. İstenen model kapalıysa Studio açar; ayrı bir Ollama gerekmez. Yalnız bu bilgisayardan erişilir.</div></div>
+          <label class="anahtar"><input type="checkbox" id="ay-sunucu-acik" ${a.sunucu_acik ? "checked" : ""}><span></span></label></div>
+        <div class="satir"><label class="soluk kucuk" for="ay-sunucu-port">Port</label><input class="alan" id="ay-sunucu-port" type="number" min="1024" max="65535" value="${a.sunucu_port}" style="max-width:140px">
+          <span class="ayar-not">11434 = Ollama'nın portu (Ollama destekli uygulamalar ayar değiştirmeden bağlanır)</span></div>
+        <div id="ay-sunucu-durum"></div>
+      </div>
       <div class="ayar-grup"><label>Sunucu</label><div class="satir">
         <button class="btn" id="ay-yukle"><span data-ikon="guc"></span>Modeli şimdi yükle</button>
         <button class="btn" id="ay-durdur"><span data-ikon="durdur"></span>Sunucuyu durdur</button>
@@ -111,6 +118,10 @@ export function ayarlarAc(sekme = "ai") {
   alanKaydet("#ay-adres", "adres");
   alanKaydet("#ay-oto", "otomatik_baslat");
   alanKaydet("#ay-araclar", "sohbet_araclari");
+  const sunucuKaydet = async (degisiklik) => { await kaydet(degisiklik); sunucuDurumuCiz(govde); };
+  $("#ay-sunucu-acik", govde).onchange = (e) => sunucuKaydet({ sunucu_acik: e.target.checked });
+  $("#ay-sunucu-port", govde).onchange = (e) => sunucuKaydet({ sunucu_port: Number(e.target.value) });
+  sunucuDurumuCiz(govde);
   $("#ay-baglam", govde).value = String(a.baglam_token);
   alanKaydet("#ay-baglam", "baglam_token", Number);
   alanKaydet("#ay-sistem", "sistem_istemi");
@@ -138,6 +149,31 @@ export function ayarlarAc(sekme = "ai") {
   $("#ay-durdur", govde).onclick = () => sunucuDurdur(false);
   $("#ay-harici", govde).onclick = () => sunucuDurdur(true);
   ikonlariYerlestir(govde);
+}
+
+async function sunucuDurumuCiz(govde) {
+  const kap = $("#ay-sunucu-durum", govde);
+  if (!kap) return;
+  let s;
+  try { s = await api("/api/sunucu"); } catch (e) { kap.innerHTML = `<div class="hata-kutu">${kacir(e.message)}</div>`; return; }
+  const modeller = (durum.sunucu?.modeller || []).filter((m) => m.dosya_var).map((m) => m.anahtar);
+  const kopya = (metin) => `<button class="btn kucuk kopya" data-metin="${kacir(metin)}">Kopyala</button>`;
+  kap.innerHTML = s.acik
+    ? `<div class="kart" style="padding:10px 12px;gap:8px">
+        <div><span class="rozet yesil">açık</span> <span class="soluk kucuk">${s.istek_sayisi} istek karşılandı</span></div>
+        <div class="satir"><span class="kucuk" style="min-width:150px">Ollama uyumlu adres</span><code>${kacir(s.ollama_adres)}</code>${kopya(s.ollama_adres)}</div>
+        <div class="satir"><span class="kucuk" style="min-width:150px">OpenAI uyumlu adres</span><code>${kacir(s.openai_adres)}</code>${kopya(s.openai_adres)}</div>
+        <div class="kucuk soluk">Model adları: ${modeller.map((m) => `<code>${kacir(m)}</code>`).join(" ")}</div>
+        <div class="ayar-not"><b>Nasıl bağlanır?</b> GridMind: AI motoru → <i>Local model (Ollama)</i>. Ollama destekli diğer uygulamalar: ayar gerekmez. OpenAI/OpenRouter kullanan uygulamalar: temel adres = OpenAI uyumlu adres, API anahtarı herhangi bir metin, model = yukarıdaki adlardan biri. Pencereyi kapatınca sunucu da kapanır; arka planda çalıştırmak için portable klasördeki <code>Sunucu.bat</code>.</div>
+        ${s.son_istekler.length ? `<div class="kucuk soluk">Son istekler: ${s.son_istekler.slice(0, 5).map((i) => `${kacir(i.zaman.slice(11, 19))} ${kacir(i.yol)} ${kacir(i.model || "")}`).join(" · ")}</div>` : ""}
+      </div>`
+    : `<div class="kart" style="padding:10px 12px"><span class="rozet ${s.hata ? "kirmizi" : ""}">${s.hata ? "açılamadı" : "kapalı"}</span>
+        ${s.hata ? `<span class="kucuk"> ${kacir(s.hata)} Başka port seçin ya da o programı kapatıp </span><button class="btn kucuk" id="ay-sunucu-yeniden">Tekrar dene</button>` : ""}</div>`;
+  kap.querySelectorAll(".kopya").forEach((b) => {
+    b.onclick = async () => { await navigator.clipboard.writeText(b.dataset.metin); bildir("Kopyalandı", "basari", 1500); };
+  });
+  const yeniden = $("#ay-sunucu-yeniden", kap);
+  if (yeniden) yeniden.onclick = async () => { await api("/api/sunucu/yeniden", { method: "POST" }).catch(() => {}); sunucuDurumuCiz(govde); };
 }
 
 export async function modelYukle(model) {

@@ -27,6 +27,8 @@ class KullaniciAyarlari(BaseModel):
     uygulama_talimati: bool = True  # <veri>/AGENTS.md
     skiller_acik: bool = True  # Claude Code / brain / uygulama skill'leri
     kapali_skiller: list[str] = []
+    sunucu_acik: bool = True  # Ollama gibi yerel sunucu: diger uygulamalar modelleri kullanir
+    sunucu_port: int = Field(default=11434, ge=1024, le=65535)  # 11434 = Ollama'nin portu
     baglam_token: int = 16384  # llama-server -c; talimatlar ~3k token yer
     sistem_istemi: str = Field(default="", max_length=4000)
     sicaklik: float = Field(default=0.2, ge=0.0, le=2.0)

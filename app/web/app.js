@@ -161,6 +161,16 @@ async function durumYenile() {
   $("#hap-klasor-metni").textContent = a.llm_dizin.split(/[\\/]/).pop() || a.llm_dizin;
   bantGuncelle();
   bosDurumKartlari();
+  agecidiGuncelle();
+}
+
+async function agecidiGuncelle() {
+  let s;
+  try { s = await api("/api/sunucu"); } catch { return; }
+  const hap = $("#agecidi-hapi");
+  hap.hidden = !s.ayar_acik;
+  $("#agecidi-nokta").className = `nokta ${s.acik ? "hazir" : s.hata ? "hata" : ""}`;
+  $("#agecidi-metni").textContent = s.acik ? `Sunucu :${s.port}` : s.hata ? "Sunucu açılamadı" : "Sunucu kapalı";
 }
 
 function bantGuncelle() {
@@ -274,6 +284,7 @@ async function baslat() {
   $("#hap-model").onclick = (e) => modelMenusu(e.currentTarget);
   $("#hap-bilgisayar").onclick = (e) => sunucuMenusu(e.currentTarget, true);
   $("#sunucu-hapi").onclick = (e) => sunucuMenusu(e.currentTarget, false);
+  $("#agecidi-hapi").onclick = () => { ayarlarAc(); setTimeout(() => document.getElementById("ay-agecidi")?.scrollIntoView({ behavior: "smooth" }), 50); };
 
   document.addEventListener("keydown", (e) => {
     if (!e.ctrlKey) return;

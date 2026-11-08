@@ -117,7 +117,8 @@ class SahteSunucu:
                 ]
             return "1250 dolar 51.500 TL eder.", None
         if govde.get("response_format"):
-            ozellik = govde["response_format"]["json_schema"]["schema"].get("properties", {})
+            bicim = govde["response_format"].get("json_schema") or {}
+            ozellik = bicim.get("schema", {}).get("properties", {})
             if "sehir" in ozellik:
                 return json.dumps({"sehir": "Ankara", "plaka": 6}), None
             if "alanlar" in ozellik:

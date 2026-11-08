@@ -18,6 +18,8 @@ pyinstaller --noconfirm --clean paketleme\yerel-ai-studio.spec || exit /b 1
 copy /y paketleme\Baslat.bat dist\YerelAIStudio\ >nul
 
 copy /y paketleme\BENIOKU.txt dist\YerelAIStudio\ >nul
+copy /y paketleme\Sunucu.bat dist\YerelAIStudio\ >nul
+copy /y paketleme\Sunucu-Durdur.bat dist\YerelAIStudio\ >nul
 echo.
 echo Derlendi (portable): dist\YerelAIStudio\Baslat.bat
 endlocal
