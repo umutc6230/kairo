@@ -15,7 +15,7 @@ from app.services.ayarlar import AyarDeposu
 from app.services.depo import json_oku, json_yaz
 from app.services.ekler import EkDeposu, tur_bul
 from app.services.oturumlar import Mesaj, OturumDeposu, baslik_uret
-from app.services.sohbet import gecmis, kuyruktan_akit
+from app.services.sohbet import kuyruktan_akit
 from app.services.testler import bellek_uyarisi, benzerlik
 
 
@@ -88,17 +88,59 @@ def test_ek_deposu(tmp_path):
 
 
 # ---- sohbet yardimcilari ----
-def test_gecmis_sinir_ve_ekler():
+async def test_gecmis_mesajlari_ekler_ve_butce(tmp_path):
+    from app.services.sohbet import GECMIS_RESIM_TOKEN, gecmis_mesajlari
+    from app.services.yerel_llm import YerelLLM
+
+    depo = EkDeposu(tmp_path)
+    resim = depo.kaydet("r.png", _png(2000, 1000))
+    notu = depo.kaydet("n.txt", ("satir " * 2000).encode())
+    ses = depo.kaydet("k.wav", b"RIFF")
     mesajlar = [
-        Mesaj(rol="kullanici", metin="a" * 50, ekler=[{"id": "1", "ad": "r.png", "tur": "resim"}]),
+        Mesaj(
+            rol="kullanici", metin="ilk", ekler=[{"id": resim.id, "ad": "r.png", "tur": "resim"}]
+        ),
         Mesaj(rol="asistan", metin="", hata="Durduruldu."),
         Mesaj(rol="asistan", metin="b" * 50),
-        Mesaj(rol="kullanici", metin="c" * 50),
+        Mesaj(
+            rol="kullanici",
+            metin="",
+            ekler=[
+                {"id": notu.id, "ad": "n.txt", "tur": "metin"},
+                {"id": ses.id, "ad": "k.wav", "tur": "ses"},
+                {"id": "abcdef123456", "ad": "silik.png", "tur": "resim"},
+            ],
+        ),
     ]
-    g = gecmis(mesajlar, sinir=120)
-    assert [m["role"] for m in g] == ["assistant", "user"]  # en eski sigmadi, hatali atlandi
-    g = gecmis(mesajlar)
-    assert g[0]["content"].startswith("[Ek: r.png]\n")
+    llm = YerelLLM(model="deepseek-heretic")  # ses desteklemez
+    g, dusen = await gecmis_mesajlari(llm, depo, mesajlar, 100_000, lambda o: None)
+    assert [m["role"] for m in g] == ["user", "assistant", "user"]  # hatali bos mesaj atlandi
+    ilk = g[0]["content"]
+    assert ilk[0] == {"type": "text", "text": "ilk"} and ilk[1]["type"] == "image_url"
+    son = g[2]["content"]
+    assert son[0]["text"].startswith("[Ek: silik.png (silinmis)]")
+    assert "kisaltildi" in son[1]["text"] and "bu model sesi dinleyemiyor" in son[2]["text"]
+    assert dusen == []
+    # butce yalniz son mesajlara yeter: eski gorsel duser ve adi bildirilir
+    g, dusen = await gecmis_mesajlari(
+        llm, depo, mesajlar, GECMIS_RESIM_TOKEN + 1200, lambda o: None
+    )
+    assert dusen == ["r.png"]
+    assert g[0]["content"].startswith("[Ek: r.png (baglama sigmadi, gonderilmedi)]")
+    # metin bile sigmazsa daha eski mesajlar hic gitmez
+    g, dusen = await gecmis_mesajlari(llm, depo, mesajlar, 5, lambda o: None)
+    assert len(g) == 1 and "n.txt (baglama sigmadi" in g[0]["content"]  # ekler etiketli
+    assert dusen == ["n.txt", "k.wav"]
+
+
+def _png(gen: int, yuk: int) -> bytes:
+    import io
+
+    from PIL import Image
+
+    t = io.BytesIO()
+    Image.new("RGB", (gen, yuk), "white").save(t, "PNG")
+    return t.getvalue()
 
 
 async def test_kuyruktan_akit_iptalde_gorevi_durdurur():

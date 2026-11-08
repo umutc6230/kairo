@@ -282,3 +282,56 @@ async def test_test_paketi_hatali_test_basarisiz_sayilir(istemci, sunucu):
     ol = olaylar(r.text)
     assert all(not x["basarili"] for x in ol if x["tur"] == "test_sonucu")
     assert next(x for x in ol if x["tur"] == "model_bitti")["puan"] == 0
+
+
+async def test_sohbet_devaminda_onceki_resim_ve_pdf_modele_gider(istemci, sunucu):
+    import base64
+
+    import fitz
+    from PIL import Image
+
+    resim = (
+        await istemci.post("/api/ekler", files={"dosya": ("f.png", png(3000, 1500), "x")})
+    ).json()
+    belge = fitz.open()
+    belge.new_page().insert_text((72, 72), "Sozlesme bedeli 500.000 TL olarak belirlenmistir.")
+    pdf = (
+        await istemci.post("/api/ekler", files={"dosya": ("s.pdf", belge.tobytes(), "x")})
+    ).json()
+    o = await yeni_oturum(istemci)
+    await istemci.post(
+        f"/api/oturumlar/{o}/mesaj", json={"metin": "Bu fatura", "ekler": [resim["id"]]}
+    )
+    await istemci.post(f"/api/oturumlar/{o}/mesaj", json={"metin": "Bu da", "ekler": [pdf["id"]]})
+    r = await istemci.post(f"/api/oturumlar/{o}/mesaj", json={"metin": "Ilk resimde ne vardi?"})
+    assert olaylar(r.text)[-1]["tur"] == "bitti"
+    mesajlar = sunucu.istekler[-1]["messages"]
+    assert [m["role"] for m in mesajlar] == ["user", "assistant", "user", "assistant", "user"]
+    ilk = mesajlar[0]["content"]
+    assert ilk[0]["text"] == "Bu fatura" and ilk[1]["type"] == "image_url"
+    veri = base64.b64decode(ilk[1]["image_url"]["url"].split(",", 1)[1])
+    assert max(Image.open(io.BytesIO(veri)).size) == 1024  # gecmiste kucultulmus
+    assert "Sozlesme bedeli 500.000 TL" in mesajlar[2]["content"][1]["text"]
+    assert mesajlar[-1] == {"role": "user", "content": "Ilk resimde ne vardi?"}
+
+
+async def test_sohbet_baglama_sigmayan_eski_resim_uyarisi(istemci, sunucu):
+    ekler = [
+        (await istemci.post("/api/ekler", files={"dosya": (f"r{i}.png", png(), "x")})).json()
+        for i in range(5)
+    ]
+    await istemci.put("/api/ayarlar", json={"max_tokens": 4096})  # butce: ~3 gorsel
+    o = await yeni_oturum(istemci)
+    for ek in ekler:
+        await istemci.post(f"/api/oturumlar/{o}/mesaj", json={"metin": "bak", "ekler": [ek["id"]]})
+    r = await istemci.post(f"/api/oturumlar/{o}/mesaj", json={"metin": "Hepsini ozetle"})
+    uyari = next(x for x in olaylar(r.text) if x["tur"] == "uyari")
+    assert "r0.png" in uyari["metin"] and "r4.png" not in uyari["metin"]  # en eski duser
+    gorseller = [
+        p
+        for m in sunucu.istekler[-1]["messages"]
+        if isinstance(m["content"], list)
+        for p in m["content"]
+        if p["type"] == "image_url"
+    ]
+    assert 1 <= len(gorseller) < 5  # en yeniler gitti, en eskiler dustu

@@ -187,6 +187,9 @@ function asistanMesaji() {
       g.innerHTML = md(this.metin);
       ikonlariYerlestir(g);
     },
+    uyari(mesaj) {
+      d.querySelector(".uyarilar").append(el(`<div class="uyari-kutu">${kacir(mesaj)}</div>`));
+    },
     hata(mesaj) {
       clearInterval(this.sayac);
       this.durum("");
@@ -289,6 +292,9 @@ export async function gonder() {
         case "parca":
           yanit.parcaEkle(o.metin);
           sonaKaydir();
+          break;
+        case "uyari":
+          yanit.uyari(o.metin);
           break;
         case "hata":
           yanit.hata(o.mesaj);

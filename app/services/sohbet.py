@@ -13,14 +13,39 @@ from typing import Any
 
 from pydantic import BaseModel, Field
 
-from app.exceptions import SesDesteklenmiyor, UygulamaHatasi, YerelLLMHatasi
+from app.exceptions import Bulunamadi, SesDesteklenmiyor, UygulamaHatasi, YerelLLMHatasi
 from app.services.ekler import Ek, EkDeposu
 from app.services.model_yonetici import ModelYonetici
 from app.services.oturumlar import EkOzet, Mesaj, OturumDeposu, baslik_uret
-from app.services.yerel_llm import MODELLER, YerelLLM, resmi_kucult
+from app.services.yerel_llm import (
+    DENGELI_BUTCE,
+    DERIN_EK_TOKEN,
+    MODELLER,
+    OCR_UZUN_KENAR,
+    YerelLLM,
+    resmi_kucult,
+)
 
-GECMIS_KARAKTER = 16000  # gecmis mesajlar icin pay (~5k token); 8192 context'e sigsin
+# Baglam butcesi (llama-server -c 8192). Tahminler kasitli olarak comert: tasarsa sunucu hata verir.
+BAGLAM_TOKEN = 8192
+GUVENLIK_TOKEN = 400
+KARAKTER_PER_TOKEN = 3.3  # Turkce olcum (skill bolum 4.7)
+RESIM_TOKEN = 1800  # 1600 px gorsel
+GECMIS_RESIM_TOKEN = 1100  # gecmiste 1024 px'e kucultulmus gorsel
+GECMIS_RESIM_KENAR = 1024
+SES_TOKEN = 800  # <= 30 sn ses
 EK_METIN_KARAKTER = 12000
+GECMIS_EK_METIN_KARAKTER = 4000
+
+
+def tahmini_token(metin: str) -> int:
+    return int(len(metin) / KARAKTER_PER_TOKEN) + 4
+
+
+def ayrilan_token(max_tokens: int, dusunme: str) -> int:
+    """Cevap (+ dusunce) icin ayrilan pay; yerel_llm._govde ile ayni hesap."""
+    ek = {"dengeli": DENGELI_BUTCE, "derin": DERIN_EK_TOKEN}.get(dusunme, 0)
+    return max_tokens + ek
 
 
 class MesajIstegi(BaseModel):
@@ -52,20 +77,33 @@ async def kuyruktan_akit(
 
 
 async def ek_parcalari(
-    llm: YerelLLM, depo: EkDeposu, ek: Ek, gonder: Callable[[Olay], None]
-) -> list[dict]:
-    """Bir eki, mesaj icerik parcalarina cevirir (gorsel, ses ya da metin)."""
+    llm: YerelLLM,
+    depo: EkDeposu,
+    ek: Ek,
+    gonder: Callable[[Olay], None],
+    *,
+    gecmiste: bool = False,
+) -> tuple[list[dict], int]:
+    """Bir eki mesaj icerik parcalarina cevirir; (parcalar, tahmini token) dondurur.
+    gecmiste=True: onceki mesajin eki (gorsel daha kucuk, metin daha kisa, PDF yeniden okunmaz)."""
     if ek.tur == "resim":
-        veri, mime = resmi_kucult(depo.veri(ek), mime=ek.mime)
-        return [{"type": "image_url", "image_url": {"url": YerelLLM.resim_data_url(veri, mime)}}]
+        kenar = GECMIS_RESIM_KENAR if gecmiste else OCR_UZUN_KENAR
+        veri, mime = resmi_kucult(depo.veri(ek), kenar, mime=ek.mime)
+        url = YerelLLM.resim_data_url(veri, mime)
+        maliyet = GECMIS_RESIM_TOKEN if gecmiste else RESIM_TOKEN
+        return [{"type": "image_url", "image_url": {"url": url}}], maliyet
     if ek.tur == "ses":
         profil = MODELLER.get(llm.model)
         if profil and not profil.ses:
+            if gecmiste:  # eski ses: bu model dinleyemez, yalniz adi gider
+                return [
+                    {"type": "text", "text": f"[Ses: {ek.ad} (bu model sesi dinleyemiyor)]"}
+                ], 20
             raise SesDesteklenmiyor()
         veri = base64.b64encode(depo.veri(ek)).decode()
         bicim = "mp3" if ek.uzanti == ".mp3" else "wav"
-        return [{"type": "input_audio", "input_audio": {"data": veri, "format": bicim}}]
-    if ek.tur == "pdf" and not ek.metin:
+        return [{"type": "input_audio", "input_audio": {"data": veri, "format": bicim}}], SES_TOKEN
+    if ek.tur == "pdf" and not ek.metin and not gecmiste:
         gonder({"tur": "durum", "metin": f"PDF okunuyor: {ek.ad}"})
 
         def ilerleme(a: int, b: int) -> None:
@@ -75,26 +113,59 @@ async def ek_parcalari(
         metin = "\n\n".join(f"--- Sayfa {i} ---\n{s}" for i, s in enumerate(sayfalar, 1))
         ek = depo.metin_kaydet(ek, metin)
     etiket = "PDF" if ek.tur == "pdf" else "Dosya"
-    kesik = ek.metin[:EK_METIN_KARAKTER]
-    not_ = "\n[... metin kisaltildi]" if len(ek.metin) > EK_METIN_KARAKTER else ""
-    return [{"type": "text", "text": f"[{etiket}: {ek.ad}]\n{kesik}{not_}"}]
+    sinir = GECMIS_EK_METIN_KARAKTER if gecmiste else EK_METIN_KARAKTER
+    not_ = "\n[... metin kisaltildi]" if len(ek.metin) > sinir else ""
+    metin = f"[{etiket}: {ek.ad}]\n{ek.metin[:sinir]}{not_}"
+    return [{"type": "text", "text": metin}], tahmini_token(metin)
 
 
-def gecmis(mesajlar: list[Mesaj], sinir: int = GECMIS_KARAKTER) -> list[dict]:
-    """Onceki mesajlari yalniz metin olarak (ekler adiyla) sondan basa sinira kadar alir."""
+async def gecmis_mesajlari(
+    llm: YerelLLM,
+    depo: EkDeposu,
+    mesajlar: list[Mesaj],
+    butce: int,
+    gonder: Callable[[Olay], None],
+) -> tuple[list[dict], list[str]]:
+    """Onceki mesajlari EKLERIYLE (gorsel, PDF/metin yazisi, ses) sondan basa butceye kadar alir.
+    Butceye sigmayan eski ekler gonderilmez ve adlari ikinci degerde doner (kullaniciya uyari)."""
     sonuc: list[dict] = []
-    toplam = 0
+    dusenler: list[str] = []
     for m in reversed(mesajlar):
         if m.hata and not m.metin:
             continue
-        metin = m.metin
-        if m.ekler:
-            metin = " ".join(f"[Ek: {e.ad}]" for e in m.ekler) + ("\n" + metin if metin else "")
-        if toplam + len(metin) > sinir:
+        maliyet = tahmini_token(m.metin)
+        if maliyet > butce:
             break
-        toplam += len(metin)
-        sonuc.append({"role": "user" if m.rol == "kullanici" else "assistant", "content": metin})
-    return list(reversed(sonuc))
+        butce -= maliyet
+        rol = "user" if m.rol == "kullanici" else "assistant"
+        if rol == "assistant" or not m.ekler:
+            sonuc.append({"role": rol, "content": m.metin})
+            continue
+        parcalar: list[dict] = []
+        etiketler: list[str] = []
+        mesaj_dusen: list[str] = []
+        for ozet in m.ekler:
+            try:
+                ek = depo.getir(ozet.id)
+            except Bulunamadi:
+                etiketler.append(f"[Ek: {ozet.ad} (silinmis)]")
+                continue
+            p, c = await ek_parcalari(llm, depo, ek, gonder, gecmiste=True)
+            if c <= butce:
+                parcalar += p
+                butce -= c
+            else:
+                mesaj_dusen.append(ek.ad)
+                etiketler.append(f"[Ek: {ek.ad} (baglama sigmadi, gonderilmedi)]")
+        dusenler = mesaj_dusen + dusenler  # eskiden yeniye, mesaj ici sira korunur
+        on_ek = " ".join(etiketler)
+        metin = f"{on_ek}\n{m.metin}".strip() if on_ek else m.metin
+        if parcalar:
+            icerik: Any = ([{"type": "text", "text": metin}] if metin else []) + parcalar
+        else:
+            icerik = metin or "[ek]"
+        sonuc.append({"role": "user", "content": icerik})
+    return list(reversed(sonuc)), dusenler
 
 
 def istatistik(llm: YerelLLM, bas: float, ilk: float | None, yukleme: float | None) -> dict:
@@ -183,18 +254,35 @@ class SohbetServisi:
             async with self.yonetici.kullan(ayar.model) as llm:
                 yukleme = self.yonetici.yukleme_sn
                 parcalar: list[dict] = []
+                guncel = tahmini_token(istek.metin) + tahmini_token(ayar.sistem_istemi)
                 for ek in ekler:
-                    parcalar += await ek_parcalari(llm, self.ekler, ek, gonder)
+                    p, c = await ek_parcalari(llm, self.ekler, ek, gonder)
+                    parcalar += p
+                    guncel += c
                 icerik: Any = istek.metin
                 if parcalar:
                     icerik = [{"type": "text", "text": istek.metin}] if istek.metin else []
                     icerik += parcalar
+                seviye = istek.dusunme or ayar.dusunme
+                butce = BAGLAM_TOKEN - GUVENLIK_TOKEN - guncel
+                butce -= ayrilan_token(ayar.max_tokens, seviye)
+                onceki_mesajlar, dusenler = await gecmis_mesajlari(
+                    llm, self.ekler, onceki, max(butce, 0), gonder
+                )
+                if dusenler:
+                    gonder(
+                        {
+                            "tur": "uyari",
+                            "metin": "Bağlama (8192 token) sığmadığı için şu eski ekler bu "
+                            f"cevapta gönderilmedi: {', '.join(dusenler)}",
+                        }
+                    )
                 mesajlar = (
                     [{"role": "system", "content": ayar.sistem_istemi}]
                     if ayar.sistem_istemi
                     else []
                 )
-                mesajlar += gecmis(onceki) + [{"role": "user", "content": icerik}]
+                mesajlar += onceki_mesajlar + [{"role": "user", "content": icerik}]
                 gonder({"tur": "durum", "metin": "Yanitlaniyor..."})
                 sonuc = await cevap_akit(
                     llm,
