@@ -182,7 +182,7 @@ async def test_on_adimli_gorev_test_hatasi_duzeltme_ve_kanit(tmp_path, proje) ->
     assert run.durum is RunDurum.basarili, (run.hata, [a.sonuc[:80] for a in run.adimlar])
     assert run.sonuc.kanit == [10] and run.sonuc.dogrulandi  # 99 yok sayildi
     assert len(run.adimlar) == 13 and run.kullanim.adim == 13
-    assert run.adimlar[8].durum is AdimDurum.hata and "basarisiz" in run.adimlar[8].sonuc
+    assert run.adimlar[8].durum is AdimDurum.hata and "gecersiz" in run.adimlar[8].sonuc
     assert json.loads(run.adimlar[5].sonuc)["cikis_kodu"] != 0
     assert "a + b" in (proje / "src" / "hesap.py").read_text(encoding="utf-8")
     assert [p.baslik for p in run.plan] == ["Duzelt"]
@@ -284,9 +284,15 @@ async def test_surekli_kesinti_sinirli_deneme(tmp_path, proje) -> None:
 
 
 async def test_cokme_sonrasi_belirsiz_adim_tekrarlanmaz(tmp_path, proje) -> None:
-    model = SahteModel([cagri("gorevi_bitir", ozet="tamam", kanit_adimlari=[1])])
+    model = SahteModel(
+        [
+            cagri("proje_dosya_oku", yol="a.txt"),
+            cagri("gorevi_bitir", ozet="tamam", kanit_adimlari=[2]),
+        ]
+    )
     runner, depo, _, sayac = kur(tmp_path, proje, model)
     run = cokmus_run(depo, "a.txt", "x")
+    (proje / "a.txt").write_text("x", encoding="utf-8")  # cokmeden once gercekten yazilmisti
     assert depo.kurtar() == [run.id]  # uygulama yeniden acildi
     run = depo.getir(run.id)
     assert run.durum is RunDurum.karar_bekliyor
@@ -302,7 +308,12 @@ async def test_cokme_sonrasi_belirsiz_adim_tekrarlanmaz(tmp_path, proje) -> None
 
 
 async def test_belirsiz_adim_kullanici_isterse_tekrarlanir(tmp_path, proje) -> None:
-    model = SahteModel([cagri("gorevi_bitir", ozet="tamam", kanit_adimlari=[1])])
+    model = SahteModel(
+        [
+            cagri("proje_dosya_oku", yol="b.txt"),
+            cagri("gorevi_bitir", ozet="tamam", kanit_adimlari=[2]),
+        ]
+    )
     runner, depo, _, sayac = kur(tmp_path, proje, model)
     run = cokmus_run(depo, "b.txt", "y")
     depo.kurtar()
@@ -438,3 +449,72 @@ async def test_api_proje_yokken_gorev_baslamaz(istemci) -> None:
     assert (
         await istemci.get("/api/gorevler/x..y")
     ).status_code == 404  # gecersiz id: dosya yolu kurulmaz
+
+
+async def test_istek_siniri_429_gecici_sayilir(tmp_path, proje) -> None:
+    from app.services.openrouter import OpenRouterLLM
+
+    with pytest.raises(Exception) as bilgi:
+        OpenRouterLLM._hata_firlat(429, "rate limited")
+    assert bilgi.value.gecici
+    with pytest.raises(Exception) as bilgi:
+        OpenRouterLLM._hata_firlat(401, "")
+    assert not bilgi.value.gecici
+    model = SahteModel(
+        [
+            bilgi.type("sinir", gecici=True),
+            cagri("proje_listele"),
+            cagri("gorevi_bitir", ozet="ok", kanit_adimlari=[1]),
+        ]
+    )
+    runner, *_ = kur(tmp_path, proje, model)
+    run = await bitir(runner, (await runner.baslat("x")).id)
+    assert run.durum is RunDurum.basarili and len(model.gorulen) == 3
+
+
+async def test_degisiklik_oncesi_kanit_gecersiz(tmp_path, proje) -> None:
+    """Canli denemede model degisiklik ONCESI bir listeleme adimini kanit gosterdi."""
+    model = SahteModel(
+        [
+            cagri("proje_listele"),  # 1: degisiklik oncesi
+            cagri("proje_dosya_yaz", yol="yeni.txt", icerik="x"),  # 2
+            cagri("gorevi_bitir", ozet="yaptim", kanit_adimlari=[1]),  # 3: reddedilir
+            cagri("proje_dosya_oku", yol="yeni.txt"),  # 4: son durumu dogrular
+            cagri("gorevi_bitir", ozet="yaptim", kanit_adimlari=[4]),
+        ]
+    )
+    runner, *_ = kur(tmp_path, proje, model)
+    run = await bitir(runner, (await runner.baslat("x")).id)
+    assert run.adimlar[2].durum is AdimDurum.hata and "SONRA" in run.adimlar[2].sonuc
+    assert run.durum is RunDurum.basarili and run.sonuc.kanit == [4]
+
+
+def test_okuma_araci_hash_verir_yama_onunla_calisir(tmp_path, proje) -> None:
+    runner, *_ = kur(tmp_path, proje, SahteModel([]))
+    isl = runner.araclar("")[2]
+    okunan = isl["proje_dosya_oku"](yol="src/hesap.py")
+    assert len(okunan["hash"]) == 32
+    eksik = isl["proje_dosya_yama"](yol="src/hesap.py", eski_metin="a - b", yeni_metin="a + b")
+    assert "proje_dosya_oku" in eksik["hata"]  # model ne yapacagini anlar
+    s = isl["proje_dosya_yama"](
+        yol="src/hesap.py", eski_metin="a - b", yeni_metin="a + b", beklenen_hash=okunan["hash"]
+    )
+    assert "hata" not in s
+
+
+async def test_model_adim_numarasini_gorur_ve_uzun_basarisiz_cikti_kanit_olamaz(
+    tmp_path, proje
+) -> None:
+    uzun = "import sys; print('x' * 5000); sys.exit(1)"
+    model = SahteModel(
+        [
+            cagri("komut_calistir", komut=f'"{sys.executable}" -c "{uzun}"'),
+            cagri("gorevi_bitir", ozet="gecti", kanit_adimlari=[1]),
+        ]
+    )
+    runner, *_ = kur(tmp_path, proje, model)
+    run = await bitir(runner, (await runner.baslat("x")).id)
+    tool = next(m for m in model.gorulen[-1] if m["role"] == "tool")
+    assert json.loads(tool["content"])["adim"] == 1
+    assert run.adimlar[0].cikis_kodu == 1
+    assert run.adimlar[1].durum is AdimDurum.hata  # kirpilmis cikti "basarili" sayilmadi

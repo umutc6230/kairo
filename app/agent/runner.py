@@ -42,8 +42,9 @@ YAN_ETKILI = {
     "git_dal",
     "git_commit",
 }
+DEGISTIREN = {"proje_dosya_yaz", "proje_dosya_yama", "proje_dosya_tasi", "proje_dosya_sil"}
 GECICI_HATA_DENEME = 2  # model kesintisinde sinirli yeniden deneme
-BEKLEME_SN = (2.0, 5.0)
+BEKLEME_SN = (5.0, 15.0)  # istek siniri (429) icin kisa bekleme yetmiyor
 SONUC_SINIRI = 6000
 
 
@@ -103,6 +104,7 @@ class Adim(BaseModel):
     yan_etkili: bool = False
     sonuc: str = ""
     onay_id: str = ""
+    cikis_kodu: int | None = None  # komut adimlarinda gercek cikis kodu
     zaman: str = Field(default_factory=lambda: datetime.now().isoformat(timespec="seconds"))
 
 
@@ -406,6 +408,12 @@ class AgentRunner:
 
     # ---------------------------------------------------------------- dongu
     def _arac_mesaji(self, run: Run, a: Adim, sonuc: Any) -> None:
+        if isinstance(sonuc, dict) and isinstance(sonuc.get("cikis_kodu"), int):
+            a.cikis_kodu = sonuc["cikis_kodu"]  # kanit kontrolu kirpilmis metne guvenmez
+        # model kanit gosterirken adim numarasini bilmeli; yoksa numara uyduruyor (canli bulgu)
+        sonuc = (
+            {"adim": a.no, **sonuc} if isinstance(sonuc, dict) else {"adim": a.no, "sonuc": sonuc}
+        )
         metin = json.dumps(sonuc, ensure_ascii=False, default=str)
         if len(metin) > SONUC_SINIRI:
             metin = metin[:SONUC_SINIRI] + '..."[kesildi]"'
@@ -538,7 +546,11 @@ class AgentRunner:
                     secim = await llm.sohbet(gonderilen, tools=semalar, max_tokens=2048)
                 break
             except (SunucuKapali, ModelCevapHatasi) as e:
-                gecici = isinstance(e, SunucuKapali) or "zamaninda" in str(e)
+                gecici = (
+                    isinstance(e, SunucuKapali)
+                    or "zamaninda" in str(e)
+                    or getattr(e, "gecici", False)  # or. OpenRouter 429/5xx
+                )
                 if not gecici or deneme == GECICI_HATA_DENEME:
                     run.durum, run.hata = RunDurum.basarisiz, f"Model hatasi: {e}"
                     return None
@@ -656,21 +668,26 @@ class AgentRunner:
         self.depo.kaydet(run)
 
     def _bitir(self, run: Run, a: Adim) -> None:
-        """Kanit kontrolu: referans verilen adimlar basarili gercek arac adimi olmali."""
+        """Kanit kontrolu: referans verilen adim basarili gercek bir arac adimi olmali ve SON
+        dosya degisikliginden SONRA atilmis olmali (degisiklik oncesi okuma son durumu kanitlamaz).
+        """
         ozet = str(a.argumanlar.get("ozet") or "")[:2000]
         numaralar = [n for n in a.argumanlar.get("kanit_adimlari") or [] if isinstance(n, int)]
         adimlar = {x.no: x for x in run.adimlar}
+        son_degisiklik = max(
+            (x.no for x in run.adimlar if x.arac in DEGISTIREN and x.durum is AdimDurum.tamam),
+            default=0,
+        )
         gecerli: list[int] = []
         for n in numaralar:
             x = adimlar.get(n)
             if x is None or x.arac in META or x.durum is not AdimDurum.tamam:
                 continue
+            if n <= son_degisiklik:  # degisikligin kendisi kanit degil
+                continue
             if x.arac == "komut_calistir":
-                try:
-                    kod = json.loads(x.sonuc).get("cikis_kodu")
-                except (json.JSONDecodeError, AttributeError):
-                    kod = None
-                if kod not in (0, None):
+                kod = x.cikis_kodu
+                if kod != 0:  # bilinmeyen kod da kanit olamaz
                     a.durum = AdimDurum.hata
                     self._arac_mesaji(
                         run,
@@ -682,10 +699,26 @@ class AgentRunner:
                     return
             gecerli.append(n)
         a.durum = AdimDurum.tamam
+        if (
+            numaralar and not gecerli
+        ):  # kanit verdi ama gecersiz: bitirme reddedilir, model duzeltir
+            a.durum = AdimDurum.hata
+            self._arac_mesaji(
+                run,
+                a,
+                {"hata": f"Kanit adimlari {numaralar} gecersiz: son dosya degisikligi adim "
+                 f"{son_degisiklik}; kanit bundan SONRA basarili bir adim olmali (or. testi "
+                 "tekrar calistir). Kanitin yoksa kanit_adimlari=[] ile bitir."},
+            )  # fmt: skip
+            self.depo.kaydet(run)
+            return
         run.sonuc = Sonuc(ozet=ozet, kanit=gecerli, dogrulandi=bool(gecerli))
         run.durum = RunDurum.basarili if gecerli else RunDurum.dogrulanmadi
         if not gecerli:
-            run.hata = "Gecerli arac kaniti gosterilmedi; sonuc dogrulanmadi."
+            run.hata = (
+                "Gecerli arac kaniti gosterilmedi (son degisiklikten sonra basarili bir adim "
+                "gerekir); sonuc dogrulanmadi."
+            )
         self._arac_mesaji(run, a, {"tamam": True, "durum": str(run.durum)})
         self.depo.kaydet(run)
 

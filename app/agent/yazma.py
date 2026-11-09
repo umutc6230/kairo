@@ -77,7 +77,8 @@ class YazmaAraclari:
             return
         if beklenen is None:
             raise UygulamaHatasi(
-                f"Dosya zaten var: {p}. Uzerine yazmak icin once oku ve `beklenen_hash` gonder."
+                f"`beklenen_hash` eksik ({p}): once proje_dosya_oku ile oku, donen `hash` "
+                "degerini beklenen_hash olarak gonder."
             )
         if beklenen != simdiki:
             raise UygulamaHatasi(
@@ -217,9 +218,8 @@ class YazmaAraclari:
         self._izin("dosya_sil", YanEtki.sil, p, f"SIL: {self.kapsam.goreli(p)}")
         if not p.is_file():
             raise UygulamaHatasi(f"Dosya bulunamadi: {p}")
-        simdiki = dosya_hashi(p)
-        if beklenen_hash and beklenen_hash != simdiki:
-            raise UygulamaHatasi("Dosya en son okudugundan beri degisti; silme iptal edildi.")
+        # hash ZORUNLU: yoksa "sil + yeniden yaz" ile bayat-yazim korumasi atlatilabiliyordu
+        self._hash_kontrol(p, beklenen_hash)
         once_hash, kopya, boyut = self.checkpointler.anlik_al(p)
         p.unlink()
         cp = self._checkpoint(

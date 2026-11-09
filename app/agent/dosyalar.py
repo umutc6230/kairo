@@ -20,6 +20,7 @@ from pathlib import Path
 from typing import Any
 
 from app.agent import policy
+from app.agent.checkpoints import icerik_hashi
 from app.agent.yollar import guvenli_coz, ham_dogrula, kimlik, kimlik_dogrula
 from app.exceptions import YetkiYok
 
@@ -182,6 +183,8 @@ class AjanDosyaAraclari:
             "truncated": kesildi,
             "sonraki_satir": son + 1 if kesildi else None,
             "icerik": numarali,
+            # yazma/yama/silme araclari bunu `beklenen_hash` olarak ister (bayat yazimi onler)
+            "hash": icerik_hashi(veri),
         }
 
     def klasor_listele(self, yol: str = "", derinlik: int = 1) -> dict:

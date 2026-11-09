@@ -190,7 +190,13 @@ def test_tasi_ve_sil(ortam, py_proje: Path) -> None:
     with pytest.raises(UygulamaHatasi, match="Kaynak bulunamadi"):
         kayit.yazma.dosya_tasi("tasinacak.txt", "x.txt")
 
-    s = kayit.yazma.dosya_sil("alt/tasindi.txt")
+    # hash'siz silme reddedilir ("sil + yeniden yaz" ile bayat-yazim korumasi atlatilamaz)
+    with pytest.raises(UygulamaHatasi, match="beklenen_hash"):
+        kayit.yazma.dosya_sil("alt/tasindi.txt")
+    h = kayit.okuma.dosya_oku("alt/tasindi.txt")["hash"]  # okuma araci hash'i verir
+    with pytest.raises(UygulamaHatasi, match="degisti"):
+        kayit.yazma.dosya_sil("alt/tasindi.txt", beklenen_hash="0" * 32)
+    s = kayit.yazma.dosya_sil("alt/tasindi.txt", beklenen_hash=h)
     assert s["silindi"] and not (py_proje / "alt" / "tasindi.txt").exists()
     # geri alinca dosya geri gelir
     assert cp.geri_al(s["checkpoint"])["tamam"]

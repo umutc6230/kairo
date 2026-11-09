@@ -63,9 +63,22 @@ Python 3.12 + FastAPI + pywebview; arayuz vanilla JS. Paketleme: PORTABLE (kulla
 - [ ] A6 skills/komut/hooks | A7 MCP/plugin/mods | A8 alt ajanlar | A9-A12 | A13 kalite kapisi
 
 ## Son oturum
-- 2026-11-09 (9): A3 tamamlandi (backend + API; ekran A5). Model genel {islem} rotasi /karar'i
-  yutuyordu: ozel rota once tanimlandi. 330 test, %92. Gercek E4B ile cok dosyali canli gorev
-  arka planda denendi (sonuc asagida).
+- 2026-11-09 (9): A3 tamamlandi (backend + API; ekran A5). Genel {islem} rotasi /karar'i
+  yutuyordu: ozel rota once tanimlandi. CANLI KABUL (2 dosya, 3 hata, pytest):
+  * Yerel E4B: BASARISIZ, 40 adim butcesi doldu (28 dk); 16 yama reddedildi.
+  * OpenRouter nemotron-3-ultra:free (son hal): BASARILI, 16 adim, 90 sn, kanit = gecen test.
+  Canli denemelerin buldugu GERCEK hatalar (hepsi duzeltildi + test):
+  1) proje_dosya_oku hash DONDURMUYORDU -> model beklenen_hash bilemiyordu (yama hep reddedildi).
+  2) proje_dosya_sil hash'siz calisiyordu -> 'sil + yeniden yaz' ile bayat-yazim korumasi atlatiliyordu.
+  3) Hash eksik mesaji yanlisti ('Dosya zaten var') -> model sahte hash uyduruyordu.
+  4) Model adim numaralarini gormuyordu -> kanit numarasi uyduruyordu; sonuca 'adim' eklendi.
+  5) Kanit: degisiklik oncesi/degisikligin kendisi kabul ediliyordu -> son degisiklikten SONRA olmali;
+     gecersiz kanitta bitirme reddedilir (model duzeltir), bos kanit = dogrulanmadi.
+  6) Cikis kodu 2000 karaktere kirpilmis metinden okunuyordu -> uzun BASARISIZ cikti kanit sayilabiliyordu;
+     Adim.cikis_kodu alani.
+  7) OpenRouter 429/5xx kalici sayiliyordu -> gecici (sinirli backoff 5/15 sn).
+  OpenRouter anahtari yalniz deneme surecinin belleginde kullanildi, data/'ya yazilmadi.
+  333 test, %92.
 - 2026-11-09 (8): A1.8 tamamlandi. Bu makinede Podman 5.8.3 kurulu ama makine yok (podman machine
   init/start + imaj pull kullanicinin elle yapacagi indirme); WSL2 Ubuntu var. Bulgu: /web statik
   dosyalari Cache-Control'suz sunuluyordu, tarayici guncellemeden sonra ESKI JS calistiriyordu ->
@@ -114,6 +127,7 @@ Python 3.12 + FastAPI + pywebview; arayuz vanilla JS. Paketleme: PORTABLE (kulla
 
 ## Siradaki adim
 - Kullanici anahtar girince OpenRouter ile gercek sohbet + Test denemesi.
+- Yerel E4B ile canli gorevi duzeltmelerden sonra tekrar dene (RAM bosken; ~30 dk).
 - A4 baglam, hafiza ve model profilleri (AGENT-GELISTIRME-TALIMATI.md A4); sonra A5 ajan ekrani.
 - Konteyneri gercekten denemek icin (kullanici onayiyla, indirme): podman machine init; podman machine start; podman pull python:3.12-slim
 - Arayuz: checkpoint ekraninda hunk secip geri alma, arka plan komutuna girdi kutusu.

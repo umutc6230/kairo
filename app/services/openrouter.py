@@ -24,7 +24,9 @@ OR_BASLIK = {
 
 
 class OpenRouterHatasi(ModelCevapHatasi):
-    pass
+    def __init__(self, mesaj: str, gecici: bool = False) -> None:
+        super().__init__(mesaj)
+        self.gecici = gecici  # 429/5xx: ajan dongusu sinirli bekleyip yeniden dener
 
 
 def maskele(anahtar: str) -> str:
@@ -71,7 +73,10 @@ class OpenRouterLLM(YerelLLM):
             404: "Secili OpenRouter modeli bulunamadi ya da bu istegi desteklemiyor.",
             429: "OpenRouter istek siniri asildi; biraz bekleyip tekrar deneyin.",
         }.get(durum)
-        raise OpenRouterHatasi(mesaj or f"OpenRouter hata dondu ({durum}): {govde[:300]}")
+        raise OpenRouterHatasi(
+            mesaj or f"OpenRouter hata dondu ({durum}): {govde[:300]}",
+            gecici=durum == 429 or durum >= 500,
+        )
 
 
 def _sadelestir(m: dict) -> dict:

@@ -76,17 +76,18 @@ OKUMA_SEMALARI = [
 YAZMA_SEMALARI = [
     _fonk(
         "proje_dosya_yaz",
-        "Dosya olusturur ya da uzerine yazar. VAR OLAN dosyada once proje_dosya_oku ile okuyup "
-        "`beklenen_hash` gondermelisin; yoksa islem reddedilir.",
+        "Dosya olusturur ya da uzerine yazar. VAR OLAN dosyada once proje_dosya_oku ile oku ve "
+        "donen `hash` degerini `beklenen_hash` olarak gonder; yoksa islem reddedilir.",
         {"yol": S, "icerik": S, "beklenen_hash": S},
         ["yol", "icerik"],
     ),
     _fonk(
         "proje_dosya_yama",
         "Dosyadaki BENZERSIZ bir metin parcasini degistirir (en guvenli duzenleme yolu). "
-        "`eski_metin` dosyada tam olarak bir kez gecmeli; girinti birebir ayni olmali.",
+        "`eski_metin` dosyada tam olarak bir kez gecmeli; girinti birebir ayni olmali. "
+        "`beklenen_hash`: proje_dosya_oku'nun dondurdugu `hash`.",
         {"yol": S, "eski_metin": S, "yeni_metin": S, "beklenen_hash": S},
-        ["yol", "eski_metin", "yeni_metin"],
+        ["yol", "eski_metin", "yeni_metin", "beklenen_hash"],
     ),
     _fonk(
         "proje_dosya_tasi",
@@ -96,9 +97,10 @@ YAZMA_SEMALARI = [
     ),  # fmt: skip
     _fonk(
         "proje_dosya_sil",
-        "Dosyayi siler (geri alinabilir checkpoint olusur).",
+        "Dosyayi siler (geri alinabilir checkpoint olusur). `beklenen_hash`: proje_dosya_oku'nun "
+        "dondurdugu `hash`.",
         {"yol": S, "beklenen_hash": S},
-        ["yol"],
+        ["yol", "beklenen_hash"],
     ),  # fmt: skip
 ]
 
