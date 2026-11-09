@@ -48,11 +48,20 @@ Python 3.12 + FastAPI + pywebview; arayuz vanilla JS. Paketleme: PORTABLE (kulla
       onay; onay islemin tam metnine bagli; commit yalniz adi verilen dosyalar), hunk bazli geri alma
       (/api/checkpointler/{id}/hunklar, /hunk-geri-al; cakismada dokunmaz). tests/test_a2_kalan.py 11 test
 - [ ] A2 ertelenen: git worktree (A8 alt ajanlarla), push/merge (dis etki, ayri is), arayuzde hunk secimi
-- [ ] A1.8 gercek izolasyon adaptoru  <- SIRADAKI
-- [ ] A3 kalici Run/Step ajan dongusu | A4 baglam/hafiza/model profilleri | A5 ajan ekrani
+- [x] A1.8 izolasyon adaptoru (app/agent/izolasyon.py): yok (Job Object) | konteyner (Podman/Docker,
+      --network none, yalniz proje koku bagli, cap-drop ALL, no-new-privileges, --pull=never). Konteyner
+      kullanilamazsa komut CALISMAZ (sessiz dusus yok). Izolasyon yoksa otomatik modda da komut onay
+      ister. Proje/izin penceresinde secim + durum. tests/test_a1_8_izolasyon.py 9 test
+- [ ] A3 kalici Run/Step ajan dongusu  <- SIRADAKI
+- [ ] A4 baglam/hafiza/model profilleri | A5 ajan ekrani
 - [ ] A6 skills/komut/hooks | A7 MCP/plugin/mods | A8 alt ajanlar | A9-A12 | A13 kalite kapisi
 
 ## Son oturum
+- 2026-11-09 (8): A1.8 tamamlandi. Bu makinede Podman 5.8.3 kurulu ama makine yok (podman machine
+  init/start + imaj pull kullanicinin elle yapacagi indirme); WSL2 Ubuntu var. Bulgu: /web statik
+  dosyalari Cache-Control'suz sunuluyordu, tarayici guncellemeden sonra ESKI JS calistiriyordu ->
+  no-cache (ETag dogrulamasi). Davranis degisikligi: izolasyonsuz otomatik modda komut onay ister.
+  311 test, %93.
 - 2026-11-09 (7): A2 kalanlari tamamlandi (stdin, git dal/commit, hunk geri alma). Bulgu: Windows'ta
   write_text CRLF yazar; ajan LF yazinca tum dosya tek blok gorunur (satir sonu degisimi tek hunk).
   302 test, %93. feature/ajan-katmani push edildi (bu commit henuz push edilmedi).
@@ -96,7 +105,8 @@ Python 3.12 + FastAPI + pywebview; arayuz vanilla JS. Paketleme: PORTABLE (kulla
 
 ## Siradaki adim
 - Kullanici anahtar girince OpenRouter ile gercek sohbet + Test denemesi.
-- A1.8 izolasyon (Windows kisitli token/ACL ya da istege bagli WSL), sonra A3 kalici Run/Step ajan dongusu.
+- A3 kalici Run/Step ajan dongusu (AGENT-GELISTIRME-TALIMATI.md A3).
+- Konteyneri gercekten denemek icin (kullanici onayiyla, indirme): podman machine init; podman machine start; podman pull python:3.12-slim
 - Arayuz: checkpoint ekraninda hunk secip geri alma, arka plan komutuna girdi kutusu.
 - A1.8 gercek izolasyon: su an "yok" olarak raporlaniyor. A2 terminaliyle birlikte kisitli
   surec/ACL ya da istege bagli WSL/container adaptoru degerlendirilecek.

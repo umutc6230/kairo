@@ -16,12 +16,14 @@ import subprocess
 import sys
 import uuid
 from collections import deque
+from collections.abc import Callable
 from datetime import datetime
 from pathlib import Path
 
 from pydantic import BaseModel, Field
 
 from app.agent.dosyalar import ortam_allowlist
+from app.agent.izolasyon import IzolasyonAdaptoru, YokAdaptoru
 from app.exceptions import Bulunamadi, UygulamaHatasi
 
 VARSAYILAN_TIMEOUT = 120
@@ -41,6 +43,7 @@ class KomutDurumu(BaseModel):
     baslangic: str = Field(default_factory=lambda: datetime.now().isoformat(timespec="seconds"))
     sure_sn: float | None = None
     arka_plan: bool = False
+    izolasyon: str = "yok"
 
 
 def _kirp(metin: str, sinir: int = MAX_CIKTI_KARAKTER) -> tuple[str, bool]:
@@ -118,9 +121,12 @@ class KomutIsi:
 class KomutServisi:
     """Calisan ve biten komutlari tutar; uzun isler sohbeti bloklamaz (A2.5)."""
 
-    def __init__(self, en_fazla_is: int = 20) -> None:
+    def __init__(
+        self, en_fazla_is: int = 20, izolasyon: Callable[[], IzolasyonAdaptoru] = YokAdaptoru
+    ) -> None:
         self.isler: dict[str, KomutIsi] = {}
         self.en_fazla_is = en_fazla_is
+        self.izolasyon = izolasyon  # her cagrida guncel ayardan uretilir
 
     def _yer_ac(self) -> None:
         bitmis = [i for i in self.isler.values() if i.durum.durum != "calisiyor"]
@@ -139,26 +145,35 @@ class KomutServisi:
         *,
         timeout: int = VARSAYILAN_TIMEOUT,
         arka_plan: bool = False,
+        kok: Path | None = None,
     ) -> KomutIsi:
         if not komut.strip():
             raise UygulamaHatasi("Bos komut calistirilamaz.")
         if not cwd.is_dir():
             raise UygulamaHatasi(f"Calisma klasoru yok: {cwd}")
+        adaptor = self.izolasyon()
+        argv = adaptor.sar(
+            komut, cwd, kok or cwd
+        )  # kullanilamazsa UygulamaHatasi (sessiz dusus yok)
         self._yer_ac()
         timeout = max(1, min(int(timeout), MAX_TIMEOUT))
-        is_ = KomutIsi(KomutDurumu(komut=komut, cwd=str(cwd), arka_plan=arka_plan))
+        is_ = KomutIsi(
+            KomutDurumu(komut=komut, cwd=str(cwd), arka_plan=arka_plan, izolasyon=adaptor.ad)
+        )
+        ortak = {
+            "cwd": str(cwd),
+            # on plan isi girdi beklerse asili kalmasin; arka plan isine girdi_gonder yazar
+            "stdin": subprocess.PIPE if arka_plan else subprocess.DEVNULL,
+            "stdout": subprocess.PIPE,
+            "stderr": subprocess.STDOUT,
+            "env": ortam_allowlist(),
+            "creationflags": subprocess.CREATE_NO_WINDOW if sys.platform == "win32" else 0,
+        }
         try:
-            # shell: Windows'ta exec+liste tirnaklari \" diye kacirir, cmd yolu taniyamaz
-            is_.surec = await asyncio.create_subprocess_shell(
-                komut,
-                cwd=str(cwd),
-                # on plan isi girdi beklerse asili kalmasin; arka plan isine girdi_gonder yazar
-                stdin=subprocess.PIPE if arka_plan else subprocess.DEVNULL,
-                stdout=subprocess.PIPE,
-                stderr=subprocess.STDOUT,
-                env=ortam_allowlist(),
-                creationflags=subprocess.CREATE_NO_WINDOW if sys.platform == "win32" else 0,
-            )
+            if argv:  # konteyner: argv dogrudan exe'ye gider, cmd.exe tirnak sorunu yok
+                is_.surec = await asyncio.create_subprocess_exec(*argv, **ortak)
+            else:  # shell: Windows'ta exec+liste tirnaklari \" diye kacirir, cmd yolu taniyamaz
+                is_.surec = await asyncio.create_subprocess_shell(komut, **ortak)
         except (OSError, ValueError) as e:
             raise UygulamaHatasi(f"Komut baslatilamadi: {e}") from e
         is_._job_bagla()

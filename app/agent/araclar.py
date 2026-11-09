@@ -240,7 +240,9 @@ class AjanAracKaydi:
             )
 
             async def calistir() -> dict:
-                is_ = await self.komutlar.baslat(komut, cwd, timeout=timeout, arka_plan=arka_plan)
+                is_ = await self.komutlar.baslat(
+                    komut, cwd, timeout=timeout, arka_plan=arka_plan, kok=self.kapsam.kok_of(cwd)
+                )
                 if arka_plan:
                     return {
                         **self.komutlar.ozet(is_),

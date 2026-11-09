@@ -20,6 +20,7 @@ from pydantic import BaseModel, Field, ValidationError
 
 from app import URUN_ADI, URUN_SAHIBI, URUN_SAHIBI_GITHUB, URUN_SAHIBI_X, __version__
 from app.agent.checkpoints import CheckpointDeposu
+from app.agent.izolasyon import adaptor_olustur
 from app.agent.policy import PolitikaMotoru, yerel_host_mu
 from app.agent.terminal import KomutServisi
 from app.agent.workspaces import Guven, Mod, WorkspaceDeposu
@@ -74,6 +75,16 @@ class GuvenIstegi(BaseModel):
 
 class OnayIstegi(BaseModel):
     onayla: bool
+
+
+class TazeStatik(StaticFiles):
+    """Basliksiz statik dosyayi tarayici tahminle onbellekler; guncellemeden sonra eski JS
+    calisir. no-cache: her seferinde ETag ile dogrulanir (yerelde maliyetsiz)."""
+
+    def file_response(self, *args: Any, **kwargs: Any) -> Response:
+        r = super().file_response(*args, **kwargs)
+        r.headers["Cache-Control"] = "no-cache"
+        return r
 
 
 class GeriAlIstegi(BaseModel):
@@ -163,9 +174,18 @@ def uygulama_olustur(
     talimatlar = TalimatDeposu(veri_dizini)
     skiller = skill_deposu or SkillDeposu(veri_dizini)
     projeler = WorkspaceDeposu(veri_dizini)
-    politika = PolitikaMotoru(veri_dizini)
+    _adaptorler: dict[tuple[str, str], Any] = {}
+
+    def izolasyon() -> Any:
+        a = ayarlar.oku()
+        k = (a.izolasyon, a.konteyner_imaj)  # ayni secimde ayni nesne: durum onbellegi korunur
+        if k not in _adaptorler:
+            _adaptorler[k] = adaptor_olustur(*k)
+        return _adaptorler[k]
+
+    politika = PolitikaMotoru(veri_dizini, izolasyon=izolasyon)
     checkpointler = CheckpointDeposu(veri_dizini)
-    komutlar = KomutServisi()
+    komutlar = KomutServisi(izolasyon=izolasyon)
     sohbet = SohbetServisi(
         yonetici,
         oturumlar,
@@ -651,7 +671,7 @@ def uygulama_olustur(
         )
 
     if web.exists():
-        app.mount("/web", StaticFiles(directory=web), name="web")
+        app.mount("/web", TazeStatik(directory=web), name="web")
     else:  # pragma: no cover - paket hatasi
         logger.error("Arayuz klasoru yok: {}", web)
     return app

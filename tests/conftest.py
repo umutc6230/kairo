@@ -232,3 +232,17 @@ async def yetkisiz_istemci(app):
 
 def olaylar(metin: str) -> list[dict]:
     return [json.loads(s[6:]) for s in metin.split("\n\n") if s.startswith("data: ")]
+
+
+class IzoleSahte:
+    """Politika testleri icin 'izole' adaptor: komut yine yerelde calisir (izolasyon iddiasi
+    yalniz karar mantigini test etmek icindir)."""
+
+    ad = "sahte"
+    izole = True
+
+    def durum(self) -> dict:
+        return {"ad": self.ad, "izole": True, "kullanilabilir": True, "not": "test"}
+
+    def sar(self, komut, cwd, kok):
+        return None

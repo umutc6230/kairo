@@ -66,7 +66,14 @@ export function projeAc() {
         <div class="izin-satiri"><span class="soluk">Yetkili klasörler</span><span></span></div>
         <ul class="kok-liste">${(izin.kokler || []).map((k) => `<li><code>${kacir(k)}</code></li>`).join("") || "<li class='soluk'>yok</li>"}</ul>
         ${izin.mod_tavani_uygulandi ? `<div class="uyari-kutu kucuk">Yönetilen politika modu <b>${kacir(izin.mod)}</b> ile sınırlıyor.</div>` : ""}
-        <div class="uyari-kutu kucuk">İzolasyon: <b>${kacir(izin.izolasyon || "yok")}</b>. ${kacir(izin.izolasyon_notu || "")}</div>
+        <div class="uyari-kutu kucuk">İzolasyon: <b>${izin.izolasyon === "yok" ? "yok" : "konteyner (ağ kapalı)"}</b> · Otomatik modda komut: <b>${kacir(izin.otomatik_komut || "onay ister")}</b><br>${kacir(izin.izolasyon_notu || "")}</div>
+        <label class="proje-alan">Komutlar nerede çalışsın
+          <select class="alan" id="izolasyon-sec">
+            <option value="yok" ${izin.izolasyon_secimi !== "konteyner" ? "selected" : ""}>Bu bilgisayarda (izolasyon yok, otomatik modda da onay ister)</option>
+            <option value="konteyner" ${izin.izolasyon_secimi === "konteyner" ? "selected" : ""}>Konteynerde (Podman/Docker: ağ kapalı, yalnız proje klasörü)</option>
+          </select>
+        </label>
+        ${izin.izolasyon_secimi === "konteyner" && !izin.izolasyon_kullanilabilir ? '<div class="uyari-kutu kucuk">Konteyner şu an kullanılamıyor; komutlar çalıştırılmaz (izolasyonsuz çalışmaya sessizce dönülmez).</div>' : ""}
       </div>
 
       <div class="kutu">
@@ -121,6 +128,11 @@ export function projeAc() {
   };
 
   function baglantilariKur() {
+    $("#izolasyon-sec", govde).onchange = (ev) =>
+      sarmala(async () => {
+        await api("/api/ayarlar", { method: "PUT", govde: { izolasyon: ev.target.value } });
+        bildir("İzolasyon ayarı kaydedildi.");
+      });
     $("#btn-proje-ac", govde).onclick = () =>
       sarmala(async () => {
         const yol = $("#proje-yol", govde).value.trim();

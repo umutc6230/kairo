@@ -18,6 +18,7 @@ import hashlib
 import json
 import re
 import uuid
+from collections.abc import Callable
 from datetime import datetime, timedelta
 from enum import StrEnum
 from ipaddress import ip_address
@@ -26,6 +27,7 @@ from typing import Any
 
 from pydantic import BaseModel, Field
 
+from app.agent.izolasyon import IzolasyonAdaptoru, YokAdaptoru
 from app.agent.workspaces import CalismaAlani, Guven, Mod
 from app.agent.yollar import guvenli_coz, kanonik
 from app.exceptions import YetkiYok
@@ -255,10 +257,16 @@ class PolitikaMotoru:
 
     surum = POLITIKA_SURUMU
 
-    def __init__(self, veri_dizini: Path, yonetilen: YonetilenPolitika | None = None) -> None:
+    def __init__(
+        self,
+        veri_dizini: Path,
+        yonetilen: YonetilenPolitika | None = None,
+        izolasyon: Callable[[], IzolasyonAdaptoru] = YokAdaptoru,
+    ) -> None:
         self.veri_dizini = veri_dizini
         self.yonetilen = yonetilen or YonetilenPolitika.yukle(veri_dizini)
         self.onaylar = OnayDeposu(veri_dizini)
+        self.izolasyon = izolasyon
 
     # ---- yardimcilar ----
     def mod(self, alan: CalismaAlani) -> Mod:
@@ -361,6 +369,13 @@ class PolitikaMotoru:
                 kural="dis_etki" if istek.yan_etki is YanEtki.dis else "git_onay",
                 cozulmus_yol=yol_metni,
             )
+        if mod is Mod.otomatik and istek.yan_etki is YanEtki.komut and not self.izolasyon().izole:
+            return Sonuc(
+                karar=Karar.sor,
+                neden="Izolasyon yok: komut kullanicinin tum yetkileriyle calisir, onay gerekir.",
+                kural="izolasyonsuz_komut",
+                cozulmus_yol=yol_metni,
+            )
         if mod is Mod.otomatik:
             return Sonuc(
                 karar=Karar.izin,
@@ -401,6 +416,7 @@ class PolitikaMotoru:
     def bilgi(self, alan: CalismaAlani) -> dict[str, Any]:
         """Arayuzde gorunen izin kapsami (kullanici neyin acik oldugunu gorebilsin)."""
         mod = self.mod(alan)
+        iz = self.izolasyon().durum()
         return {
             "mod": str(mod),
             "mod_tavani_uygulandi": mod != alan.mod,
@@ -411,11 +427,11 @@ class PolitikaMotoru:
             "talimat_okunur": alan.talimat_okunur_mu(),
             "ag_izinli": self.yonetilen.ag_izinli,
             "yasak_araclar": self.yonetilen.yasak_araclar,
-            "izolasyon": "yok",  # A1.8: Windows'ta dosya/ag sandbox'i YOK, yalniz yol + policy
-            "izolasyon_notu": (
-                "Komutlar icin isletim sistemi duzeyinde dosya/ag izolasyonu yok; yalniz yol "
-                "kapsami, izin motoru ve surec yasam dongusu (Job Object) uygulanir."
-            ),
+            "izolasyon": iz["ad"] if iz["izole"] else "yok",
+            "izolasyon_secimi": iz["ad"],
+            "izolasyon_kullanilabilir": iz["kullanilabilir"],
+            "izolasyon_notu": iz["not"],
+            "otomatik_komut": "izinli" if iz["izole"] else "onay ister",
         }
 
 

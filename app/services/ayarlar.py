@@ -79,6 +79,10 @@ class KullaniciAyarlari(BaseModel):
     max_tokens: int = Field(default=1024, ge=16, le=8192)
     saglayici: Literal["yerel", "openrouter"] = "yerel"
     or_model: str = Field(default="", max_length=200)  # OpenRouter model id (or. x/y:free)
+    izolasyon: Literal["yok", "konteyner"] = "yok"  # A1.8: komutlar nerede calisir
+    konteyner_imaj: str = Field(
+        default="python:3.12-slim", pattern=r"^[a-z0-9][a-z0-9._/:@-]{0,199}$"
+    )
 
     @property
     def aktif_model(self) -> str:

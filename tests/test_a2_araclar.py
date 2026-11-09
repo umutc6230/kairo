@@ -16,6 +16,7 @@ import sys
 from pathlib import Path
 
 import pytest
+from conftest import IzoleSahte
 
 from app.agent.araclar import AjanAracKaydi
 from app.agent.checkpoints import CheckpointDeposu, dosya_hashi
@@ -61,7 +62,7 @@ def ortam(tmp_path: Path, py_proje: Path):
     alan = CalismaAlani(
         id="a" * 12, ad="ornek", kokler=[str(py_proje)], guven=Guven.guvenilir, mod=Mod.otomatik
     )
-    politika = PolitikaMotoru(veri)
+    politika = PolitikaMotoru(veri, izolasyon=IzoleSahte)
     cp = CheckpointDeposu(veri)
     kayit = AjanAracKaydi(alan, politika, cp, KomutServisi())
     return kayit, alan, cp, kayit.kapsam
