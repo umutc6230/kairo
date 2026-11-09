@@ -5,13 +5,19 @@ klasordeki ek dosyalari (references/...) okur.
 Skill'ler yalniz OKUNUR; icindeki betikler calistirilmaz.
 
 Kaynaklar: ~/.claude/skills (Claude Code), ~/Documents/brain/skills (brain),
-<veri>/skills (uygulama).
+<veri>/skills (uygulama), ve YALNIZ guvenilir projede <proje>/.claude/skills (proje).
+
+A6: surum, gereken araclar (allowed-tools/required-tools), icerik hash'i, guven ve bozuk frontmatter
+hatasi tutulur. Manifestte arac/izin istemek IZIN VERMEK DEGILDIR: her arac PolitikaMotoru'ndan
+gecer.
 """
 
 from __future__ import annotations
 
+import hashlib
 import re
 import shutil
+from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -46,13 +52,20 @@ DURAK = {
 }
 
 
+GUVEN = {"claude": "kullanici", "brain": "kullanici", "uygulama": "kullanici", "proje": "proje"}
+
+
 @dataclass(frozen=True)
 class Skill:
     ad: str
     aciklama: str
-    kaynak: str  # claude | brain | uygulama
+    kaynak: str  # claude | brain | uygulama | proje
     dosya: Path  # SKILL.md ya da tek .md
     klasor: Path | None  # ek dosyalarin klasoru (tek dosyalik skill'de None)
+    surum: str = ""
+    gereken_araclar: tuple[str, ...] = ()
+    hash: str = ""  # SKILL.md icerik hash'i (degisiklik/kaynak takibi)
+    hata: str = ""  # bozuk frontmatter vb.: skill listelenir ama YUKLENMEZ
 
     def ozet(self) -> dict:
         return {
@@ -61,33 +74,74 @@ class Skill:
             "kaynak": self.kaynak,
             "yol": str(self.dosya),
             "silinebilir": self.kaynak == "uygulama",
+            "duzenlenebilir": self.kaynak == "uygulama",
+            "surum": self.surum,
+            "gereken_araclar": list(self.gereken_araclar),
+            "hash": self.hash,
+            "guven": GUVEN.get(self.kaynak, "bilinmiyor"),
+            "hata": self.hata,
         }
 
 
-def frontmatter(metin: str) -> tuple[dict, str]:
-    """('---' arasi YAML, govde). YAML bozuksa bos sozluk."""
+def frontmatter_ayrintili(metin: str) -> tuple[dict, str, str]:
+    """(meta, govde, hata). Bozuk YAML sessizce yutulmaz: hata metni doner."""
     if not metin.startswith("---"):
-        return {}, metin
+        return {}, metin, ""
     son = metin.find("\n---", 3)
     if son < 0:
-        return {}, metin
+        return {}, metin, "Frontmatter kapanmamis: ikinci '---' satiri yok."
+    govde = metin[son + 4 :].lstrip("\n")
     try:
         veri = yaml.safe_load(metin[3:son]) or {}
-    except yaml.YAMLError:
-        veri = {}
-    return (veri if isinstance(veri, dict) else {}), metin[son + 4 :].lstrip("\n")
+    except yaml.YAMLError as e:
+        yer = getattr(e, "problem_mark", None)
+        konum = f" (satir {yer.line + 2})" if yer is not None else ""
+        return {}, govde, f"Frontmatter YAML hatasi{konum}: {getattr(e, 'problem', e)}"
+    if not isinstance(veri, dict):
+        return {}, govde, "Frontmatter anahtar: deger biciminde olmali."
+    return veri, govde, ""
+
+
+def frontmatter(metin: str) -> tuple[dict, str]:
+    """('---' arasi YAML, govde). YAML bozuksa bos sozluk (geriye uyumlu)."""
+    meta, govde, _ = frontmatter_ayrintili(metin)
+    return meta, govde
+
+
+def _araclar(deger: object) -> tuple[str, ...]:
+    if isinstance(deger, str):
+        parcalar = re.split(r"[,\s]+", deger)
+    elif isinstance(deger, list):
+        parcalar = [str(x) for x in deger]
+    else:
+        return ()
+    return tuple(sorted({p.strip() for p in parcalar if p.strip()}))[:30]
 
 
 def _skill_oku(dosya: Path, kaynak: str, klasor: Path | None) -> Skill | None:
     try:
-        meta, govde = frontmatter(dosya.read_text(encoding="utf-8", errors="replace"))
+        ham = dosya.read_bytes()
     except OSError:
         return None
+    metin = ham.decode("utf-8", errors="replace")
+    meta, govde, hata = frontmatter_ayrintili(metin)
     ad = str(meta.get("name") or (klasor.name if klasor else dosya.stem)).strip()
     aciklama = " ".join(str(meta.get("description") or "").split())
     if not aciklama:  # frontmatter yoksa ilk anlamli satir
         aciklama = next((s.strip("# ").strip() for s in govde.splitlines() if s.strip()), "")
-    return Skill(ad=ad, aciklama=aciklama[:600], kaynak=kaynak, dosya=dosya, klasor=klasor)
+    return Skill(
+        ad=ad,
+        aciklama=aciklama[:600],
+        kaynak=kaynak,
+        dosya=dosya,
+        klasor=klasor,
+        surum=str(meta.get("version") or meta.get("surum") or "")[:40],
+        gereken_araclar=_araclar(
+            meta.get("required-tools") or meta.get("allowed-tools") or meta.get("tools")
+        ),
+        hash=hashlib.sha256(ham).hexdigest()[:16],
+        hata=hata,
+    )
 
 
 def varsayilan_kaynaklar(veri_dizini: Path) -> list[tuple[str, Path]]:
@@ -102,6 +156,8 @@ class SkillDeposu:
     def __init__(self, veri_dizini: Path, kaynaklar: list[tuple[str, Path]] | None = None) -> None:
         self.uygulama_dizini = veri_dizini / "skills"
         self.kaynak_listesi = kaynaklar or varsayilan_kaynaklar(veri_dizini)
+        # aktif GUVENILIR projenin skill klasorleri (api baglar); guvenilmeyen repo skill ekleyemez
+        self.proje_kaynaklari: Callable[[], list[tuple[str, Path]]] = lambda: []
 
     def kesfet(self) -> list[Skill]:
         """Tum kaynaklari tarar. Ayni dosya (junction/kisayol) iki kaynakta varsa bir kez alinir;
@@ -109,7 +165,7 @@ class SkillDeposu:
         gorulen_dosya: set[Path] = set()
         gorulen_ad: set[str] = set()
         sonuc: list[Skill] = []
-        for kaynak, kok in self.kaynak_listesi:
+        for kaynak, kok in [*self.kaynak_listesi, *self.proje_kaynaklari()]:
             if not kok.is_dir():
                 continue
             for oge in sorted(kok.iterdir(), key=lambda p: p.name.lower()):
@@ -139,7 +195,33 @@ class SkillDeposu:
         raise Bulunamadi(f"Skill bulunamadi: {ad}")
 
     # ---- uygulama skill'leri (eklenebilir/silinebilir) ----
-    def olustur(self, ad: str, aciklama: str, icerik: str) -> Skill:
+    def guncelle(self, ad: str, aciklama: str, icerik: str, surum: str = "",
+                 gereken_araclar: list[str] | None = None) -> Skill:  # fmt: skip
+        """Yalniz uygulama skill'i duzenlenir; Claude/brain/proje kaynaklari salt okunur."""
+        s = self.getir(ad)
+        if s.kaynak != "uygulama" or s.klasor is None:
+            raise UygulamaHatasi("Yalniz uygulamada eklenen skill'ler duzenlenebilir.")
+        if not aciklama.strip():
+            raise UygulamaHatasi("Aciklama zorunlu: model skill'i buna bakarak secer.")
+        self._yaz(s.klasor, s.ad, aciklama, icerik, surum, gereken_araclar)
+        return self.getir(ad)
+
+    @staticmethod
+    def _yaz(klasor: Path, ad: str, aciklama: str, icerik: str, surum: str = "",
+             gereken_araclar: list[str] | None = None) -> None:  # fmt: skip
+        meta: dict = {"name": ad, "description": aciklama.strip()}
+        if surum.strip():
+            meta["version"] = surum.strip()[:40]
+        if gereken_araclar:
+            meta["required-tools"] = sorted({a.strip() for a in gereken_araclar if a.strip()})
+        on = yaml.safe_dump(meta, allow_unicode=True, sort_keys=False)
+        hedef = klasor / "SKILL.md"
+        gecici = hedef.with_suffix(".tmp")
+        gecici.write_text(f"---\n{on}---\n\n{icerik.strip()}\n", encoding="utf-8")
+        gecici.replace(hedef)
+
+    def olustur(self, ad: str, aciklama: str, icerik: str, surum: str = "",
+                gereken_araclar: list[str] | None = None) -> Skill:  # fmt: skip
         ad = ad.strip().lower()
         if not AD_DESENI.fullmatch(ad):
             raise UygulamaHatasi("Skill adi kucuk harf, rakam, - _ . olmali (orn. fatura-okuma).")
@@ -149,8 +231,7 @@ class SkillDeposu:
             raise UygulamaHatasi(f"Bu adda skill zaten var: {ad}")
         klasor = self.uygulama_dizini / ad
         klasor.mkdir(parents=True)
-        on = yaml.safe_dump({"name": ad, "description": aciklama.strip()}, allow_unicode=True)
-        (klasor / "SKILL.md").write_text(f"---\n{on}---\n\n{icerik.strip()}\n", encoding="utf-8")
+        self._yaz(klasor, ad, aciklama, icerik, surum, gereken_araclar)
         return self.getir(ad)
 
     def sil(self, ad: str) -> None:
@@ -203,7 +284,7 @@ def uygun_skiller(skiller: list[Skill], sorgu: str, n: int = MAX_LISTE) -> list[
 def otomatik_skill(skiller: list[Skill], sorgu: str) -> Skill | None:
     """Kucuk modeller araci 'cagiracagim' deyip cagirmayabiliyor: mesajla guclu eslesen tek
     skill varsa talimati dogrudan yuklenir (ikinciyle arasi acik olmali)."""
-    p = puanla(skiller, sorgu)
+    p = puanla([s for s in skiller if not s.hata], sorgu)  # bozuk skill otomatik yuklenmez
     if p and p[0][0] >= OTOMATIK_ESIK and (len(p) == 1 or p[0][0] - p[1][0] >= 2):
         return p[0][1]
     return None
@@ -251,14 +332,29 @@ def sistem_metni(secilenler: list[Skill]) -> str:
 
 
 # ---- model araclari ----
-def arac_isleyicileri(depo: SkillDeposu, kapali: set[str]) -> dict:
+def arac_isleyicileri(
+    depo: SkillDeposu, kapali: set[str], mevcut_araclar: Callable[[], set[str]] | None = None
+) -> dict:
     def skill_kullan(ad: str) -> dict:
         try:
             s = depo.getir(ad.strip(), kapali)
         except Bulunamadi as e:
             return {"hata": e.mesaj}
+        if s.hata:  # bozuk skill yarim talimatla calistirilmaz
+            return {"hata": f"Skill '{s.ad}' bozuk, yuklenmedi: {s.hata}"}
         _, govde = frontmatter(s.dosya.read_text(encoding="utf-8", errors="replace"))
         sonuc = {"ad": s.ad, "talimat": govde[:MAX_SKILL_KARAKTER]}
+        if s.surum:
+            sonuc["surum"] = s.surum
+        if s.gereken_araclar:
+            sonuc["gereken_araclar"] = list(s.gereken_araclar)
+            sonuc["izin_notu"] = (
+                "Skill'in arac listesi IZIN VERMEZ; her arac yine izin motorundan gecer."
+            )
+            if mevcut_araclar is not None:
+                eksik = sorted(set(s.gereken_araclar) - mevcut_araclar())
+                if eksik:
+                    sonuc["eksik_araclar"] = eksik
         if len(govde) > MAX_SKILL_KARAKTER:
             sonuc["not"] = "Talimat kisaltildi."
         if s.klasor:

@@ -86,11 +86,17 @@ Python 3.12 + FastAPI + pywebview; arayuz vanilla JS. Paketleme: PORTABLE (kulla
       Web Speech (bulut) YOK; model sesi anlamiyorsa / OpenRouter seciliyse dugme devre disi + neden.
       Kayit gostergesi, sure, 30 sn sinir, Esc iptal, izin hatasi.
 - [ ] A5 kalan: gercek WebView2 penceresinde E2E (pywebview iframe kopru enjeksiyonu kontrolu)
-- [ ] A6 skills, komutlar ve hooks  <- SIRADAKI
+- [x] A6.1 skill metadata (app/services/skiller.py): surum, required/allowed-tools, sha256 hash, guven
+      (kullanici/proje), bozuk frontmatter satirli hata -> listelenir ama YUKLENMEZ (otomatik dahil);
+      proje skill'i yalniz guvenilir projede (.claude/skills); PUT /api/skiller/{ad} duzenle,
+      GET /api/skiller/{ad}/test (modelin gorecegi + eksik araclar). Manifest araci izin degildir.
+- [ ] A6.2-6 skill script kapsami, slash registry, hooks, UI  <- SIRADAKI
 - [ ] A5 ajan ekrani
 - [ ] A7 MCP/plugin/mods | A8 alt ajanlar | A9-A12 | A13 kalite kapisi
 
 ## Son oturum
+- 2026-11-09 (14): A6.1 tamamlandi. Bulgu: bozuk frontmatter'li skill otomatik yuklemede yine
+  secilebiliyordu -> otomatik_skill bozuklari atlar. 372 test.
 - 2026-11-09 (13): A5.6 + A5.7. Tarayicida: adsiz dugme/alan 0; 120 mesajlik sohbette 40 cizildi, 'daha
   eski' calisti; gercek klavyeyle 60 Tab + 25 Shift+Tab odak modalda kaldi, Esc kapatti, odak acan dugmeye
   dondu. Canli dikte: Windows TTS ile uretilen WAV -> gercek yerel Gemma E4B -> 'Please open the project

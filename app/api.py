@@ -31,6 +31,7 @@ from app.config import web_dizini
 from app.exceptions import GecersizEk, OnayGerekli, UygulamaHatasi, YerelLLMHatasi
 from app.services import ekler as ekler_modulu
 from app.services import sistem
+from app.services import skiller as skl
 from app.services.agecidi import AgGecidi, agecidi_uygulamasi
 from app.services.araclar import ARACLAR, ORNEK_ISTEMLER
 from app.services.artifactler import ARTIFACT_ARACI, ONIZLEME_CSP, ArtifactDeposu
@@ -42,7 +43,7 @@ from app.services.model_yonetici import LLMFabrikasi, ModelYonetici
 from app.services.openrouter import OpenRouterDeposu
 from app.services.oturumlar import OturumDeposu
 from app.services.skiller import SkillDeposu
-from app.services.sohbet import MesajIstegi, SohbetServisi
+from app.services.sohbet import VARSAYILAN_ALAN_ID, MesajIstegi, SohbetServisi
 from app.services.talimatlar import TalimatDeposu
 from app.services.testler import (
     ORNEK_SATIRLAR,
@@ -177,6 +178,8 @@ class SkillIstegi(BaseModel):
     ad: str = Field(min_length=1, max_length=64)
     aciklama: str = Field(min_length=1, max_length=600)
     icerik: str = Field(min_length=1, max_length=40000)
+    surum: str = Field(default="", max_length=40)
+    gereken_araclar: list[str] = Field(default=[], max_length=30)
 
 
 class SkillDurumIstegi(BaseModel):
@@ -247,6 +250,14 @@ def uygulama_olustur(
         komutlar,
     )
 
+    def proje_skill_kaynaklari() -> list[tuple[str, Path]]:
+        alan = sohbet.aktif_alan()
+        # kisisel klasorler proje degil; guvenilmeyen repo skill/talimat ekleyemez
+        if alan.id == VARSAYILAN_ALAN_ID or not alan.talimat_okunur_mu():
+            return []
+        return [("proje", Path(k) / ".claude" / "skills") for k in alan.kokler]
+
+    skiller.proje_kaynaklari = proje_skill_kaynaklari
     hafiza = HafizaDeposu(veri_dizini)
     artifactler = ArtifactDeposu(veri_dizini)
     sohbet.hafiza = hafiza
@@ -769,7 +780,24 @@ def uygulama_olustur(
 
     @app.post("/api/skiller")
     async def skill_ekle(istek: SkillIstegi) -> dict:
-        return skiller.olustur(istek.ad, istek.aciklama, istek.icerik).ozet()
+        return skiller.olustur(
+            istek.ad, istek.aciklama, istek.icerik, istek.surum, istek.gereken_araclar
+        ).ozet()
+
+    @app.put("/api/skiller/{ad}")
+    async def skill_guncelle(ad: str, istek: SkillIstegi) -> dict:
+        return skiller.guncelle(
+            ad, istek.aciklama, istek.icerik, istek.surum, istek.gereken_araclar
+        ).ozet()
+
+    @app.get("/api/skiller/{ad}/test")
+    async def skill_test(ad: str) -> dict:
+        """Modelin gorecegi sonuc: bozuk mu, hangi araclari istiyor, hangileri su an yok."""
+        a = ayarlar.oku()
+        sistem_, araclar_, _, _ = sohbet.baglam_hazirla(a, "", [])
+        mevcut = {x["function"]["name"] for x in araclar_}
+        isl = skl.arac_isleyicileri(skiller, set(a.kapali_skiller), lambda: mevcut)
+        return {"skill": skiller.getir(ad).ozet(), "model_gorur": isl["skill_kullan"](ad)}
 
     @app.delete("/api/skiller/{ad}")
     async def skill_sil(ad: str) -> dict:

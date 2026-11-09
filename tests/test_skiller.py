@@ -256,3 +256,94 @@ def test_tam_liste_ve_otomatik(depo):
     uzun = skl.otomatik_metin(depo.getir("markitdown"), sinir=50)
     assert "kisaltildi" in uzun and uzun.endswith("</skill>")
     assert "CALISTIRAMAZSIN" in uzun and "CALISTIRAMAZSIN" in metin
+
+
+# ---- A6.1: metadata, hash, guven, bozuk frontmatter, proje kapsami ----
+def _meta_skill(kok: Path, ad: str, on: str, govde: str = "Govde.") -> Path:
+    d = kok / ad
+    d.mkdir(parents=True)
+    (d / "SKILL.md").write_text(f"---\n{on}\n---\n\n{govde}\n", encoding="utf-8")
+    return d
+
+
+def test_surum_araclar_hash_guven(tmp_path):
+    kok = tmp_path / "k"
+    _meta_skill(kok, "rapor", "name: rapor\ndescription: Rapor yazar.\nversion: 1.2\n"
+                "allowed-tools: dosya_oku, dosya_yaz")  # fmt: skip
+    d = skl.SkillDeposu(tmp_path, [("claude", kok)])
+    s = d.getir("rapor")
+    o = s.ozet()
+    assert o["surum"] == "1.2" and o["gereken_araclar"] == ["dosya_oku", "dosya_yaz"]
+    assert len(o["hash"]) == 16 and o["guven"] == "kullanici" and o["hata"] == ""
+    assert not o["duzenlenebilir"]
+    eski = s.hash
+    (kok / "rapor" / "SKILL.md").write_text(
+        (kok / "rapor" / "SKILL.md").read_text(encoding="utf-8") + "ek\n", encoding="utf-8"
+    )
+    assert d.getir("rapor").hash != eski  # icerik degisince hash degisir
+
+
+def test_bozuk_frontmatter_anlasilir_hata_ve_yuklenmez(tmp_path):
+    kok = tmp_path / "k"
+    _meta_skill(kok, "bozuk", "name: bozuk\ndescription: [kapanmamis fatura okuma", "GIZLI GOVDE")
+    d = skl.SkillDeposu(tmp_path, [("claude", kok)])
+    s = d.getir("bozuk")
+    assert "YAML" in s.hata and "satir" in s.hata
+    sonuc = skl.arac_isleyicileri(d, set())["skill_kullan"]("bozuk")
+    assert "bozuk" in sonuc["hata"] and "talimat" not in sonuc
+    assert skl.otomatik_skill([s], "bozuk fatura okuma kapanmamis") is None
+    kapanmamis = tmp_path / "k2"
+    kapanmamis.mkdir()
+    (kapanmamis / "x.md").write_text("---\nname: x\nGovde", encoding="utf-8")
+    d2 = skl.SkillDeposu(tmp_path, [("claude", kapanmamis)])
+    assert "kapanmamis" in d2.getir("x").hata
+
+
+def test_manifest_araci_izin_degil_eksik_arac_bildirilir(tmp_path):
+    kok = tmp_path / "k"
+    _meta_skill(kok, "kabuk", "name: kabuk\ndescription: Komut calistirir.\n"
+                "required-tools: [komut_calistir, dosya_oku]")  # fmt: skip
+    d = skl.SkillDeposu(tmp_path, [("claude", kok)])
+    sonuc = skl.arac_isleyicileri(d, set(), lambda: {"dosya_oku"})["skill_kullan"]("kabuk")
+    assert sonuc["eksik_araclar"] == ["komut_calistir"]
+    assert "IZIN VERMEZ" in sonuc["izin_notu"]
+
+
+def test_proje_kaynagi_yalniz_baglaninca(tmp_path):
+    proje = tmp_path / "proje" / ".claude" / "skills"
+    _meta_skill(proje, "proje-skill", "name: proje-skill\ndescription: Proje ozel.")
+    d = skl.SkillDeposu(tmp_path / "veri", [("claude", tmp_path / "yok")])
+    assert [s.ad for s in d.kesfet()] == []  # varsayilan: proje skill'i yok
+    d.proje_kaynaklari = lambda: [("proje", proje)]
+    s = d.getir("proje-skill")
+    assert s.kaynak == "proje" and s.ozet()["guven"] == "proje"
+    with pytest.raises(UygulamaHatasi):
+        d.guncelle("proje-skill", "x", "y")  # proje skill'i salt okunur
+
+
+def test_uygulama_skill_guncelle(tmp_path):
+    d = skl.SkillDeposu(tmp_path, [("uygulama", tmp_path / "skills")])
+    d.olustur("not-al", "Not alir.", "Eski govde", "1.0", ["dosya_yaz"])
+    s = d.guncelle("not-al", "Not alir, ozetler.", "Yeni govde", "1.1", ["dosya_oku", "dosya_yaz"])
+    assert s.surum == "1.1" and s.gereken_araclar == ("dosya_oku", "dosya_yaz")
+    assert "Yeni govde" in s.dosya.read_text(encoding="utf-8") and s.hata == ""
+    assert not (s.dosya.with_suffix(".tmp")).exists()
+    with pytest.raises(UygulamaHatasi):
+        d.guncelle("not-al", "  ", "x")
+
+
+async def test_skill_duzenle_ve_test_uclari(istemci, skill_klasoru):
+    _meta_skill(skill_klasoru, "kirik", "name: kirik\ndescription: [acik")
+    r = await istemci.post("/api/skiller", json={
+        "ad": "ozetle", "aciklama": "Ozetler.", "icerik": "v1", "surum": "1",
+        "gereken_araclar": ["olmayan_arac"]})  # fmt: skip
+    assert r.json()["surum"] == "1" and r.json()["duzenlenebilir"]
+    r = await istemci.put("/api/skiller/ozetle", json={
+        "ad": "ozetle", "aciklama": "Ozetler.", "icerik": "v2", "surum": "2"})  # fmt: skip
+    assert r.json()["surum"] == "2" and r.json()["gereken_araclar"] == []
+    t = (await istemci.get("/api/skiller/ozetle/test")).json()
+    assert t["model_gorur"]["talimat"].strip() == "v2"
+    k = (await istemci.get("/api/skiller/kirik/test")).json()
+    assert k["skill"]["hata"] and "talimat" not in k["model_gorur"]
+    assert (await istemci.put("/api/skiller/kirik", json={
+        "ad": "kirik", "aciklama": "x", "icerik": "y"})).status_code == 400  # fmt: skip

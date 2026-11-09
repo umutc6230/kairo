@@ -665,7 +665,8 @@ class SohbetServisi:
                     otomatik = secilen.ad
                     skill_metni = f"{skill_metni}\n\n{skl.otomatik_metin(secilen)}".strip()
                 araclar += skl.ARACLAR
-                isleyiciler |= skl.arac_isleyicileri(self.skiller, kapali)
+                mevcut = {a["function"]["name"] for a in araclar}
+                isleyiciler |= skl.arac_isleyicileri(self.skiller, kapali, lambda: mevcut)
         talimat = self.talimatlar.sistem_metni(
             claude=ayar.claude_talimatlari, uygulama=ayar.uygulama_talimati
         )
