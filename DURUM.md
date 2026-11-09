@@ -1,5 +1,5 @@
 # DURUM - yerel-ai-studio
-guncel: 2026-11-09 | son arac: Claude Code (Opus 5) | dal: main
+guncel: 2026-11-09 | son arac: Claude Code (Opus 5.5) | dal: feature/ajan-katmani
 
 ## Ne
 Yerel sansursuz modelleri (DeepSeek-V4-Pro Qwen3.5 9B, Gemma 4 12B, Gemma 4 E4B heretic) sohbet,
@@ -36,12 +36,21 @@ Python 3.12 + FastAPI + pywebview; arayuz vanilla JS. Paketleme: PORTABLE (kulla
 - [x] A0 mevcut hatalar + baslangic olcumu (2026-11-09): 8 madde, `tests/test_a0_regresyon.py` 34 test
 - [x] A1 proje/workspace + izin motoru + loopback sertlestirme (2026-11-09): `app/agent/`
       (yollar, workspaces, policy) + proje arayuzu; `tests/test_a1_izinler.py` 61 test
-- [ ] A1.7/A1.8 komut sureci ve izolasyon adaptoru -> A2 ile birlikte  <- SIRADAKI
-- [ ] A2 dosya/terminal/Git/checkpoint araclari (A1 kabulu gecmeden acilmaz)
+- [x] A1.7 komut sureci (env allowlist, timeout, cikti siniri, process-tree iptali)
+- [x] A2 cekirdek: oku/listele/glob/ara (rg + python yedegi), yama/yaz/tasi/sil (hash + atomik +
+      checkpoint), terminal (arka plan, durdur), git durum/diff/gecmis, dosya bazli geri alma.
+      `tests/test_a2_araclar.py` 35 test; uctan uca Python/TS duzelt-test-geri al gecti
+- [ ] OpenRouter saglayici (AI Ayarlari: anahtar, model listesi, ucretsiz filtre, Test)  <- SIRADAKI
+- [ ] A2 kalan: terminale stdin, branch/worktree/commit (ayri izin), hunk bazli geri alma
+- [ ] A1.8 gercek izolasyon adaptoru (su an "yok" raporlaniyor)
 - [ ] A3 kalici Run/Step ajan dongusu | A4 baglam/hafiza/model profilleri | A5 ajan ekrani
 - [ ] A6 skills/komut/hooks | A7 MCP/plugin/mods | A8 alt ajanlar | A9-A12 | A13 kalite kapisi
 
 ## Son oturum
+- 2026-11-09 (5): A0-A2 `feature/ajan-katmani` dalina commit edildi (6eab028, push yok).
+  3 hata duzeltildi: arka plan isi durdurulunca surec olmuyordu (process sizintisi);
+  Windows'ta tirnakli yol iceren komutlar bozuluyordu (exec+liste `\"` kaciriyordu -> shell);
+  `coz("")` kok yerine hata veriyordu. 282 test, %93, ruff temiz.
 - 2026-11-09 (4): **A1 asamasi uygulandi**. Yeni `app/agent/` paketi: `yollar.py` (kanonik yol,
   junction/symlink/UNC/cihaz yolu/ADS/ayrilmis ad/sonda nokta reddi, TOCTOU kimlik kontrolu),
   `workspaces.py` (proje ac/kapat, cok kok, ek klasor, guven, mod), `policy.py` (allow/ask/deny,
@@ -73,14 +82,7 @@ Python 3.12 + FastAPI + pywebview; arayuz vanilla JS. Paketleme: PORTABLE (kulla
   ozyineleme (alt cizgili ad); adres /v1 cift ekleniyordu; "İ".lower() hatasi; durdur kilitte asiliydi.
 
 ## Siradaki adim
-- **A2: dosya, terminal, Git ve checkpoint araclari** (`AGENT-GELISTIRME-TALIMATI.md` A2).
-  Sira: `read_file`/`glob`/`search_content` (satir numarali, rg ile) -> `apply_patch`/`write_file`
-  (beklenen eski hash + atomik yazim + checkpoint) -> terminal (cwd zorunlu, gercek exit code,
-  timeout, process-tree iptali = A1.7) -> Git status/diff/branch -> checkpoint ile hunk bazli
-  geri alma (conflict-aware; `reset --hard` YOK). Kabul A2: gecici Python ve TS projesinde
-  oku -> patch -> test -> diff -> geri alma; CRLF, Turkce/bosluklu yol, stale hash, dirty repo.
-- Yazma araclari A1 izin motorundan GECMEDEN eklenmeyecek: her arac `PolitikaMotoru.uygula`
-  cagiracak (Istek.yan_etki = yaz/sil/komut) ve onay akisini kullanacak.
+- **OpenRouter saglayici** (BRAIN-POLICY AI entegrasyon kurallari), sonra A2 kalanlari.
 - A1.8 gercek izolasyon: su an "yok" olarak raporlaniyor. A2 terminaliyle birlikte kisitli
   surec/ACL ya da istege bagli WSL/container adaptoru degerlendirilecek.
 - `openclaude` reposu (Twigpine) kullanilacaksa once BRAIN-POLICY dis kaynak taramasi + rapor.
