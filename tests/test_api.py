@@ -137,7 +137,7 @@ async def test_sohbet_resim_ses_metin_ekleri(istemci, sunucu):
     # ses desteklemeyen modelde anlasilir hata, mesaj hatasiyla kaydedilir
     await istemci.put("/api/ayarlar", json={"model": "deepseek-heretic"})
     r = await istemci.post(f"/api/oturumlar/{o}/mesaj", json={"metin": "", "ekler": [ses["id"]]})
-    hata = olaylar(r.text)[-2]
+    hata = olaylar(r.text)[-1]  # hata akisi bitirir; sahte "bitti" gelmez (A0.5)
     assert hata["tur"] == "hata" and "ses girisini desteklemiyor" in hata["mesaj"]
     kayit = (await istemci.get(f"/api/oturumlar/{o}")).json()
     assert "desteklemiyor" in kayit["mesajlar"][-1]["hata"]
@@ -165,8 +165,10 @@ async def test_sohbet_model_hatasi_kaydedilir(istemci, sunucu):
     o = await yeni_oturum(istemci)
     r = await istemci.post(f"/api/oturumlar/{o}/mesaj", json={"metin": "x"})
     ol = olaylar(r.text)
-    assert ol[-2]["tur"] == "hata" and "bellek yetmedi" in ol[-2]["mesaj"]
-    assert ol[-1]["tur"] == "bitti" and ol[-1]["mesaj"]["hata"]
+    assert ol[-1]["tur"] == "hata" and "bellek yetmedi" in ol[-1]["mesaj"]
+    # hata akisi bitirir (sahte "bitti" yok), ama mesaj hatasiyla diske kaydedilir (A0.5)
+    kayit = (await istemci.get(f"/api/oturumlar/{o}")).json()["mesajlar"][-1]
+    assert kayit["rol"] == "asistan" and "bellek yetmedi" in kayit["hata"]
 
 
 async def test_model_hazirla_durdur_ve_harici(istemci, monkeypatch):

@@ -5,6 +5,7 @@ import { aramaAc, ayarKaydet, ayarlarAc, ayarlarKur, modelYukle, sunucuDurdur } 
 import { $, $$, api, bildir, durum, el, menuAc, modelAdi, modelProfil, onayla, sayi, sor, turkcelestir } from "./ortak.js";
 import { sayfaModelleriniYenile, sayfalarKur } from "./sayfalar.js";
 import { modelSayfasiYukle, modellerKur } from "./modeller.js";
+import { projeKur } from "./proje.js";
 import { skillSayfasiYukle, skillerKur } from "./skiller.js";
 import { akisVar, durdur, mesajlariCiz, sohbetKur, yeniSohbetEkrani } from "./sohbet.js";
 
@@ -269,6 +270,7 @@ async function baslat() {
   sohbetKur({ oturumlarYenile: oturumlariYenile, baslikAyarla });
   ayarlarKur(hepsiniYenile);
   sayfalarKur();
+  projeKur();
   skillerKur(hepsiniYenile);
   modellerKur(hepsiniYenile);
 

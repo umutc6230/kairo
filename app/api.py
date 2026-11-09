@@ -4,10 +4,12 @@ from __future__ import annotations
 
 import asyncio
 import json
+import secrets
 import time
 from collections.abc import AsyncIterator, Callable
 from contextlib import asynccontextmanager
 from pathlib import Path
+from urllib.parse import urlsplit
 
 from fastapi import FastAPI, Request, UploadFile
 from fastapi.responses import FileResponse, JSONResponse, Response, StreamingResponse
@@ -16,8 +18,13 @@ from loguru import logger
 from pydantic import BaseModel, Field, ValidationError
 
 from app import URUN_ADI, URUN_SAHIBI, URUN_SAHIBI_GITHUB, URUN_SAHIBI_X, __version__
+from app.agent.checkpoints import CheckpointDeposu
+from app.agent.policy import PolitikaMotoru, yerel_host_mu
+from app.agent.terminal import KomutServisi
+from app.agent.workspaces import Guven, Mod, WorkspaceDeposu
 from app.config import web_dizini
-from app.exceptions import UygulamaHatasi, YerelLLMHatasi
+from app.exceptions import GecersizEk, OnayGerekli, UygulamaHatasi, YerelLLMHatasi
+from app.services import ekler as ekler_modulu
 from app.services import sistem
 from app.services.agecidi import AgGecidi, agecidi_uygulamasi
 from app.services.araclar import ARACLAR, ORNEK_ISTEMLER
@@ -39,6 +46,36 @@ from app.services.testler import (
     ornek_belge,
 )
 from app.services.yerel_llm import DUSUNME_SECENEKLERI, MODELLER, YerelLLM
+
+UPLOAD_PARCA_BAYT = 1024 * 1024  # upload akisinda tek seferde okunan parca
+OTURUM_BASLIGI = "x-yas-oturum"  # loopback API'de oturum kimligi (A1.9)
+ACIK_YOLLAR = ("/", "/web", "/docs", "/openapi.json", "/favicon.ico")
+
+
+class ProjeIstegi(BaseModel):
+    yol: str = Field(min_length=1, max_length=4096)
+    ad: str = Field(default="", max_length=80)
+    guven: Guven = Guven.sinirli
+
+
+class YolIstegi(BaseModel):
+    yol: str = Field(min_length=1, max_length=4096)
+
+
+class ModIstegi(BaseModel):
+    mod: Mod
+
+
+class GuvenIstegi(BaseModel):
+    guven: Guven
+
+
+class OnayIstegi(BaseModel):
+    onayla: bool
+
+
+class GeriAlIstegi(BaseModel):
+    yollar: list[str] = []
 
 
 class AdIstegi(BaseModel):
@@ -108,7 +145,21 @@ def uygulama_olustur(
     yonetici = ModelYonetici(ayarlar, fabrika)
     talimatlar = TalimatDeposu(veri_dizini)
     skiller = skill_deposu or SkillDeposu(veri_dizini)
-    sohbet = SohbetServisi(yonetici, oturumlar, ekler, talimatlar, skiller)
+    projeler = WorkspaceDeposu(veri_dizini)
+    politika = PolitikaMotoru(veri_dizini)
+    checkpointler = CheckpointDeposu(veri_dizini)
+    komutlar = KomutServisi()
+    sohbet = SohbetServisi(
+        yonetici,
+        oturumlar,
+        ekler,
+        talimatlar,
+        skiller,
+        projeler,
+        politika,
+        checkpointler,
+        komutlar,
+    )
     isitmalar: set[asyncio.Task] = set()
     agecidi = AgGecidi(agecidi_uygulamasi(yonetici, ayarlar, kapat))
     magaza = magaza or Magaza()
@@ -121,6 +172,7 @@ def uygulama_olustur(
         if a.sunucu_acik:
             await agecidi.baslat(a.sunucu_port)
         yield
+        await komutlar.hepsini_durdur()  # yetim test/dev-server surecleri kalmasin
         await agecidi.durdur()
         await yonetici.kapat()  # yalniz bizim baslattigimiz model sunucusunu durdurur
         await magaza.kapat()
@@ -128,6 +180,44 @@ def uygulama_olustur(
     app = FastAPI(title=URUN_ADI, version=__version__, lifespan=omur)
     app.state.yonetici = yonetici
     app.state.agecidi = agecidi
+    app.state.oturum_anahtari = oturum_anahtari = secrets.token_urlsafe(24)
+    app.state.politika = politika
+
+    @app.middleware("http")
+    async def _loopback_koruma(istek: Request, sonraki):
+        """Loopback API sertlestirmesi (A1.9).
+
+        Yerel bir surecte acik port, "yalniz ben erisebilirim" demek degil: tarayicidaki
+        herhangi bir sayfa da 127.0.0.1'e istek atabilir. Bu nedenle:
+        - Host yalniz loopback olabilir (DNS rebinding)
+        - Origin/Referer varsa loopback olmali (CSRF)
+        - /api cagrilari oturum anahtari ister; anahtar yalniz bizim sundugumuz sayfaya gomulur,
+          baska origin onu OKUYAMAZ.
+        Bu, isletim sistemi duzeyinde yetkilendirme DEGILDIR: ayni kullanicinin baska bir yerel
+        programi index.html'i okuyup anahtari alabilir. Gercek izolasyon icin A1.8 notuna bak.
+        """
+        konak = (istek.headers.get("host") or "").rsplit(":", 1)[0]
+        if not yerel_host_mu(konak):
+            return JSONResponse({"hata": "Yalniz bu bilgisayardan erisilir."}, status_code=403)
+        kaynak = istek.headers.get("origin") or istek.headers.get("referer") or ""
+        if kaynak:
+            try:
+                kaynak_konak = urlsplit(kaynak).hostname
+            except ValueError:
+                kaynak_konak = None
+            if not yerel_host_mu(kaynak_konak):
+                return JSONResponse({"hata": "Dis kaynakli istek reddedildi."}, status_code=403)
+        yol = istek.url.path
+        korunan = yol.startswith("/api") and not yol.startswith("/api/bilgi")
+        if korunan and istek.headers.get(OTURUM_BASLIGI) != oturum_anahtari:
+            return JSONResponse(
+                {"hata": "Oturum anahtari gecersiz; uygulamayi yeniden acin."}, status_code=403
+            )
+        return await sonraki(istek)
+
+    @app.exception_handler(OnayGerekli)
+    async def _onay_gerekli(_: Request, e: OnayGerekli) -> JSONResponse:
+        return JSONResponse({"hata": e.mesaj, "onay": e.onay}, status_code=e.durum)
 
     @app.exception_handler(UygulamaHatasi)
     async def _uygulama_hatasi(_: Request, e: UygulamaHatasi) -> JSONResponse:
@@ -254,8 +344,18 @@ def uygulama_olustur(
     # ---- ekler ----
     @app.post("/api/ekler")
     async def ek_yukle(dosya: UploadFile) -> dict:
-        veri = await dosya.read()
-        return ekler.kaydet(dosya.filename or "dosya", veri).model_dump(exclude={"metin"})
+        """Akista parca parca okur: sinir asilinca hemen keser, RAM'e tum dosya alinmaz (A0.7)."""
+        ad = dosya.filename or "dosya"
+        ekler_modulu.tur_bul(ad)  # desteklenmeyen uzanti: dosya hic okunmadan reddedilir
+        parcalar: list[bytes] = []
+        toplam = 0
+        while parca := await dosya.read(UPLOAD_PARCA_BAYT):
+            toplam += len(parca)
+            if toplam > ekler_modulu.MAX_BOYUT:
+                mb = ekler_modulu.MAX_BOYUT / (1024 * 1024)
+                raise GecersizEk(f"Dosya {mb:.0f} MB sinirindan buyuk; yukleme durduruldu.")
+            parcalar.append(parca)
+        return ekler.kaydet(ad, b"".join(parcalar)).model_dump(exclude={"metin"})
 
     @app.get("/api/ekler/{ek_id}")
     async def ek_getir(ek_id: str) -> FileResponse:
@@ -406,12 +506,99 @@ def uygulama_olustur(
     async def test_paketi(istek: PaketIstegi) -> StreamingResponse:
         return sse(testler.paket(istek))
 
+    # ---- projeler / calisma alani (A1.1) ----
+    @app.get("/api/projeler")
+    async def proje_listesi() -> dict:
+        aktif = projeler.aktif()
+        return {
+            "alanlar": [a.model_dump(mode="json") for a in projeler.liste()],
+            "aktif": aktif.model_dump(mode="json") if aktif else None,
+            "etkin": sohbet.aktif_alan().model_dump(mode="json"),
+            "modlar": [str(m) for m in Mod],
+            "guvenler": [str(g) for g in Guven],
+        }
+
+    @app.post("/api/projeler")
+    async def proje_ac(istek: ProjeIstegi) -> dict:
+        return projeler.ac(istek.yol, istek.ad, istek.guven).model_dump(mode="json")
+
+    @app.post("/api/projeler/kapat")
+    async def proje_kapat() -> dict:
+        projeler.kapat()
+        return {"aktif": None, "etkin": sohbet.aktif_alan().model_dump(mode="json")}
+
+    @app.delete("/api/projeler/{alan_id}")
+    async def proje_sil(alan_id: str) -> dict:
+        projeler.sil(alan_id)
+        return {"silindi": alan_id}
+
+    @app.put("/api/projeler/{alan_id}/mod")
+    async def proje_mod(alan_id: str, istek: ModIstegi) -> dict:
+        return projeler.mod_ayarla(alan_id, istek.mod).model_dump(mode="json")
+
+    @app.put("/api/projeler/{alan_id}/guven")
+    async def proje_guven(alan_id: str, istek: GuvenIstegi) -> dict:
+        return projeler.guven_ayarla(alan_id, istek.guven).model_dump(mode="json")
+
+    @app.post("/api/projeler/{alan_id}/kok")
+    async def proje_kok_ekle(alan_id: str, istek: YolIstegi) -> dict:
+        return projeler.kok_ekle(alan_id, istek.yol).model_dump(mode="json")
+
+    @app.post("/api/projeler/{alan_id}/klasor")
+    async def proje_klasor(alan_id: str, istek: YolIstegi) -> dict:
+        return projeler.klasor_yetkilendir(alan_id, istek.yol).model_dump(mode="json")
+
+    # ---- izinler ve onaylar (A1.3, A1.4) ----
+    @app.get("/api/izinler")
+    async def izinler() -> dict:
+        alan = sohbet.aktif_alan()
+        return {**politika.bilgi(alan), "alan": alan.model_dump(mode="json")}
+
+    @app.get("/api/onaylar")
+    async def onay_gecmisi() -> dict:
+        return {"onaylar": politika.onaylar.gecmis()}
+
+    @app.post("/api/onaylar/{onay_id}")
+    async def onay_karar(onay_id: str, istek: OnayIstegi) -> dict:
+        return politika.onaylar.karar_ver(onay_id, istek.onayla).model_dump(mode="json")
+
+    # ---- checkpoint / geri alma (A2.7) ----
+    @app.get("/api/checkpointler")
+    async def checkpoint_listesi() -> dict:
+        return {"checkpointler": checkpointler.liste()}
+
+    @app.get("/api/checkpointler/{cp_id}")
+    async def checkpoint_onizle(cp_id: str) -> dict:
+        return checkpointler.onizle(cp_id)
+
+    @app.post("/api/checkpointler/{cp_id}/geri-al")
+    async def checkpoint_geri_al(cp_id: str, istek: GeriAlIstegi) -> dict:
+        return checkpointler.geri_al(cp_id, istek.yollar or None)
+
+    # ---- calisan komutlar ----
+    @app.get("/api/komutlar")
+    async def komut_listesi() -> dict:
+        return {"isler": [komutlar.ozet(i) for i in komutlar.isler.values()]}
+
+    @app.post("/api/komutlar/{is_id}/durdur")
+    async def komut_durdur_ucu(is_id: str) -> dict:
+        return await komutlar.durdur(is_id)
+
     # ---- arayuz ----
     web = web_dizini()
 
     @app.get("/")
     async def ana_sayfa() -> Response:
-        return FileResponse(web / "index.html", headers={"Cache-Control": "no-store"})
+        """index.html'e oturum anahtarini gomer: baska origin bu sayfayi OKUYAMAZ (A1.9)."""
+        try:
+            html = (web / "index.html").read_text(encoding="utf-8")
+        except OSError:  # pragma: no cover - paket hatasi
+            return JSONResponse({"hata": "Arayuz dosyasi bulunamadi."}, status_code=500)
+        etiket = f'<meta name="yas-oturum" content="{oturum_anahtari}">'
+        html = html.replace("</head>", f"  {etiket}\n</head>", 1)
+        return Response(
+            html, media_type="text/html; charset=utf-8", headers={"Cache-Control": "no-store"}
+        )
 
     if web.exists():
         app.mount("/web", StaticFiles(directory=web), name="web")

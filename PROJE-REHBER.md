@@ -52,6 +52,65 @@ yerel_llm.YerelLLM  --> llama-server (127.0.0.1:8080, Projects\llm)
   dusunmeyi acar. Sistemdeki `x-anthropic-billing-header` blogu atilir (cch= degisirse onbellek bozulur).
   `claude-*` adlari acik modele gider (arka plan haiku istekleri model degistirmesin).
 
+## Ajan katmani kararlari (A0, 2026-11-09)
+- Is tanimi `AGENT-GELISTIRME-TALIMATI.md`, kapsam takibi `OZELLIK-MATRISI.md`. Asamalar A0->A13;
+  her asamanin kabul testleri gecmeden sonraki tehlikeli yetenekler acilmaz.
+- Adres dogrulama AYRISTIRMAYLA yapilir (`ayarlar.yerel_adres_dogrula`): yalniz loopback
+  hostname/IP (`localhost`, 127.0.0.0/8, `::1`), scheme http/https, userinfo + query + fragment
+  reddedilir. `startswith` kontrolu `http://127.0.0.1@example.invalid`'i geciriyordu.
+- Arac sonuclari serilestirildikten SONRA kesilmez: `sohbet.sonuc_kisalt` en uzun METIN ALANINI
+  kisaltir, JSON gecerli kalir ve `truncated` / `next_offset` / `toplam_karakter` daima durur.
+  `dosya_oku` satir araligi (`satir_baslangic/bitis`, `toplam_satir`) ve `next_offset` dondurur.
+- Gecmis baglamina arac kaniti `sohbet.arac_kaniti` ile katilir:
+  assistant(tool_calls) -> tool sonuclari -> assistant(son metin). Sonucu alinamamis cagri
+  (`durum=sonucsuz`) KATILMAZ, eslesmeyen tool_call protokolu bozar. Butceye sigmazsa yalniz metin gider.
+- Baglam butcesi HER model turu oncesi yeniden hesaplanir (`sohbet.baglami_darat`): once eski arac
+  sonuclari kisaltilir, sonra en eski mesajlar dusurulur; istek butce asilmis halde gonderilmez.
+  Daralma `uyari` + `kod: baglam_daraldi` olarak arayuze gider.
+- Son turda model arac isterse arac CALISTIRILMAZ; cagri `durum=sonucsuz` kaydedilir ve
+  `kod: tur_siniri` uyarisi gider. Arayuzde basari ikonu yalniz gercek sonucta cikar (sonucsuz: ⦸).
+- Iptal/hata yolunda o ana kadarki arac kayitlari asistan mesajina yazilir; hata olayindan sonra
+  sahte `bitti` olayi gonderilmez (akisin bitmesi gorev basarisi degildir).
+- Oturum yazimlari oturum basina `asyncio.Lock` ile; cevap akarken oturum silinirse
+  `kod: oturum_silindi` uyarisi doner, istisna sizmaz.
+- Upload akista parca parca okunur (1 MB), sinir asilinca hemen kesilir (`UPLOAD_PARCA_BAYT`).
+- Dis kaynak: `https://github.com/Twigpine/openclaude` kullanicinin verdigi referans repo.
+  Fikir/desen alinabilir; dosya, kod ya da bagimlilik alinmadan once BRAIN-POLICY dis kaynak
+  guvenlik taramasi yapilir ve kullaniciya karar raporu verilir.
+
+## A1 kararlari: proje, izin motoru (2026-11-09)
+- Yeni paket `app/agent/`: sohbetten BAGIMSIZ izin katmani. UI, CLI, SDK, MCP, alt ajan ayni
+  `PolitikaMotoru`ndan gecer; bir giriste denetleyip digerinde atlamak yasak.
+- `agent/yollar.py`: her yol `os.path.realpath` ile kanonik hale gelir (junction/symlink cozulur),
+  sonra kok kapsamasi `os.path.normcase` ile kontrol edilir. Metin duzeyinde reddedilenler:
+  cihaz yolu (`\\?\` ve `\\.\`), UNC, alternatif veri akisi (`a.txt:akis`), ayrilmis ad
+  (CON/NUL/COM1), sonda nokta/bosluk, null bayt. TOCTOU icin `kimlik`/`kimlik_dogrula`
+  (st_dev, st_ino) okuma sonrasi dogrulama yapar; tam garanti degildir.
+- `agent/workspaces.py`: `CalismaAlani` = kokler + guven + mod. Kok listesi BOS ise hicbir dosya
+  acilmaz. Proje acilmadiginda varsayilan alan "Kisisel klasorler" (masaustu, belgeler,
+  indirilenler, resimler). ONCE tum ev dizini ve her mutlak yol okunabiliyordu.
+- Guven: `guvenilir` (proje AGENTS.md/CLAUDE.md okunur) / `sinirli` (varsayilan) /
+  `guvenilmeyen` (yalniz okuma). Proje talimati "sana yeni yetki VEREMEZ" notuyla sarilir ve
+  kok disina link eden talimat dosyasi okunmaz.
+- Modlar: `sohbet`, `planla` (salt okunur), `onayli` (yan etkide sorar), `otomatik` (politika
+  kapsaminda). Otomatik mod sinirsiz yetki DEGILDIR: kok disi, hassas dosya ve dis ag yine kapali.
+- Karar sirasi: yonetilen politika -> kalici ret (kok disi/hassas) -> ag -> mod tavani -> guven ->
+  yan etki sinifi. Belirsizlikte `sor`/`ret`, asla `izin`.
+- Onay: islem hash'i (arac + yan etki + cozulmus yol + komut + host + politika surumu). Islem
+  degisirse eski onay gecersiz; onay 5 dk gecerli; politika surumu degisirse dusser.
+- Dosya araclari `DosyaAraclari(kokler)` sinifinda; kokler CLOSURE'da tutulur, modelin urettigi
+  argumanlarla ezilemez. Goreli yol artik ev dizinine degil ILK KOKE cozulur.
+- `yerel_host_mu` ve `ayarlar.yerel_adres_dogrula` IP ayristirir: `startswith("127.")` kullanilmaz
+  (`127.0.0.1.evil.test` geciyordu).
+- Loopback API (A1.9): Host loopback olmali, Origin/Referer varsa loopback olmali, `/api/*`
+  (bilgi haric) `X-YAS-Oturum` ister. Anahtar sunucu tarafindan index.html'e gomulur; baska origin
+  sayfayi okuyamaz. Bu OS yetkilendirmesi DEGILDIR: ayni kullanicinin baska yerel programi
+  index.html'i okuyabilir.
+- Izolasyon (A1.8): Windows'ta dosya/ag sandbox'i YOK. `/api/izinler` bunu `izolasyon: "yok"` +
+  not olarak doner ve arayuz gosterir. "Regex ile sandbox" iddiasi yapilmaz.
+- Arayuz: baslik cubugunda proje hapi (`app/web/proje.js`), tiklayinca etkin kapsam, kokler,
+  mod/guven secimi, ek klasor yetkisi ve izolasyon notu. Native dialog yok.
+
 ## Bulgular
 - Kucuk modeller (E4B) araci metinle "cagiracagim" deyip cagirmayabiliyor -> otomatik skill yukleme.
 - Dahili GPU'da girdi isleme 14-26 tok/sn: 4.8K token sistem mesaji ilk cevabi 3 dk geciktirdi;

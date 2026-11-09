@@ -7,10 +7,14 @@ import ctypes
 import re
 import sys
 import uuid
+from collections.abc import Sequence
 from datetime import datetime
 from pathlib import Path
 from typing import Any
 
+from app.agent import policy
+from app.agent.yollar import guvenli_coz, ham_dogrula, kimlik, kimlik_dogrula
+from app.exceptions import YetkiYok
 from app.services import araclar as demo
 
 MAX_OGE = 150
@@ -83,8 +87,8 @@ def bilinen_klasor(ad: str) -> Path:
     return Path.home() / yedek[ad]
 
 
-def yol_coz(yol: str | None) -> Path:
-    temiz = (yol or "masaustu").strip().strip("\"'")
+def takma_ad(temiz: str) -> Path | None:
+    """`masaustu`, `belgeler/Notlar` gibi takma adi gercek yola cevirir; takma ad yoksa None."""
     anahtar = _TAKMA_AD.get(temiz.lower().rstrip("/\\"))
     if anahtar:
         return bilinen_klasor(anahtar)
@@ -92,15 +96,29 @@ def yol_coz(yol: str | None) -> Path:
         on_ek = takma + "/"
         if temiz.lower().replace("\\", "/").startswith(on_ek):
             return bilinen_klasor(gercek) / temiz[len(on_ek) :]
+    return None
+
+
+def yol_coz(yol: str | None) -> Path:
+    temiz = (yol or "masaustu").strip().strip("\"'")
+    if (hedef := takma_ad(temiz)) is not None:
+        return hedef
     p = Path(temiz).expanduser()
     return p if p.is_absolute() else Path.home() / p
 
 
 def gizli_mi(p: Path) -> bool:
-    parcalar = {x.lower() for x in p.parts}
-    if parcalar & {k.lower() for k in GIZLI_KLASORLER}:
-        return True
-    return bool(GIZLI_AD.search(p.name) or TARAYICI_PROFILI.search(str(p)))
+    """Gizli hedef mi? Tek kaynak izin motorunda (`agent.policy.hassas_mi`)."""
+    return policy.hassas_mi(p)
+
+
+def varsayilan_kokler() -> list[Path]:
+    """Proje acilmadiginda dosya araclarinin dokunabilecegi kisisel klasorler.
+
+    Once tum ev dizini (ve mutlak her yol) erisilebiliyordu; A1 ile kapsam bu dort klasore
+    indirildi. Proje acilinca kokler projenin kendisi olur.
+    """
+    return [bilinen_klasor(a) for a in ("masaustu", "belgeler", "indirilenler", "resimler")]
 
 
 def _boyut(n: int) -> str:
@@ -111,10 +129,70 @@ def _boyut(n: int) -> str:
     return ""
 
 
+class DosyaAraclari:
+    """Salt okunur dosya araclari, YETKILI KOKLERE bagli.
+
+    Kokler kurucuda kapatilir (closure): model arguman olarak kok listesini degistiremez.
+    Her yol `agent.yollar.guvenli_coz` ile kanonik hale gelir ve kapsama kontrolunden gecer;
+    junction/symlink, UNC, cihaz yolu ve alternatif veri akisi kacislari burada kapanir.
+    """
+
+    def __init__(self, kokler: Sequence[Path] | None = None) -> None:
+        self.kokler = [Path(k) for k in (kokler if kokler is not None else varsayilan_kokler())]
+
+    def _coz(self, ham: str | None, *, varsayilan: str = "masaustu") -> Path:
+        temiz = ham_dogrula(ham or varsayilan)
+        hedef = takma_ad(temiz)
+        if hedef is None:
+            p = Path(temiz).expanduser()
+            # goreli ad: ev dizini yerine ILK YETKILI KOK altinda aranir
+            hedef = p if p.is_absolute() else ((self.kokler[0] / temiz) if self.kokler else p)
+        yetkili = guvenli_coz(self.kokler, str(hedef))
+        if policy.hassas_mi(yetkili):
+            raise YetkiYok(
+                "Bu hedef gizli bilgi (anahtar, parola, oturum) icerebilecegi icin okunmaz."
+            )
+        return yetkili
+
+    def klasor_listele(self, yol: str = "masaustu", gizlileri_goster: bool = False) -> dict:
+        try:
+            k = self._coz(yol)
+        except YetkiYok as e:
+            return {"hata": str(e), "karar": "ret"}
+        return _klasor_listele(k, gizlileri_goster)
+
+    def dosya_oku(self, yol: str, baslangic: int = 0) -> dict:
+        try:
+            p = self._coz(yol, varsayilan="")
+        except YetkiYok as e:
+            return {"hata": str(e), "karar": "ret"}
+        return _dosya_oku(p, baslangic)
+
+    def dosya_ara(self, aranan: str, klasor: str = "masaustu", derinlik: int = 3) -> dict:
+        try:
+            kok = self._coz(klasor)
+        except YetkiYok as e:
+            return {"hata": str(e), "karar": "ret"}
+        return _dosya_ara(aranan, kok, derinlik)
+
+    def isleyiciler(self) -> dict[str, Any]:
+        """Arac adi -> baglanmis fonksiyon. Model yalniz sema alanlarini gonderebilir."""
+        return {
+            "klasor_listele": self.klasor_listele,
+            "dosya_oku": self.dosya_oku,
+            "dosya_ara": self.dosya_ara,
+            "hesapla": demo.hesapla,
+            "saat_kac": demo.saat_kac,
+            "birim_cevir": demo.birim_cevir,
+        }
+
+
 def klasor_listele(yol: str = "masaustu", gizlileri_goster: bool = False) -> dict:
-    k = yol_coz(yol)
-    if gizli_mi(k):
-        return {"hata": "Bu klasor gizli bilgi icerebilecegi icin listelenmez."}
+    """Varsayilan kisisel kokler ile (proje acilmadiginda ve testlerde)."""
+    return DosyaAraclari().klasor_listele(yol, gizlileri_goster)
+
+
+def _klasor_listele(k: Path, gizlileri_goster: bool = False) -> dict:
     if not k.is_dir():
         return {"hata": f"Klasor bulunamadi: {k}"}
     klasorler, dosyalar = [], []
@@ -145,30 +223,51 @@ def klasor_listele(yol: str = "masaustu", gizlileri_goster: bool = False) -> dic
 
 
 def dosya_oku(yol: str, baslangic: int = 0) -> dict:
-    p = yol_coz(yol)
-    if gizli_mi(p):
-        return {
-            "hata": "Bu dosya gizli bilgi (anahtar, parola, oturum) icerebilecegi icin okunmaz."
-        }
+    return DosyaAraclari().dosya_oku(yol, baslangic)
+
+
+def _dosya_oku(p: Path, baslangic: int = 0) -> dict:
     if not p.is_file():
         return {"hata": f"Dosya bulunamadi: {p}"}
     if p.stat().st_size > MAX_DOSYA_BAYT:
         return {"hata": "Dosya 5 MB'dan buyuk; okunmadi."}
+    kimlik_once = kimlik(p)  # kontrol-kullanim arasinda dosya degistiyse okumayi iptal et
     veri = p.read_bytes()
+    try:
+        kimlik_dogrula(p, kimlik_once)
+    except YetkiYok as e:
+        return {"hata": str(e), "karar": "ret"}
     if b"\x00" in veri[:4096]:
         return {"hata": "Bu bir metin dosyasi degil (ikili dosya); icerigi okunamaz."}
     metin = veri.decode("utf-8", errors="replace")
-    baslangic = max(0, int(baslangic))
-    parca = metin[baslangic : baslangic + MAX_OKUMA_KARAKTER]
-    sonuc: dict[str, Any] = {"dosya": str(p), "karakter": len(metin), "icerik": parca}
-    if baslangic + MAX_OKUMA_KARAKTER < len(metin):
-        sonuc["devam"] = f"Devami icin baslangic={baslangic + MAX_OKUMA_KARAKTER} ile tekrar oku."
+    baslangic = min(max(0, int(baslangic)), len(metin))
+    bitis = min(baslangic + MAX_OKUMA_KARAKTER, len(metin))
+    parca = metin[baslangic:bitis]
+    kesildi = bitis < len(metin)
+    sonuc: dict[str, Any] = {
+        "dosya": str(p),
+        "karakter": len(metin),  # geriye donuk uyumluluk
+        "toplam_karakter": len(metin),
+        "toplam_satir": metin.count("\n") + 1,
+        "satir_baslangic": metin.count("\n", 0, baslangic) + 1,
+        "satir_bitis": metin.count("\n", 0, bitis) + 1,
+        "baslangic": baslangic,
+        "bitis": bitis,
+        "truncated": kesildi,
+        "next_offset": bitis if kesildi else None,
+        "icerik": parca,
+    }
+    if kesildi:
+        sonuc["devam"] = f"Devami icin baslangic={bitis} ile tekrar oku."
     return sonuc
 
 
 def dosya_ara(aranan: str, klasor: str = "masaustu", derinlik: int = 3) -> dict:
-    kok = yol_coz(klasor)
-    if gizli_mi(kok) or not kok.is_dir():
+    return DosyaAraclari().dosya_ara(aranan, klasor, derinlik)
+
+
+def _dosya_ara(aranan: str, kok: Path, derinlik: int = 3) -> dict:
+    if not kok.is_dir():
         return {"hata": f"Aranacak klasor yok ya da erisilemez: {kok}"}
     aranan_k = aranan.strip().lower()
     bulunan: list[str] = []
@@ -243,12 +342,11 @@ ISLEYICILER: dict[str, Any] = {
     "birim_cevir": demo.birim_cevir,
 }
 SISTEM_NOTU = (
-    "Bu bilgisayardaki dosya ve klasorlere salt okunur araclarla erisebilirsin: klasor_listele, "
-    "dosya_oku, dosya_ara. Kullanici dosya, klasor ya da masaustu hakkinda sorarsa 'yapamam' deme, "
-    "uygun araci cagir (masaustu icin yol='masaustu'). Hesap icin hesapla, saat icin saat_kac. "
-    "Dosya silme, yazma ya da tasima aracin yok; istenirse bunu acikca soyle. "
-    "Bir araci kullanacaksan bunu metin olarak yazma ('cagiracagim' deme), araci dogrudan cagir."
-)
+    "Dosya araclarin SALT OKUNUR: klasor_listele, dosya_oku, dosya_ara (masaustu icin "
+    "yol='masaustu'). Dosya yazma, silme, tasima aracin YOK; istenirse acikca soyle. "
+    "Hesap icin hesapla, saat icin saat_kac. Araci metinle anlatma ('cagiracagim' deme), "
+    "dogrudan cagir."
+)  # Her istekte giden sabit onek: kisa tutulur (dahili GPU'da girdi isleme 14-26 tok/sn)
 
 
 def sonuc_ozeti(ad: str, sonuc: Any) -> str:
@@ -257,10 +355,11 @@ def sonuc_ozeti(ad: str, sonuc: Any) -> str:
         return str(sonuc)[:80]
     if "hata" in sonuc:
         return f"hata: {sonuc['hata']}"
-    if ad == "klasor_listele":
+    if ad == "klasor_listele" and "klasor_sayisi" in sonuc:
         return f"{sonuc['klasor_sayisi']} klasor, {sonuc['dosya_sayisi']} dosya"
-    if ad == "dosya_oku":
-        return f"{sonuc['karakter']} karakter okundu"
-    if ad == "dosya_ara":
+    if ad == "dosya_oku" and "karakter" in sonuc:
+        kesik = " (kesildi)" if sonuc.get("truncated") else ""
+        return f"{sonuc['karakter']} karakter okundu{kesik}"
+    if ad == "dosya_ara" and "sayi" in sonuc:
         return f"{sonuc['sayi']} sonuc"
     return ", ".join(f"{k}: {v}" for k, v in list(sonuc.items())[:3])[:100]

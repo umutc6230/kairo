@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
+from ipaddress import ip_address
 from pathlib import Path
+from urllib.parse import urlsplit
 
 from pydantic import BaseModel, Field, field_validator
 
@@ -14,6 +16,47 @@ from app.services.yerel_llm import (
     VARSAYILAN_ADRES,
     VARSAYILAN_MODEL,
 )
+
+YEREL_HATA = (
+    "Adres yalniz bu bilgisayar olabilir: http://127.0.0.1:8080, http://localhost:8080 "
+    "ya da http://[::1]:8080 biciminde, kullanici adi/sorgu icermeden."
+)
+IZINLI_SCHEME = ("http", "https")
+
+
+def yerel_adres_dogrula(ham: str) -> str:
+    """Adresi AYRISTIRARAK yalniz loopback hedeflerini kabul eder; `.../v1` ile dondurur.
+
+    startswith kontrolu yetersizdi: `http://localhost.example.invalid` ve
+    `http://127.0.0.1@example.invalid` gercek hostname'i uzakta birakiyordu (A0.2).
+    """
+    v = (ham or "").strip().rstrip("/")
+    if not v:
+        raise ValueError(YEREL_HATA)
+    try:
+        ayri = urlsplit(v)
+        port = ayri.port  # gecersiz portta ValueError
+        host = (ayri.hostname or "").lower()
+    except ValueError as e:
+        raise ValueError(YEREL_HATA) from e
+    if ayri.scheme not in IZINLI_SCHEME or not ayri.netloc or not host:
+        raise ValueError(YEREL_HATA)
+    if ayri.username or ayri.password or "@" in ayri.netloc:
+        raise ValueError(YEREL_HATA)  # userinfo ile gercek host gizlenebiliyor
+    if ayri.query or ayri.fragment:
+        raise ValueError(YEREL_HATA)
+    if host != "localhost":
+        try:
+            if not ip_address(host).is_loopback:
+                raise ValueError(YEREL_HATA)
+        except ValueError as e:  # hostname ne localhost ne de loopback IP
+            raise ValueError(YEREL_HATA) from e
+    konak = f"[{host}]" if ":" in host else host
+    netloc = f"{konak}:{port}" if port is not None else konak
+    yol = ayri.path.rstrip("/")
+    if not yol.endswith("/v1"):
+        yol = f"{yol}/v1"
+    return f"{ayri.scheme}://{netloc}{yol}"
 
 
 class KullaniciAyarlari(BaseModel):
@@ -58,10 +101,7 @@ class KullaniciAyarlari(BaseModel):
     @field_validator("adres")
     @classmethod
     def _adres(cls, v: str) -> str:
-        v = v.strip().rstrip("/")
-        if not v.startswith(("http://127.0.0.1", "http://localhost")):
-            raise ValueError("Adres yalniz bu bilgisayar olabilir (http://127.0.0.1:...)")
-        return v if v.endswith("/v1") else f"{v}/v1"
+        return yerel_adres_dogrula(v)
 
 
 class AyarDeposu:

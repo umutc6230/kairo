@@ -1,5 +1,5 @@
 # DURUM - yerel-ai-studio
-guncel: 2026-11-08 | son arac: Claude Code (Opus 5.5) | dal: main
+guncel: 2026-11-09 | son arac: Claude Code (Opus 5) | dal: main
 
 ## Ne
 Yerel sansursuz modelleri (DeepSeek-V4-Pro Qwen3.5 9B, Gemma 4 12B, Gemma 4 E4B heretic) sohbet,
@@ -32,7 +32,39 @@ Python 3.12 + FastAPI + pywebview; arayuz vanilla JS. Paketleme: PORTABLE (kulla
       gercek E4B ile Read araci kullanip dogru cevap verdi (ilk tur ~12 dk, sonraki turlar ~10 sn)
 - [x] Portable derleme (72 MB): teslim klasorunden Baslat.bat ile acildi, veri data'da, AppData temiz, X ile tam kapandi
 
+## Asama (ajan katmani)
+- [x] A0 mevcut hatalar + baslangic olcumu (2026-11-09): 8 madde, `tests/test_a0_regresyon.py` 34 test
+- [x] A1 proje/workspace + izin motoru + loopback sertlestirme (2026-11-09): `app/agent/`
+      (yollar, workspaces, policy) + proje arayuzu; `tests/test_a1_izinler.py` 61 test
+- [ ] A1.7/A1.8 komut sureci ve izolasyon adaptoru -> A2 ile birlikte  <- SIRADAKI
+- [ ] A2 dosya/terminal/Git/checkpoint araclari (A1 kabulu gecmeden acilmaz)
+- [ ] A3 kalici Run/Step ajan dongusu | A4 baglam/hafiza/model profilleri | A5 ajan ekrani
+- [ ] A6 skills/komut/hooks | A7 MCP/plugin/mods | A8 alt ajanlar | A9-A12 | A13 kalite kapisi
+
 ## Son oturum
+- 2026-11-09 (4): **A1 asamasi uygulandi**. Yeni `app/agent/` paketi: `yollar.py` (kanonik yol,
+  junction/symlink/UNC/cihaz yolu/ADS/ayrilmis ad/sonda nokta reddi, TOCTOU kimlik kontrolu),
+  `workspaces.py` (proje ac/kapat, cok kok, ek klasor, guven, mod), `policy.py` (allow/ask/deny,
+  mod tavani, yonetilen politika, islem hash'li onay, sir maskeleme). Dosya araclari artik
+  YETKILI KOKLERE bagli (closure); proje yokken kapsam 4 kisisel klasor (once tum ev diziniydi).
+  Loopback API sertlestirildi: Host/Origin + `X-YAS-Oturum` (anahtar index.html'e gomulur).
+  Arayuz: baslik cubugunda proje hapi + izin kapsami modali (`app/web/proje.js`), canli denendi.
+  Kendi testim iki gercek acik buldu: `yerel_host_mu` `127.0.0.1.evil.test`'i gecireyordu ve
+  arayuzde proje acma varsayilani "Guvenilir" geliyordu; ikisi de duzeltildi.
+- 2026-11-09 (3): **A0 asamasi uygulandi** (ajan gelistirme talimati). `OZELLIK-MATRISI.md`
+  olusturuldu (A0 + F01-F24 + korunan ozellikler + A13 kapisi). Baslangic olcumu: 152 gecti,
+  1 atladi, %94, ruff temiz. 8 A0 maddesi once BASARISIZ test yazilarak duzeltildi
+  (`tests/test_a0_regresyon.py`, 34 test): adres ayristirma, alan bazli arac sonucu kisaltma,
+  gecmiste arac kaniti, iptalde arac kaydi, tur basina baglam butcesi, akista upload siniri,
+  oturum kilidi + silinmis oturuma gec cevap. Davranis degisikligi: hata olayindan sonra artik
+  sahte `bitti` olayi GONDERILMEZ (iki mevcut test buna gore guncellendi).
+  Sonuc: 186 test gecti, 1 atladi, coverage %94, ruff temiz (sahte model; canli model/GUI denenmedi).
+  Kullanicinin verdigi referans repo: https://github.com/Twigpine/openclaude (henuz taranmadi).
+- 2026-11-09 (2): kullanicinin ozellik listesine gore AGENT-GELISTIRME-TALIMATI.md hazirlandi:
+  24 yetenek grubu, A0-A13 asamalari, kabul testleri ve kalite olcumu. Kod degismedi.
+- 2026-11-09: ajan mimarisi incelemesi; AGENT-INCELEME-2026-11-09.md raporu eklendi, kod degismedi.
+  152 test gecti, 1 atladi, coverage %94, ruff temiz. URL allowlist acigi, kesik arac JSON'u ve
+  gecmiste arac kaniti kaybi sentetik denemelerle dogrulandi; canli GUI/model denenmedi.
 - 2026-11-08 (3): Claude Code destegi (Anthropic uclari, adaptive dusunme kapali, billing satiri
   ayiklama), Claude-Yerel.bat, TermFlow 'Add Local Models' provider'i. 152 test, %94.
 - 2026-11-08 (2): sohbet devami ekleri, sohbet araclari, skill/talimat sistemi, HF model magazasi,
@@ -41,6 +73,18 @@ Python 3.12 + FastAPI + pywebview; arayuz vanilla JS. Paketleme: PORTABLE (kulla
   ozyineleme (alt cizgili ad); adres /v1 cift ekleniyordu; "İ".lower() hatasi; durdur kilitte asiliydi.
 
 ## Siradaki adim
+- **A2: dosya, terminal, Git ve checkpoint araclari** (`AGENT-GELISTIRME-TALIMATI.md` A2).
+  Sira: `read_file`/`glob`/`search_content` (satir numarali, rg ile) -> `apply_patch`/`write_file`
+  (beklenen eski hash + atomik yazim + checkpoint) -> terminal (cwd zorunlu, gercek exit code,
+  timeout, process-tree iptali = A1.7) -> Git status/diff/branch -> checkpoint ile hunk bazli
+  geri alma (conflict-aware; `reset --hard` YOK). Kabul A2: gecici Python ve TS projesinde
+  oku -> patch -> test -> diff -> geri alma; CRLF, Turkce/bosluklu yol, stale hash, dirty repo.
+- Yazma araclari A1 izin motorundan GECMEDEN eklenmeyecek: her arac `PolitikaMotoru.uygula`
+  cagiracak (Istek.yan_etki = yaz/sil/komut) ve onay akisini kullanacak.
+- A1.8 gercek izolasyon: su an "yok" olarak raporlaniyor. A2 terminaliyle birlikte kisitli
+  surec/ACL ya da istege bagli WSL/container adaptoru degerlendirilecek.
+- `openclaude` reposu (Twigpine) kullanilacaksa once BRAIN-POLICY dis kaynak taramasi + rapor.
+- Paketleme bu oturumda YAPILMADI; portable teslim klasoru guncellenmedi.
 - Claude Code ilk turu hizlandir: llama-server -ub/-b (Vulkan girdi isleme) olc; ilk istek
   5-10K token, dahili GPU'da ~14-19 tok/sn. Kisa --system-prompt ile token sayisini olc.
 - GridMind'da AI motoru -> Local model (Ollama) secip gercek arayuzden denemek.
@@ -55,6 +99,11 @@ Python 3.12 + FastAPI + pywebview; arayuz vanilla JS. Paketleme: PORTABLE (kulla
 - Dahili GPU: bos RAM az iken gorsel istekler duser (BellekYetersiz mesaji gosterilir).
 - Kucuk modeller araci 'cagiracagim' deyip cagirmayabiliyor (otomatik skill yukleme bunu azaltir).
 - Skill'lerdeki komutlar calistirilamaz (komut araci yok); model buna gore uyariliyor.
+- A0 sonrasi davranis degisikligi: hata olayindan sonra artik `bitti` olayi gelmiyor; arayuz
+  `finally` blogunda kapatiyor. Gercek pencerede (WebView2) canli olarak DENENMEDI.
+- `cevap_akit` son turunda araclar artik calistirilmiyor: varsayilan `max_tur=6` ile arac
+  calistiran tur sayisi 6'dan 5'e indi (bos yere calisip cevapsiz bitme yerine acik uyari).
+- Baglam butcesi karakter tabanli tahmin; gercek tokenizer A4'te. `/tokenize` ucu kullanilmiyor.
 
 ## Dokunulmayacak kararlar
 - pywebview + FastAPI (Electron degil). Ayni anda tek model. Native dialog yok (in-app modal).

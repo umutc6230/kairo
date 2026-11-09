@@ -213,9 +213,13 @@ function asistanMesaji() {
     aracSonucu(o) {
       const a = [...d.querySelectorAll(".arac-adim")].find((x) => x.dataset.id === o.id) || this.aracCagrisi(o);
       const ozet = a.querySelector(".ozet");
+      const hataVar = o.durum === "hata" || (o.ozet || "").startsWith("hata");
+      const sonucsuz = o.durum === "sonucsuz";
       ozet.classList.remove("parilti");
-      ozet.classList.toggle("hata", o.ozet.startsWith("hata"));
-      ozet.textContent = `${o.ozet.startsWith("hata") ? "✗" : "✓"} ${o.ozet}`;
+      ozet.classList.toggle("hata", hataVar);
+      ozet.classList.toggle("sonucsuz", sonucsuz);
+      const isaret = hataVar ? "✗" : sonucsuz ? "⦸" : "✓"; // basari ikonu yalniz gercek sonucta
+      ozet.textContent = `${isaret} ${o.ozet}${o.truncated ? " · kısaltıldı" : ""}`;
       let goster = o.sonuc;
       try { goster = JSON.stringify(JSON.parse(o.sonuc), null, 1); } catch { /* kesik JSON: oldugu gibi */ }
       a.querySelector(".arac-sonuc").textContent = goster;

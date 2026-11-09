@@ -212,8 +212,20 @@ def app(veri: Path, sunucu: SahteSunucu, llm_dizin: Path, skill_klasoru: Path):
 
 @pytest.fixture
 async def istemci(app):
+    """Gercek arayuz gibi: loopback Host + oturum anahtari basligi (A1.9)."""
     async with httpx.AsyncClient(
-        transport=httpx.ASGITransport(app=app), base_url="http://test"
+        transport=httpx.ASGITransport(app=app),
+        base_url="http://127.0.0.1",
+        headers={"X-YAS-Oturum": app.state.oturum_anahtari},
+    ) as c:
+        yield c
+
+
+@pytest.fixture
+async def yetkisiz_istemci(app):
+    """Oturum anahtari OLMAYAN istemci: yerel baska bir surec/sayfa gibi davranir."""
+    async with httpx.AsyncClient(
+        transport=httpx.ASGITransport(app=app), base_url="http://127.0.0.1"
     ) as c:
         yield c
 

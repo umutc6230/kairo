@@ -40,8 +40,12 @@ export function el(html) {
   return e;
 }
 
+/** Oturum anahtari: sunucu index.html'e gomer. Baska origin bu sayfayi okuyamaz (A1.9). */
+const OTURUM_ANAHTARI = document.querySelector('meta[name="yas-oturum"]')?.content || "";
+export const oturumBasligi = () => (OTURUM_ANAHTARI ? { "X-YAS-Oturum": OTURUM_ANAHTARI } : {});
+
 export async function api(yol, { method = "GET", govde, form } = {}) {
-  const secenek = { method, headers: {} };
+  const secenek = { method, headers: { ...oturumBasligi() } };
   if (form) secenek.body = form;
   else if (govde !== undefined) {
     secenek.headers["Content-Type"] = "application/json";
@@ -67,7 +71,7 @@ function hataMetni(veri) {
 export async function* sseOku(yol, govde, signal) {
   const r = await fetch(yol, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: { "Content-Type": "application/json", ...oturumBasligi() },
     body: JSON.stringify(govde),
     signal,
   });

@@ -33,3 +33,19 @@ class GecersizEk(UygulamaHatasi):
 
 class MesgulHatasi(UygulamaHatasi):
     durum = 409
+
+
+class YetkiYok(UygulamaHatasi):
+    """Izin motoru ya da yol kapsami islemi reddetti (A1)."""
+
+    durum = 403
+
+
+class OnayGerekli(UygulamaHatasi):
+    """Islem kullanici onayi bekliyor; onay kaydi `onay` alaninda doner (A1.4)."""
+
+    durum = 409
+
+    def __init__(self, mesaj: str, onay: dict | None = None) -> None:
+        super().__init__(mesaj)
+        self.onay = onay or {}

@@ -1,0 +1,234 @@
+"""Ajan arac kaydi: sema uretimi ve MODA GORE arac secimi (A2 wiring).
+
+Kritik kural: yan etkili araclar, politika onlari reddedecekse MODELE HIC SUNULMAZ. Boylece
+kucuk model olmayan bir yetkiyi denemeye calisip tur harcamaz; sunulan her arac yine de
+cagrildiginda `PolitikaMotoru` kontrolunden gecer (sema gorunurlugu yetki degildir).
+"""
+
+from __future__ import annotations
+
+import asyncio
+from collections.abc import Callable
+from typing import Any
+
+from app.agent.checkpoints import CheckpointDeposu
+from app.agent.dosyalar import AjanDosyaAraclari, KokKapsami
+from app.agent.git_araclari import GitAraclari
+from app.agent.policy import Istek, Karar, PolitikaMotoru, YanEtki
+from app.agent.terminal import KomutServisi
+from app.agent.workspaces import CalismaAlani
+from app.agent.yazma import YazmaAraclari, sonuc_veya_hata
+
+
+def _calisan_loop() -> asyncio.AbstractEventLoop | None:
+    try:
+        return asyncio.get_running_loop()
+    except RuntimeError:
+        return None
+
+
+def _fonk(ad: str, aciklama: str, ozellikler: dict, zorunlu: list[str]) -> dict:
+    return {
+        "type": "function",
+        "function": {
+            "name": ad,
+            "description": aciklama,
+            "parameters": {"type": "object", "properties": ozellikler, "required": zorunlu},
+        },
+    }
+
+
+S = {"type": "string"}
+I = {"type": "integer"}  # noqa: E741
+B = {"type": "boolean"}
+
+OKUMA_SEMALARI = [
+    _fonk(
+        "proje_dosya_oku",
+        "Proje icindeki bir metin dosyasini SATIR NUMARALARIYLA okur. Uzunsa sonraki_satir ile "
+        "devam et. Dosyayi degistirmeden once mutlaka oku.",
+        {"yol": S, "baslangic_satir": I, "satir_sayisi": I},
+        ["yol"],
+    ),
+    _fonk(
+        "proje_listele",
+        "Proje klasorunun icerigini listeler (gitignore ve .git/node_modules atlanir).",
+        {"yol": S, "derinlik": I},
+        [],
+    ),
+    _fonk(
+        "proje_glob",
+        "Dosya adi desenine gore dosya bulur. Ornek: '**/*.py', 'src/**/*.ts'.",
+        {"desen": S, "klasor": S},
+        ["desen"],
+    ),
+    _fonk(
+        "proje_ara",
+        "Dosya ICERIGINDE duzenli ifade arar; dosya:satir:metin dondurur.",
+        {"desen": S, "klasor": S, "dosya_deseni": S},
+        ["desen"],
+    ),
+    _fonk("git_durum", "Calisma agaci durumu: dal ve degismis dosyalar.", {"klasor": S}, []),
+    _fonk("git_diff", "Degisikliklerin farki (unified diff).", {"klasor": S, "staged": B}, []),
+    _fonk("git_gecmis", "Son commitler (tek satir).", {"klasor": S, "adet": I}, []),
+]
+
+YAZMA_SEMALARI = [
+    _fonk(
+        "proje_dosya_yaz",
+        "Dosya olusturur ya da uzerine yazar. VAR OLAN dosyada once proje_dosya_oku ile okuyup "
+        "`beklenen_hash` gondermelisin; yoksa islem reddedilir.",
+        {"yol": S, "icerik": S, "beklenen_hash": S},
+        ["yol", "icerik"],
+    ),
+    _fonk(
+        "proje_dosya_yama",
+        "Dosyadaki BENZERSIZ bir metin parcasini degistirir (en guvenli duzenleme yolu). "
+        "`eski_metin` dosyada tam olarak bir kez gecmeli; girinti birebir ayni olmali.",
+        {"yol": S, "eski_metin": S, "yeni_metin": S, "beklenen_hash": S},
+        ["yol", "eski_metin", "yeni_metin"],
+    ),
+    _fonk(
+        "proje_dosya_tasi",
+        "Dosyayi tasir / yeniden adlandirir.",
+        {"kaynak": S, "hedef": S},
+        ["kaynak", "hedef"],
+    ),  # fmt: skip
+    _fonk(
+        "proje_dosya_sil",
+        "Dosyayi siler (geri alinabilir checkpoint olusur).",
+        {"yol": S, "beklenen_hash": S},
+        ["yol"],
+    ),  # fmt: skip
+]
+
+KOMUT_SEMALARI = [
+    _fonk(
+        "komut_calistir",
+        "Proje klasorunde bir kabuk komutu calistirir (test, lint, build). Cikti ve GERCEK cikis "
+        "kodu doner. Uzun surecek is icin arka_plan=true kullan, sonra komut_durumu ile bak.",
+        {"komut": S, "klasor": S, "timeout": I, "arka_plan": B},
+        ["komut"],
+    ),
+    _fonk(
+        "komut_durumu",
+        "Arka plandaki komutun durumunu ve ciktisini doner.",
+        {"is_id": S},
+        ["is_id"],
+    ),  # fmt: skip
+    _fonk(
+        "komut_durdur", "Calisan komutu ve TUM alt sureclerini durdurur.", {"is_id": S}, ["is_id"]
+    ),  # fmt: skip
+]
+
+
+class AjanAracKaydi:
+    """Aktif calisma alani + politika icin arac semalari ve isleyicileri uretir."""
+
+    def __init__(
+        self,
+        alan: CalismaAlani,
+        politika: PolitikaMotoru,
+        checkpointler: CheckpointDeposu,
+        komutlar: KomutServisi,
+        oturum_id: str = "",
+        loop: asyncio.AbstractEventLoop | None = None,
+    ) -> None:
+        self.alan = alan
+        self.politika = politika
+        self.kapsam = KokKapsami(alan.izinli_kokler)
+        self.okuma = AjanDosyaAraclari(self.kapsam)
+        self.git = GitAraclari(self.kapsam)
+        self.yazma = YazmaAraclari(self.kapsam, politika, alan, checkpointler, oturum_id)
+        self.komutlar = komutlar
+        self.loop = loop or _calisan_loop()
+
+    # ---- gorunurluk ----
+    def _acik_mi(self, arac: str, yan_etki: YanEtki) -> bool:
+        """Politika bu yan etkiyi KESIN reddediyorsa arac modele sunulmaz."""
+        sonuc = self.politika.degerlendir(Istek(arac=arac, yan_etki=yan_etki, ozet=arac), self.alan)
+        return sonuc.karar is not Karar.ret
+
+    def semalar(self) -> list[dict]:
+        semalar = list(OKUMA_SEMALARI)
+        if self._acik_mi("proje_dosya_yaz", YanEtki.yaz):
+            semalar += YAZMA_SEMALARI
+        if self._acik_mi("komut_calistir", YanEtki.komut):
+            semalar += KOMUT_SEMALARI
+        return semalar
+
+    # ---- isleyiciler ----
+    def isleyiciler(self) -> dict[str, Callable[..., Any]]:
+        h: dict[str, Callable[..., Any]] = {
+            "proje_dosya_oku": self.okuma.dosya_oku,
+            "proje_listele": self.okuma.klasor_listele,
+            "proje_glob": self.okuma.glob_bul,
+            "proje_ara": self.okuma.icerik_ara,
+            "git_durum": self.git.git_durum,
+            "git_diff": self.git.git_diff,
+            "git_gecmis": self.git.git_gecmis,
+        }
+        acik = {s["function"]["name"] for s in self.semalar()}
+        if "proje_dosya_yaz" in acik:
+            h |= {
+                "proje_dosya_yaz": lambda **kw: sonuc_veya_hata(self.yazma.dosya_yaz, **kw),
+                "proje_dosya_yama": lambda **kw: sonuc_veya_hata(self.yazma.dosya_yama, **kw),
+                "proje_dosya_tasi": lambda **kw: sonuc_veya_hata(self.yazma.dosya_tasi, **kw),
+                "proje_dosya_sil": lambda **kw: sonuc_veya_hata(self.yazma.dosya_sil, **kw),
+            }
+        if "komut_calistir" in acik:
+            h |= {
+                "komut_calistir": self.komut_calistir,
+                "komut_durumu": self.komut_durumu,
+                "komut_durdur": self.komut_durdur,
+            }
+        return h
+
+    # ---- komut araclari (arac arayuzu senkron, surecler UYGULAMANIN loop'unda) ----
+    def _coro_calistir(self, coro, sure: float) -> Any:
+        """Isleyiciler `asyncio.to_thread` ile calistigi icin burada loop yoktur.
+
+        Coroutine UYGULAMANIN loop'una gonderilir: boylece arka plan isleri komut bitince
+        kapanan gecici bir loop'a baglanmaz (yoksa `komut_durumu` olu loop'a bakardi).
+        """
+        if self.loop is not None and self.loop.is_running():
+            return asyncio.run_coroutine_threadsafe(coro, self.loop).result(timeout=sure)
+        return asyncio.run(coro)  # loop yoksa (test/CLI) tek seferlik
+
+    def komut_calistir(
+        self, komut: str, klasor: str = "", timeout: int = 120, arka_plan: bool = False
+    ) -> dict:
+        def _is() -> dict:
+            cwd = self.kapsam.coz(klasor, varsayilan=".")
+            if not cwd.is_dir():
+                cwd = cwd.parent
+            self.politika.uygula(
+                Istek(
+                    arac="komut_calistir",
+                    yan_etki=YanEtki.komut,
+                    yol=str(cwd),
+                    komut=komut,
+                    ozet=f"Komut: {komut}",
+                ),
+                self.alan,
+            )
+
+            async def calistir() -> dict:
+                is_ = await self.komutlar.baslat(komut, cwd, timeout=timeout, arka_plan=arka_plan)
+                if arka_plan:
+                    return {
+                        **self.komutlar.ozet(is_),
+                        "not": "Arka planda calisiyor; komut_durumu ile kontrol et.",
+                    }
+                await self.komutlar.bekle(is_)
+                return self.komutlar.ozet(is_)
+
+            return self._coro_calistir(calistir(), sure=min(timeout, 900) + 30)
+
+        return sonuc_veya_hata(_is)
+
+    def komut_durumu(self, is_id: str) -> dict:
+        return sonuc_veya_hata(lambda: self.komutlar.ozet(self.komutlar.getir(is_id)))
+
+    def komut_durdur(self, is_id: str) -> dict:
+        return sonuc_veya_hata(lambda: self._coro_calistir(self.komutlar.durdur(is_id), sure=30))
