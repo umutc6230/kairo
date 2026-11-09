@@ -52,11 +52,20 @@ Python 3.12 + FastAPI + pywebview; arayuz vanilla JS. Paketleme: PORTABLE (kulla
       --network none, yalniz proje koku bagli, cap-drop ALL, no-new-privileges, --pull=never). Konteyner
       kullanilamazsa komut CALISMAZ (sessiz dusus yok). Izolasyon yoksa otomatik modda da komut onay
       ister. Proje/izin penceresinde secim + durum. tests/test_a1_8_izolasyon.py 9 test
-- [ ] A3 kalici Run/Step ajan dongusu  <- SIRADAKI
-- [ ] A4 baglam/hafiza/model profilleri | A5 ajan ekrani
+- [x] A3 kalici ajan dongusu (app/agent/runner.py): Run/Adim diske atomik; yan etkiden ONCE niyet
+      kaydi, cokme sonrasi belirsiz -> kullanici karari (tamamlandi/atla/tekrarla), otomatik tekrar YOK;
+      adim/sure/token butcesi, ayni hata ve ilerlemesizlik siniri; duraklat/devam/iptal/tekrar ayri;
+      calisirken yonlendirme kuyrugu; onay bekleyince durur, onay verilince ayni adimdan surer;
+      basarili icin arac kaniti (basarisiz test kanit olamaz), yoksa dogrulanmadi. API /api/gorevler.
+      tests/test_a3_ajan.py 18 test
+- [ ] A4 baglam/hafiza/model profilleri  <- SIRADAKI
+- [ ] A5 ajan ekrani
 - [ ] A6 skills/komut/hooks | A7 MCP/plugin/mods | A8 alt ajanlar | A9-A12 | A13 kalite kapisi
 
 ## Son oturum
+- 2026-11-09 (9): A3 tamamlandi (backend + API; ekran A5). Model genel {islem} rotasi /karar'i
+  yutuyordu: ozel rota once tanimlandi. 330 test, %92. Gercek E4B ile cok dosyali canli gorev
+  arka planda denendi (sonuc asagida).
 - 2026-11-09 (8): A1.8 tamamlandi. Bu makinede Podman 5.8.3 kurulu ama makine yok (podman machine
   init/start + imaj pull kullanicinin elle yapacagi indirme); WSL2 Ubuntu var. Bulgu: /web statik
   dosyalari Cache-Control'suz sunuluyordu, tarayici guncellemeden sonra ESKI JS calistiriyordu ->
@@ -105,7 +114,7 @@ Python 3.12 + FastAPI + pywebview; arayuz vanilla JS. Paketleme: PORTABLE (kulla
 
 ## Siradaki adim
 - Kullanici anahtar girince OpenRouter ile gercek sohbet + Test denemesi.
-- A3 kalici Run/Step ajan dongusu (AGENT-GELISTIRME-TALIMATI.md A3).
+- A4 baglam, hafiza ve model profilleri (AGENT-GELISTIRME-TALIMATI.md A4); sonra A5 ajan ekrani.
 - Konteyneri gercekten denemek icin (kullanici onayiyla, indirme): podman machine init; podman machine start; podman pull python:3.12-slim
 - Arayuz: checkpoint ekraninda hunk secip geri alma, arka plan komutuna girdi kutusu.
 - A1.8 gercek izolasyon: su an "yok" olarak raporlaniyor. A2 terminaliyle birlikte kisitli

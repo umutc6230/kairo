@@ -22,6 +22,7 @@ from app import URUN_ADI, URUN_SAHIBI, URUN_SAHIBI_GITHUB, URUN_SAHIBI_X, __vers
 from app.agent.checkpoints import CheckpointDeposu
 from app.agent.izolasyon import adaptor_olustur
 from app.agent.policy import PolitikaMotoru, yerel_host_mu
+from app.agent.runner import AgentRunner, Butce, RunDeposu, RunDurum, olay_akisi
 from app.agent.terminal import KomutServisi
 from app.agent.workspaces import Guven, Mod, WorkspaceDeposu
 from app.config import web_dizini
@@ -75,6 +76,21 @@ class GuvenIstegi(BaseModel):
 
 class OnayIstegi(BaseModel):
     onayla: bool
+
+
+class GorevIstegi(BaseModel):
+    hedef: str = Field(min_length=1, max_length=8000)
+    kabul: list[str] = Field(default=[], max_length=20)
+    butce: Butce = Field(default_factory=Butce)
+
+
+class GorevMesaji(BaseModel):
+    metin: str = Field(min_length=1, max_length=4000)
+
+
+class KararIstegi(BaseModel):
+    adim: int
+    karar: str
 
 
 class TazeStatik(StaticFiles):
@@ -197,6 +213,22 @@ def uygulama_olustur(
         checkpointler,
         komutlar,
     )
+
+    def ajan_baglami(hedef: str) -> tuple[str, list, dict]:
+        alan = sohbet.aktif_alan()
+        if sohbet.ajan_araclari(alan) is None:
+            raise UygulamaHatasi("Ajan gorevi icin once bir proje acin.")
+        sistem, araclar_, isleyiciler, _ = sohbet.baglam_hazirla(ayarlar.oku(), hedef, [])
+        return sistem, araclar_, isleyiciler
+
+    def onay_durumu(onay_id: str) -> str:
+        return next(
+            (o["karar"] for o in politika.onaylar.gecmis(500) if o["id"] == onay_id), "bekliyor"
+        )
+
+    run_deposu = RunDeposu(veri_dizini)
+    run_deposu.kurtar()  # onceki oturumda yarim kalanlar: belirsiz yan etki kullaniciya sorulur
+    ajan = AgentRunner(run_deposu, ajan_baglami, lambda: yonetici.kullan(), onay_durumu)
     isitmalar: set[asyncio.Task] = set()
     agecidi = AgGecidi(agecidi_uygulamasi(yonetici, ayarlar, kapat))
     magaza = magaza or Magaza()
@@ -209,6 +241,7 @@ def uygulama_olustur(
         if a.sunucu_acik:
             await agecidi.baslat(a.sunucu_port)
         yield
+        await ajan.kapat()  # calisan gorevler guvenli sinirda duraklatilir
         await komutlar.hepsini_durdur()  # yetim test/dev-server surecleri kalmasin
         await agecidi.durdur()
         await yonetici.kapat()  # yalniz bizim baslattigimiz model sunucusunu durdurur
@@ -618,7 +651,53 @@ def uygulama_olustur(
 
     @app.post("/api/onaylar/{onay_id}")
     async def onay_karar(onay_id: str, istek: OnayIstegi) -> dict:
-        return politika.onaylar.karar_ver(onay_id, istek.onayla).model_dump(mode="json")
+        sonuc = politika.onaylar.karar_ver(onay_id, istek.onayla).model_dump(mode="json")
+        for r in run_deposu.liste():  # bu onayi bekleyen ajan gorevi kaldigi yerden surer
+            if r.durum is RunDurum.onay_bekliyor and any(a.onay_id == onay_id for a in r.adimlar):
+                await ajan.devam(r.id)
+        return sonuc
+
+    # ---- ajan gorevleri (A3) ----
+    @app.post("/api/gorevler")
+    async def gorev_baslat(istek: GorevIstegi) -> dict:
+        ajan_baglami(istek.hedef)  # proje yoksa hemen Turkce hata
+        run = await ajan.baslat(
+            istek.hedef, istek.kabul, istek.butce, model=ayarlar.oku().aktif_model
+        )
+        return run.ozet()
+
+    @app.get("/api/gorevler")
+    async def gorev_listesi() -> dict:
+        return {"gorevler": [r.ozet() for r in run_deposu.liste()[:50]]}
+
+    @app.get("/api/gorevler/{run_id}")
+    async def gorev_getir(run_id: str) -> dict:
+        return run_deposu.getir(run_id).ozet()
+
+    @app.get("/api/gorevler/{run_id}/olaylar")
+    async def gorev_olaylari(run_id: str) -> StreamingResponse:
+        run_deposu.getir(run_id)
+        return sse(olay_akisi(run_deposu, run_id))
+
+    @app.post("/api/gorevler/{run_id}/mesaj")
+    async def gorev_mesaj(run_id: str, istek: GorevMesaji) -> dict:
+        return (await ajan.mesaj(run_id, istek.metin)).ozet()
+
+    @app.post("/api/gorevler/{run_id}/karar")  # genel {islem} rotasindan ONCE tanimlanmali
+    async def gorev_karar(run_id: str, istek: KararIstegi) -> dict:
+        return (await ajan.karar(run_id, istek.adim, istek.karar)).ozet()
+
+    @app.post("/api/gorevler/{run_id}/{islem}")
+    async def gorev_islem(run_id: str, islem: str) -> dict:
+        fonk = {
+            "duraklat": ajan.duraklat,
+            "devam": ajan.devam,
+            "iptal": ajan.iptal,
+            "tekrar": ajan.tekrar,
+        }.get(islem)
+        if fonk is None:
+            raise UygulamaHatasi("Islem: duraklat, devam, iptal ya da tekrar.")
+        return (await fonk(run_id)).ozet()
 
     # ---- checkpoint / geri alma (A2.7) ----
     @app.get("/api/checkpointler")
