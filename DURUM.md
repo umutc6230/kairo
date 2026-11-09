@@ -58,11 +58,25 @@ Python 3.12 + FastAPI + pywebview; arayuz vanilla JS. Paketleme: PORTABLE (kulla
       calisirken yonlendirme kuyrugu; onay bekleyince durur, onay verilince ayni adimdan surer;
       basarili icin arac kaniti (basarisiz test kanit olamaz), yoksa dogrulanmadi. API /api/gorevler.
       tests/test_a3_ajan.py 18 test
-- [ ] A4 baglam/hafiza/model profilleri  <- SIRADAKI
+- [x] A4: model yetenek profili (app/agent/yetenek.py: araclar/json/goruntu/dusunme/baglam/tokenizer;
+      aracsiz modelle gorev baslamaz, desteklenmeyen dusunme acik hata); baglam butce dokumu (sistem/
+      arac/mesaj/kanit/cevap) run.baglam'da; runner'da kural tabanli ozet (app/agent/ozet.py: hedef,
+      kabul, kullanici kisitlari, plan, adimlar, dosya/hash (ESKI notuyla), acik hatalar, sonraki eylem;
+      gecersiz ozet eski baglamin yerine gecmez; cikarilan mesajlar runs/<id>.arsiv.jsonl);
+      hafiza (app/services/hafiza.py: kaynak/tarih/kapsam/guven/gecerlilik, sir reddi, CRUD + disa
+      aktar, otomatik ogrenme varsayilan KAPALI; Ayarlar > Hafiza sekmesi); oturum catal/temizle/disa
+      aktar (temizle hafizaya dokunmaz); /api/model/yetenek. tests/test_a4_baglam.py 14 test
+- [ ] A4 ertelenen: alt klasor talimat kapsami (A4.2), arac/skill tanimlarini ihtiyaca gore yukleme (A4.6)
+- [ ] A5 ajan ekrani, review ve artifacts  <- SIRADAKI
 - [ ] A5 ajan ekrani
 - [ ] A6 skills/komut/hooks | A7 MCP/plugin/mods | A8 alt ajanlar | A9-A12 | A13 kalite kapisi
 
 ## Son oturum
+- 2026-11-09 (10): A4 tamamlandi. Canli: OpenRouter nemotron-3-ultra:free, 9K baglam, 2 ozet,
+  BASARILI (14 adim, 97 sn, kanit=gecen test, en fazla %84 dolu). Bulgular: ozet dosya/hash'i
+  2000 karaktere kirpilmis sonuctan parse ediyordu (buyuk okumada kayboluyordu) -> Adim.dosya/hash
+  alanlari; token butcesi (400K) cagri basina baglam toplami oldugu icin 32K'da ~16 cagrida
+  doluyordu -> 2M. 347 test, %92.
 - 2026-11-09 (9): A3 tamamlandi (backend + API; ekran A5). Genel {islem} rotasi /karar'i
   yutuyordu: ozel rota once tanimlandi. CANLI KABUL (2 dosya, 3 hata, pytest):
   * Yerel E4B: BASARISIZ, 40 adim butcesi doldu (28 dk); 16 yama reddedildi.
@@ -128,7 +142,7 @@ Python 3.12 + FastAPI + pywebview; arayuz vanilla JS. Paketleme: PORTABLE (kulla
 ## Siradaki adim
 - Kullanici anahtar girince OpenRouter ile gercek sohbet + Test denemesi.
 - Yerel E4B ile canli gorevi duzeltmelerden sonra tekrar dene (RAM bosken; ~30 dk).
-- A4 baglam, hafiza ve model profilleri (AGENT-GELISTIRME-TALIMATI.md A4); sonra A5 ajan ekrani.
+- A5 ajan calisma ekrani, review ve artifacts (AGENT-GELISTIRME-TALIMATI.md A5).
 - Konteyneri gercekten denemek icin (kullanici onayiyla, indirme): podman machine init; podman machine start; podman pull python:3.12-slim
 - Arayuz: checkpoint ekraninda hunk secip geri alma, arka plan komutuna girdi kutusu.
 - A1.8 gercek izolasyon: su an "yok" olarak raporlaniyor. A2 terminaliyle birlikte kisitli

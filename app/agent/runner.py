@@ -28,6 +28,8 @@ from typing import Any
 from loguru import logger
 from pydantic import BaseModel, Field
 
+from app.agent.ozet import mesaj_token, ozetle_gerekirse
+from app.agent.yetenek import ModelYetenegi, butce_dokumu, dogrula, tahmini_token
 from app.exceptions import Bulunamadi, UygulamaHatasi
 from app.services.depo import json_oku, json_yaz
 
@@ -43,6 +45,8 @@ YAN_ETKILI = {
     "git_commit",
 }
 DEGISTIREN = {"proje_dosya_yaz", "proje_dosya_yama", "proje_dosya_tasi", "proje_dosya_sil"}
+VARSAYILAN_BAGLAM = 16384
+CEVAP_TOKEN = 2048
 GECICI_HATA_DENEME = 2  # model kesintisinde sinirli yeniden deneme
 BEKLEME_SN = (5.0, 15.0)  # istek siniri (429) icin kisa bekleme yetmiyor
 SONUC_SINIRI = 6000
@@ -77,7 +81,8 @@ class AdimDurum(StrEnum):
 class Butce(BaseModel):
     max_adim: int = Field(default=40, ge=1, le=500)
     max_sure_sn: int = Field(default=1800, ge=10, le=24 * 3600)
-    max_token: int = Field(default=400_000, ge=1000, le=10_000_000)
+    # cagri basina gonderilen baglamin TOPLAMI; 32K baglamda ~60 cagri
+    max_token: int = Field(default=2_000_000, ge=1000, le=20_000_000)
     max_ayni_hata: int = Field(default=2, ge=1, le=10)
     max_ilerlemesiz: int = Field(default=3, ge=1, le=10)
 
@@ -105,6 +110,8 @@ class Adim(BaseModel):
     sonuc: str = ""
     onay_id: str = ""
     cikis_kodu: int | None = None  # komut adimlarinda gercek cikis kodu
+    dosya: str = ""  # okunan/yazilan dosya (ozet icin; kirpilmis sonuctan parse edilmez)
+    hash: str = ""
     zaman: str = Field(default_factory=lambda: datetime.now().isoformat(timespec="seconds"))
 
 
@@ -131,6 +138,8 @@ class Run(BaseModel):
     sonuc: Sonuc = Field(default_factory=Sonuc)
     hata: str = ""
     ilerlemesiz: int = 0
+    baglam: dict = {}  # son model cagrisinin butce dokumu (A4.1)
+    ozet_sayisi: int = 0
     hata_sayaci: dict[str, int] = {}
     olusturma: str = Field(default_factory=lambda: datetime.now().isoformat(timespec="seconds"))
     guncelleme: str = ""
@@ -193,10 +202,6 @@ def _json_onar(ham: str) -> dict | None:
     except json.JSONDecodeError:
         return None
     return v if isinstance(v, dict) else None
-
-
-def _tahmini_token(metin: str) -> int:
-    return len(metin) // 3 + 1
 
 
 class RunDeposu:
@@ -262,12 +267,16 @@ class AgentRunner:
         llm: LLMSaglayici,
         onay_durumu: Callable[[str], str] | None = None,
         bekleme: tuple[float, ...] = BEKLEME_SN,
+        yetenek: Callable[[], ModelYetenegi] | None = None,
+        hafiza: Callable[[], str] | None = None,
     ) -> None:
         self.depo = depo
         self.araclar = araclar
         self.llm = llm
         self.onay_durumu = onay_durumu or (lambda _id: "bekliyor")
         self.bekleme = bekleme
+        self.yetenek = yetenek
+        self.hafiza = hafiza or (lambda: "")
         self._gorevler: dict[str, asyncio.Task] = {}
         self._iptal: set[str] = set()
         self._duraklat: set[str] = set()
@@ -286,6 +295,8 @@ class AgentRunner:
         butce: Butce | None = None,
         model: str = "",
     ) -> Run:
+        if self.yetenek is not None:  # aracsiz modelle gorev baslamaz (acik hata)
+            dogrula(self.yetenek(), araclar_gerekli=True)
         if not hedef.strip():
             raise UygulamaHatasi("Gorev hedefi bos olamaz.")
         run = Run(hedef=hedef.strip(), kabul=kabul or [], butce=butce or Butce(), model=model)
@@ -410,6 +421,8 @@ class AgentRunner:
     def _arac_mesaji(self, run: Run, a: Adim, sonuc: Any) -> None:
         if isinstance(sonuc, dict) and isinstance(sonuc.get("cikis_kodu"), int):
             a.cikis_kodu = sonuc["cikis_kodu"]  # kanit kontrolu kirpilmis metne guvenmez
+        if isinstance(sonuc, dict) and (h := sonuc.get("yeni_hash") or sonuc.get("hash")):
+            a.dosya, a.hash = str(sonuc.get("goreli") or sonuc.get("dosya") or ""), str(h)
         # model kanit gosterirken adim numarasini bilmeli; yoksa numara uyduruyor (canli bulgu)
         sonuc = (
             {"adim": a.no, **sonuc} if isinstance(sonuc, dict) else {"adim": a.no, "sonuc": sonuc}
@@ -435,6 +448,8 @@ class AgentRunner:
         bas = time.monotonic() - run.kullanim.sure_sn
         try:
             sistem, semalar, isleyiciler = self.araclar(run.hedef)
+            if hafiza := self.hafiza():
+                sistem = f"{sistem}\n\n{hafiza}".strip()
             semalar = [*semalar, *RUNNER_ARACLARI]
             run.durum = RunDurum.calisiyor
             self.depo.kaydet(run)
@@ -536,14 +551,45 @@ class AgentRunner:
             )
         return a
 
+    def _baglami_hazirla(self, run: Run, sistem: str, semalar: list[dict]) -> bool:
+        """Butceyi hesaplar; gerekirse ozetler, sonra eski arac sonuclarini kisaltir.
+        Hala sigmiyorsa istegi KORLEMESINE gondermez: gorev basarisiz olur (A0.6, A4.1)."""
+        baglam = self.yetenek().baglam if self.yetenek else VARSAYILAN_BAGLAM
+        sabit = tahmini_token(sistem) + tahmini_token(json.dumps(semalar, ensure_ascii=False))
+        mesaj_siniri = baglam - sabit - CEVAP_TOKEN
+        if mesaj_siniri <= 0:
+            run.durum = RunDurum.basarisiz
+            run.hata = f"Baglam ({baglam}) talimat ve arac tanimlarina bile yetmiyor; buyutun."
+            return False
+        if ozetle_gerekirse(run, mesaj_siniri, self.depo.dizin / f"{run.id}.arsiv.jsonl"):
+            run.ozet_sayisi += 1
+            run.guncellemeler.append("Baglam doldu: eski adimlar ozetlendi (arsivde duruyor).")
+        for m in run.mesajlar[:-2]:  # son iki mesaj ham kalir
+            if mesaj_token(run.mesajlar) <= mesaj_siniri:
+                break
+            if m.get("role") == "tool" and len(str(m.get("content", ""))) > 300:
+                m["content"] = json.dumps(
+                    {"truncated": True, "not": "Eski arac sonucu baglama sigmadi; gerekirse "
+                     "araci tekrar cagir."}, ensure_ascii=False,
+                )  # fmt: skip
+        run.baglam = butce_dokumu(sistem, semalar, run.mesajlar, CEVAP_TOKEN, baglam)
+        if run.baglam["toplam"] > baglam:
+            run.durum = RunDurum.basarisiz
+            run.hata = f"Baglam yetersiz ({run.baglam['toplam']}/{baglam} token); buyutun."
+            return False
+        return True
+
     async def _model(self, run: Run, sistem: str, semalar: list[dict]) -> dict | None:
         from app.services.yerel_llm import ModelCevapHatasi, SunucuKapali
 
-        gonderilen = [{"role": "system", "content": f"{SISTEM}\n\n{sistem}".strip()}, *run.mesajlar]
+        sistem_metni = f"{SISTEM}\n\n{sistem}".strip()
+        if not self._baglami_hazirla(run, sistem_metni, semalar):
+            return None
+        gonderilen = [{"role": "system", "content": sistem_metni}, *run.mesajlar]
         for deneme in range(GECICI_HATA_DENEME + 1):
             try:
                 async with self._kilit, self.llm() as llm:
-                    secim = await llm.sohbet(gonderilen, tools=semalar, max_tokens=2048)
+                    secim = await llm.sohbet(gonderilen, tools=semalar, max_tokens=CEVAP_TOKEN)
                 break
             except (SunucuKapali, ModelCevapHatasi) as e:
                 gecici = (
@@ -559,8 +605,8 @@ class AgentRunner:
                 await asyncio.sleep(self.bekleme[min(deneme, len(self.bekleme) - 1)])
         run.kullanim.model_cagrisi += 1
         mesaj = secim.get("message") or {}
-        run.kullanim.token += _tahmini_token(json.dumps(gonderilen, ensure_ascii=False)) + (
-            _tahmini_token(json.dumps(mesaj, ensure_ascii=False))
+        run.kullanim.token += tahmini_token(json.dumps(gonderilen, ensure_ascii=False)) + (
+            tahmini_token(json.dumps(mesaj, ensure_ascii=False))
         )
         return mesaj
 

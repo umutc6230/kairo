@@ -25,6 +25,7 @@ from app.agent.policy import PolitikaMotoru, yerel_host_mu
 from app.agent.runner import AgentRunner, Butce, RunDeposu, RunDurum, olay_akisi
 from app.agent.terminal import KomutServisi
 from app.agent.workspaces import Guven, Mod, WorkspaceDeposu
+from app.agent.yetenek import ModelYetenegi, dogrula, uzak_yetenek, yerel_yetenek
 from app.config import web_dizini
 from app.exceptions import GecersizEk, OnayGerekli, UygulamaHatasi, YerelLLMHatasi
 from app.services import ekler as ekler_modulu
@@ -33,6 +34,7 @@ from app.services.agecidi import AgGecidi, agecidi_uygulamasi
 from app.services.araclar import ARACLAR, ORNEK_ISTEMLER
 from app.services.ayarlar import AyarDeposu
 from app.services.ekler import EkDeposu
+from app.services.hafiza import HafizaDeposu
 from app.services.model_magaza import Indirici, Magaza, ModelKaydi, uyumluluk
 from app.services.model_yonetici import LLMFabrikasi, ModelYonetici
 from app.services.openrouter import OpenRouterDeposu
@@ -86,6 +88,28 @@ class GorevIstegi(BaseModel):
 
 class GorevMesaji(BaseModel):
     metin: str = Field(min_length=1, max_length=4000)
+
+
+HAFIZA_ARACI = {
+    "type": "function",
+    "function": {
+        "name": "hafizaya_ekle",
+        "description": "Sonraki oturumlarda isine yarayacak KALICI bir proje bilgisini kaydeder "
+        "(or. 'testler pytest -q ile calisir'). Sir, gecici durum ya da tahmin yazma.",
+        "parameters": {
+            "type": "object",
+            "properties": {"metin": {"type": "string"}},
+            "required": ["metin"],
+        },
+    },
+}
+
+
+class HafizaIstegi(BaseModel):
+    metin: str = Field(min_length=1, max_length=1000)
+    kapsam: str = Field(default="genel", max_length=40)
+    guven: str = "orta"
+    gecerlilik: str | None = None
 
 
 class KararIstegi(BaseModel):
@@ -214,12 +238,32 @@ def uygulama_olustur(
         komutlar,
     )
 
+    hafiza = HafizaDeposu(veri_dizini)
+    sohbet.hafiza = hafiza
+
     def ajan_baglami(hedef: str) -> tuple[str, list, dict]:
         alan = sohbet.aktif_alan()
         if sohbet.ajan_araclari(alan) is None:
             raise UygulamaHatasi("Ajan gorevi icin once bir proje acin.")
-        sistem, araclar_, isleyiciler, _ = sohbet.baglam_hazirla(ayarlar.oku(), hedef, [])
+        a = ayarlar.oku()
+        sistem, araclar_, isleyiciler, _ = sohbet.baglam_hazirla(a, hedef, [])
+        if a.otomatik_ogrenme:  # kullanici actiysa ajan kalici not ekleyebilir (dusuk guven)
+            araclar_ = [*araclar_, HAFIZA_ARACI]
+
+            def hafizaya_ekle(metin: str) -> dict:
+                try:
+                    return hafiza.ekle(metin, kaynak="ajan", guven="dusuk", kapsam=alan.id)
+                except UygulamaHatasi as e:
+                    return {"hata": e.mesaj}
+
+            isleyiciler = {**isleyiciler, "hafizaya_ekle": hafizaya_ekle}
         return sistem, araclar_, isleyiciler
+
+    def model_yetenegi() -> ModelYetenegi:
+        a = ayarlar.oku()
+        if a.saglayici == "openrouter" and a.or_model:
+            return uzak_yetenek(a.or_model, openrouter.liste_yolu)
+        return yerel_yetenek(a.model, a.baglam_token)
 
     def onay_durumu(onay_id: str) -> str:
         return next(
@@ -228,7 +272,16 @@ def uygulama_olustur(
 
     run_deposu = RunDeposu(veri_dizini)
     run_deposu.kurtar()  # onceki oturumda yarim kalanlar: belirsiz yan etki kullaniciya sorulur
-    ajan = AgentRunner(run_deposu, ajan_baglami, lambda: yonetici.kullan(), onay_durumu)
+    ajan = AgentRunner(
+        run_deposu,
+        ajan_baglami,
+        lambda: yonetici.kullan(),
+        onay_durumu,
+        yetenek=model_yetenegi,
+        hafiza=lambda: (
+            hafiza.sistem_metni(sohbet.aktif_alan().id) if ayarlar.oku().hafiza_acik else ""
+        ),
+    )
     isitmalar: set[asyncio.Task] = set()
     agecidi = AgGecidi(agecidi_uygulamasi(yonetici, ayarlar, kapat))
     magaza = magaza or Magaza()
@@ -417,6 +470,57 @@ def uygulama_olustur(
     @app.get("/api/oturumlar/{oturum_id}")
     async def oturum_getir(oturum_id: str) -> dict:
         return oturumlar.getir(oturum_id).model_dump()
+
+    # ---- oturum catal / temizle / disa aktar (A4.5); temizle hafizaya dokunmaz ----
+    @app.post("/api/oturumlar/{oturum_id}/catal")
+    async def oturum_catal(oturum_id: str) -> dict:
+        return oturumlar.catal(oturum_id).model_dump()
+
+    @app.post("/api/oturumlar/{oturum_id}/temizle")
+    async def oturum_temizle(oturum_id: str) -> dict:
+        return oturumlar.temizle(oturum_id).model_dump()
+
+    @app.get("/api/oturumlar/{oturum_id}/disa-aktar")
+    async def oturum_disa_aktar(oturum_id: str, bicim: str = "json") -> Response:
+        if bicim == "md":
+            return Response(
+                oturumlar.disa_aktar_md(oturum_id),
+                media_type="text/markdown; charset=utf-8",
+                headers={"Content-Disposition": f'attachment; filename="sohbet-{oturum_id}.md"'},
+            )
+        return JSONResponse(
+            oturumlar.getir(oturum_id).model_dump(),
+            headers={"Content-Disposition": f'attachment; filename="sohbet-{oturum_id}.json"'},
+        )
+
+    # ---- hafiza (A4.4) ----
+    @app.get("/api/hafiza")
+    async def hafiza_listesi(kapsam: str | None = None) -> dict:
+        return {"kayitlar": hafiza.liste(kapsam)}
+
+    @app.post("/api/hafiza")
+    async def hafiza_ekle(istek: HafizaIstegi) -> dict:
+        return hafiza.ekle(istek.metin, **istek.model_dump(exclude={"metin"}))
+
+    @app.patch("/api/hafiza/{kayit_id}")
+    async def hafiza_guncelle(kayit_id: str, degisiklik: dict) -> dict:
+        return hafiza.guncelle(kayit_id, degisiklik)
+
+    @app.delete("/api/hafiza/{kayit_id}")
+    async def hafiza_sil(kayit_id: str) -> dict:
+        return hafiza.sil(kayit_id)
+
+    @app.get("/api/hafiza-disa-aktar")
+    async def hafiza_disa_aktar() -> JSONResponse:
+        return JSONResponse(
+            hafiza.disa_aktar(),
+            headers={"Content-Disposition": 'attachment; filename="hafiza.json"'},
+        )
+
+    # ---- model yetenegi (A4.7) ----
+    @app.get("/api/model/yetenek")
+    async def model_yetenek() -> dict:
+        return model_yetenegi().model_dump()
 
     @app.patch("/api/oturumlar/{oturum_id}")
     async def oturum_adlandir(oturum_id: str, istek: AdIstegi) -> dict:
@@ -661,6 +765,7 @@ def uygulama_olustur(
     @app.post("/api/gorevler")
     async def gorev_baslat(istek: GorevIstegi) -> dict:
         ajan_baglami(istek.hedef)  # proje yoksa hemen Turkce hata
+        dogrula(model_yetenegi(), araclar_gerekli=True, dusunme=ayarlar.oku().dusunme)
         run = await ajan.baslat(
             istek.hedef, istek.kabul, istek.butce, model=ayarlar.oku().aktif_model
         )

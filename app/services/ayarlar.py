@@ -80,6 +80,8 @@ class KullaniciAyarlari(BaseModel):
     saglayici: Literal["yerel", "openrouter"] = "yerel"
     or_model: str = Field(default="", max_length=200)  # OpenRouter model id (or. x/y:free)
     izolasyon: Literal["yok", "konteyner"] = "yok"  # A1.8: komutlar nerede calisir
+    hafiza_acik: bool = True  # kayitli notlar sisteme eklenir
+    otomatik_ogrenme: bool = False  # ajan kendi not ekleyebilir (A4.4: kullanici acar)
     konteyner_imaj: str = Field(
         default="python:3.12-slim", pattern=r"^[a-z0-9][a-z0-9._/:@-]{0,199}$"
     )

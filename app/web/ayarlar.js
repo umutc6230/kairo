@@ -1,7 +1,7 @@
 // AI Ayarlari, Hakkinda ve Arama pencereleri.
 import { ikon, ikonlariYerlestir } from "./ikonlar.js";
 import { kacir } from "./md.js";
-import { $, $$, api, bildir, durum, el, modal, onayla, sayi } from "./ortak.js";
+import { $, $$, api, bildir, durum, el, modal, onayla, sayi, sor } from "./ortak.js";
 
 let yenile = async () => {};
 export function ayarlarKur(cb) { yenile = cb; }
@@ -39,7 +39,7 @@ export function ayarlarAc(sekme = "ai") {
   const a = durum.ayarlar;
   const s = durum.sunucu || {};
   const govde = el(`<div>
-    <div class="sekmeler"><button class="sekme" data-sekme="ai">AI Ayarları</button><button class="sekme" data-sekme="hakkinda">Hakkında</button></div>
+    <div class="sekmeler"><button class="sekme" data-sekme="ai">AI Ayarları</button><button class="sekme" data-sekme="hafiza">Hafıza</button><button class="sekme" data-sekme="hakkinda">Hakkında</button></div>
     <div class="modal-govde" data-panel="ai">
       <div class="ayar-grup"><label>Sağlayıcı</label>
         <label class="secenek-kart ${a.saglayici !== "openrouter" ? "secili" : ""}"><input type="radio" name="ay-sag" value="yerel" ${a.saglayici !== "openrouter" ? "checked" : ""}><div><div class="ust">Yerel (llama.cpp) <span class="rozet yesil">internetsiz</span></div>
@@ -88,6 +88,15 @@ export function ayarlarAc(sekme = "ai") {
         <button class="btn" id="ay-durdur"><span data-ikon="durdur"></span>Sunucuyu durdur</button>
         <button class="btn tehlike" id="ay-harici" ${s.sunucu_acik && !s.bizim_sunucu ? "" : "hidden"}>Dışarıdan açılmış sunucuyu kapat</button></div></div>
     </div>
+    <div class="modal-govde" data-panel="hafiza" hidden>
+      <div class="anahtar-satir"><div><div>Hafızayı kullan</div><div class="ayar-not">Kayıtlı notlar sohbete ve ajan görevlerine eklenir. Notlar doğrulanmamış bilgi sayılır, kanıt yerine geçmez. Sohbeti temizlemek hafızayı silmez.</div></div>
+        <label class="anahtar"><input type="checkbox" id="hf-acik" ${a.hafiza_acik ? "checked" : ""}><span></span></label></div>
+      <div class="anahtar-satir"><div><div>Otomatik öğrenme</div><div class="ayar-not">Ajan, işine yarayacak kalıcı proje bilgilerini kendisi not edebilir (düşük güvenle). Gizli bilgi içeren not hiçbir zaman kaydedilmez.</div></div>
+        <label class="anahtar"><input type="checkbox" id="hf-ogrenme" ${a.otomatik_ogrenme ? "checked" : ""}><span></span></label></div>
+      <div class="satir"><input class="alan" id="hf-yeni" placeholder="Yeni not: ör. Testler pytest -q ile çalışır" style="flex:1" maxlength="1000">
+        <button class="btn" id="hf-ekle">Ekle</button><button class="btn" id="hf-disa">Dışa aktar</button></div>
+      <div id="hf-liste" class="ayar-grup"></div>
+    </div>
     <div class="modal-govde" data-panel="hakkinda" hidden>
       <div class="hakkinda-logo">${ikon("logo")}</div>
       <div><b style="font-size:18px">${kacir(durum.bilgi.urun)}</b> <span class="soluk">sürüm ${kacir(durum.bilgi.surum)}</span></div>
@@ -104,6 +113,63 @@ export function ayarlarAc(sekme = "ai") {
   };
   $$(".sekme", govde).forEach((b) => { b.onclick = () => sekmeAc(b.dataset.sekme); });
   sekmeAc(sekme);
+
+  // ---- Hafıza ----
+  const hafizaCiz = async () => {
+    const kap = $("#hf-liste", govde);
+    try {
+      const { kayitlar } = await api("/api/hafiza");
+      kap.innerHTML = kayitlar.map((k) => `<div class="secenek-kart ${k.aktif ? "" : "pasif"}" data-id="${kacir(k.id)}">
+        <div style="flex:1"><div class="ust"><span class="hf-metin">${kacir(k.metin)}</span></div>
+        <div class="alt"><span class="rozet">${kacir(k.kapsam)}</span> <span class="rozet">${kacir(k.kaynak)}</span> <span class="rozet">güven: ${kacir(k.guven)}</span> ${kacir(k.tarih.slice(0, 10))}${k.gecerlilik ? ` · ${kacir(k.gecerlilik)} tarihine kadar` : ""}</div></div>
+        <button class="btn" data-is="duzelt">Düzelt</button><button class="btn" data-is="ac">${k.aktif ? "Kapat" : "Aç"}</button><button class="btn tehlike" data-is="sil">Sil</button></div>`).join("")
+        || '<div class="ayar-not">Henüz not yok.</div>';
+      $$("[data-id]", kap).forEach((kart) => {
+        const id = kart.dataset.id;
+        const kayit = kayitlar.find((k) => k.id === id);
+        $$("[data-is]", kart).forEach((b) => {
+          b.onclick = async () => {
+            try {
+              if (b.dataset.is === "sil") {
+                if (!(await onayla("Notu sil", "Bu hafıza notu kalıcı olarak silinsin mi?", { evet: "Sil", tehlike: true }))) return;
+                await api(`/api/hafiza/${id}`, { method: "DELETE" });
+              } else if (b.dataset.is === "ac") {
+                await api(`/api/hafiza/${id}`, { method: "PATCH", govde: { aktif: !kayit.aktif } });
+              } else {
+                const yeni = await sor("Notu düzelt", kayit.metin);
+                if (!yeni || yeni === kayit.metin) return;
+                await api(`/api/hafiza/${id}`, { method: "PATCH", govde: { metin: yeni } });
+              }
+              hafizaCiz();
+            } catch (err) { bildir(err.message, "hata"); }
+          };
+        });
+      });
+    } catch (err) {
+      kap.innerHTML = `<span class="rozet kirmizi">hata</span> ${kacir(err.message)}`;
+    }
+  };
+  $("#hf-acik", govde).onchange = (e) => kaydet({ hafiza_acik: e.target.checked });
+  $("#hf-ogrenme", govde).onchange = (e) => kaydet({ otomatik_ogrenme: e.target.checked });
+  $("#hf-ekle", govde).onclick = async () => {
+    const g = $("#hf-yeni", govde);
+    if (!g.value.trim()) return;
+    try {
+      await api("/api/hafiza", { method: "POST", govde: { metin: g.value.trim() } });
+      g.value = "";
+      hafizaCiz();
+    } catch (err) { bildir(err.message, "hata"); }
+  };
+  $("#hf-disa", govde).onclick = async () => {
+    try {  // oturum basligi gerektigi icin duz <a download> kullanilamaz
+      const veri = await api("/api/hafiza-disa-aktar");
+      const url = URL.createObjectURL(new Blob([JSON.stringify(veri, null, 1)], { type: "application/json" }));
+      const a = Object.assign(document.createElement("a"), { href: url, download: "hafiza.json" });
+      a.click();
+      URL.revokeObjectURL(url);
+    } catch (err) { bildir(err.message, "hata"); }
+  };
+  hafizaCiz();
 
   const modelleriCiz = () => {
     $("#ay-modeller", govde).innerHTML = modelKartlari($("#ay-ara", govde).value, $("#ay-indirilen", govde).checked);

@@ -607,6 +607,7 @@ class SohbetServisi:
         self.politika = politika
         self.checkpointler = checkpointler
         self.komutlar = komutlar or KomutServisi()
+        self.hafiza = None  # HafizaDeposu (api baglar)
         self._kilitler: dict[str, asyncio.Lock] = {}
 
     def aktif_alan(self) -> CalismaAlani:
@@ -670,10 +671,16 @@ class SohbetServisi:
         )
         not_ = f"{SISTEM_NOTU}\n{kapsam_notu(alan)}" if ayar.sohbet_araclari else ""
         proje_talimati = self.proje_talimat_metni(alan)
+        hafiza = (
+            self.hafiza.sistem_metni(alan.id)
+            if self.hafiza is not None and getattr(ayar, "hafiza_acik", False)
+            else ""
+        )
         parcalar = (
             not_,
             talimat,
             proje_talimati,
+            hafiza,
             ayar.sistem_istemi,
             skill_listesi,
             skill_metni,

@@ -79,6 +79,25 @@ class OturumDeposu:
             raise Bulunamadi("Sohbet bulunamadi.")
         yol.unlink()
 
+    def catal(self, oturum_id: str) -> Oturum:
+        """Ayni gecmisle YENI oturum (fork); asil oturum degismez."""
+        asil = self.getir(oturum_id)
+        kopya = Oturum(baslik=f"{asil.baslik} (kopya)"[:120], mesajlar=list(asil.mesajlar))
+        return self.kaydet(kopya)
+
+    def temizle(self, oturum_id: str) -> Oturum:
+        """Mesajlari siler, oturum kalir. Kalici hafizaya DOKUNMAZ (A4.5)."""
+        o = self.getir(oturum_id)
+        o.mesajlar = []
+        return self.kaydet(o)
+
+    def disa_aktar_md(self, oturum_id: str) -> str:
+        o = self.getir(oturum_id)
+        satirlar = [f"# {o.baslik}", f"_olusturma: {o.olusturma}_", ""]
+        for m in o.mesajlar:
+            satirlar += [f"## {m.rol}", m.metin or "", ""]
+        return "\n".join(satirlar)
+
     def yeniden_adlandir(self, oturum_id: str, baslik: str) -> Oturum:
         oturum = self.getir(oturum_id)
         oturum.baslik = baslik.strip()[:80] or "Yeni sohbet"
