@@ -119,6 +119,27 @@ KOMUT_SEMALARI = [
     _fonk(
         "komut_durdur", "Calisan komutu ve TUM alt sureclerini durdurur.", {"is_id": S}, ["is_id"]
     ),  # fmt: skip
+    _fonk(
+        "komut_girdi",
+        "Arka planda calisan komutun stdin'ine bir satir yazar (soru soran script, REPL).",
+        {"is_id": S, "metin": S},
+        ["is_id", "metin"],
+    ),
+]
+
+GIT_SEMALARI = [
+    _fonk(
+        "git_dal",
+        "Git dalina gecer; yeni=true ise dali olusturup gecer. Kullanici onayi ister.",
+        {"ad": S, "yeni": B, "klasor": S},
+        ["ad"],
+    ),
+    _fonk(
+        "git_commit",
+        "YALNIZ verilen dosyalari commit eder (digerlerine dokunmaz). Kullanici onayi ister.",
+        {"mesaj": S, "dosyalar": {"type": "array", "items": S}, "klasor": S},
+        ["mesaj", "dosyalar"],
+    ),
 ]
 
 
@@ -155,6 +176,8 @@ class AjanAracKaydi:
             semalar += YAZMA_SEMALARI
         if self._acik_mi("komut_calistir", YanEtki.komut):
             semalar += KOMUT_SEMALARI
+        if self._acik_mi("git_commit", YanEtki.git):
+            semalar += GIT_SEMALARI
         return semalar
 
     # ---- isleyiciler ----
@@ -181,7 +204,10 @@ class AjanAracKaydi:
                 "komut_calistir": self.komut_calistir,
                 "komut_durumu": self.komut_durumu,
                 "komut_durdur": self.komut_durdur,
+                "komut_girdi": self.komut_girdi,
             }
+        if "git_commit" in acik:
+            h |= {"git_dal": self.git_dal, "git_commit": self.git_commit}
         return h
 
     # ---- komut araclari (arac arayuzu senkron, surecler UYGULAMANIN loop'unda) ----
@@ -232,3 +258,64 @@ class AjanAracKaydi:
 
     def komut_durdur(self, is_id: str) -> dict:
         return sonuc_veya_hata(lambda: self._coro_calistir(self.komutlar.durdur(is_id), sure=30))
+
+    def komut_girdi(self, is_id: str, metin: str) -> dict:
+        def _is() -> dict:
+            is_ = self.komutlar.getir(is_id)
+            self.politika.uygula(
+                Istek(
+                    arac="komut_girdi",
+                    yan_etki=YanEtki.komut,
+                    yol=is_.durum.cwd,
+                    komut=f"{is_.durum.komut} <<< {metin}",
+                    ozet=f"Girdi: {metin[:80]}",
+                ),
+                self.alan,
+            )
+            return self._coro_calistir(self.komutlar.girdi_gonder(is_id, metin), sure=30)
+
+        return sonuc_veya_hata(_is)
+
+    # ---- git yazma (YanEtki.git: otomatik modda da onay; onay islemin tam metnine bagli) ----
+    def git_dal(self, ad: str, yeni: bool = False, klasor: str = "") -> dict:
+        def _is() -> dict:
+            cwd = self.git._cwd(klasor)
+            ad_ = self.git.dal_adi_dogrula(ad, cwd)
+            self.politika.uygula(
+                Istek(
+                    arac="git_dal",
+                    yan_etki=YanEtki.git,
+                    yol=str(cwd),
+                    komut=f"git switch {'-c ' if yeni else ''}{ad_}",
+                    ozet=f"Git dal {'olustur' if yeni else 'degistir'}: {ad_}",
+                ),
+                self.alan,
+            )
+            return self.git.dal(cwd, ad_, yeni)
+
+        return sonuc_veya_hata(_is)
+
+    def git_commit(self, mesaj: str, dosyalar: list[str], klasor: str = "") -> dict:
+        def _is() -> dict:
+            from app.exceptions import UygulamaHatasi
+
+            mesaj_ = (mesaj or "").strip()
+            if not mesaj_ or len(mesaj_) > 2000:
+                raise UygulamaHatasi("Commit mesaji bos olamaz (en fazla 2000 karakter).")
+            if not dosyalar:
+                raise UygulamaHatasi("Commit edilecek dosyalari tek tek belirtin.")
+            cwd = self.git._cwd(klasor)
+            yollar = [self.kapsam.coz(d) for d in dosyalar]  # kok disi / hassas: YetkiYok
+            self.politika.uygula(
+                Istek(
+                    arac="git_commit",
+                    yan_etki=YanEtki.git,
+                    yol=str(cwd),
+                    komut=f"git commit -m {mesaj_!r} -- " + " ".join(sorted(map(str, yollar))),
+                    ozet=f"Git commit ({len(yollar)} dosya): {mesaj_[:80]}",
+                ),
+                self.alan,
+            )
+            return self.git.commit(cwd, mesaj_, yollar)
+
+        return sonuc_veya_hata(_is)

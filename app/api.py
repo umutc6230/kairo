@@ -80,6 +80,15 @@ class GeriAlIstegi(BaseModel):
     yollar: list[str] = []
 
 
+class HunkIstegi(BaseModel):
+    yol: str
+    hunklar: list[int] = Field(min_length=1)
+
+
+class GirdiIstegi(BaseModel):
+    metin: str = Field(max_length=10000)
+
+
 class AdIstegi(BaseModel):
     baslik: str
 
@@ -603,6 +612,18 @@ def uygulama_olustur(
     @app.post("/api/checkpointler/{cp_id}/geri-al")
     async def checkpoint_geri_al(cp_id: str, istek: GeriAlIstegi) -> dict:
         return checkpointler.geri_al(cp_id, istek.yollar or None)
+
+    @app.get("/api/checkpointler/{cp_id}/hunklar")
+    async def checkpoint_hunklar(cp_id: str, yol: str) -> dict:
+        return checkpointler.hunklar(cp_id, yol)
+
+    @app.post("/api/checkpointler/{cp_id}/hunk-geri-al")
+    async def checkpoint_hunk_geri_al(cp_id: str, istek: HunkIstegi) -> dict:
+        return checkpointler.hunk_geri_al(cp_id, istek.yol, istek.hunklar)
+
+    @app.post("/api/komutlar/{is_id}/girdi")
+    async def komut_girdi_ucu(is_id: str, istek: GirdiIstegi) -> dict:
+        return await komutlar.girdi_gonder(is_id, istek.metin)
 
     # ---- calisan komutlar ----
     @app.get("/api/komutlar")

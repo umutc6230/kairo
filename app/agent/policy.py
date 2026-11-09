@@ -61,6 +61,7 @@ class YanEtki(StrEnum):
     komut = "komut"
     ag = "ag"
     dis = "dis"  # e-posta, satin alma, yayinlama: geri alinamaz dis etki
+    git = "git"  # dal/commit: yerel ama gecmisi degistirir; push/merge burada YOK (dis)
 
 
 class Karar(StrEnum):
@@ -69,7 +70,8 @@ class Karar(StrEnum):
     ret = "ret"
 
 
-OKUMA_DISI = {YanEtki.yaz, YanEtki.sil, YanEtki.komut, YanEtki.ag, YanEtki.dis}
+OKUMA_DISI = {YanEtki.yaz, YanEtki.sil, YanEtki.komut, YanEtki.ag, YanEtki.dis, YanEtki.git}
+HER_ZAMAN_SOR = {YanEtki.dis, YanEtki.git}  # otomatik mod da sorar (A2.6: acik yetki)
 
 
 class Istek(BaseModel):
@@ -348,11 +350,15 @@ class PolitikaMotoru:
                 kural="oku",
                 cozulmus_yol=yol_metni,
             )
-        if istek.yan_etki is YanEtki.dis:  # geri alinamaz dis etki daima sorar
+        if istek.yan_etki in HER_ZAMAN_SOR:
             return Sonuc(
                 karar=Karar.sor,
-                neden="Dis etkili islem her zaman onay ister.",
-                kural="dis_etki",
+                neden=(
+                    "Dis etkili islem her zaman onay ister."
+                    if istek.yan_etki is YanEtki.dis
+                    else "Git dal/commit islemi her zaman onay ister."
+                ),
+                kural="dis_etki" if istek.yan_etki is YanEtki.dis else "git_onay",
                 cozulmus_yol=yol_metni,
             )
         if mod is Mod.otomatik:

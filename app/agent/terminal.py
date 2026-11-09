@@ -27,6 +27,7 @@ from app.exceptions import Bulunamadi, UygulamaHatasi
 VARSAYILAN_TIMEOUT = 120
 MAX_TIMEOUT = 900
 MAX_CIKTI_KARAKTER = 30000  # modele verilen
+MAX_GIRDI = 10000
 SPOOL_SATIR = 2000  # arka plan isinde saklanan son satir sayisi
 OLDURME_BEKLEME = 5.0  # A13: yonetilen cocuk surecler 5 sn icinde sonlanmali
 
@@ -151,7 +152,8 @@ class KomutServisi:
             is_.surec = await asyncio.create_subprocess_shell(
                 komut,
                 cwd=str(cwd),
-                stdin=subprocess.DEVNULL,
+                # on plan isi girdi beklerse asili kalmasin; arka plan isine girdi_gonder yazar
+                stdin=subprocess.PIPE if arka_plan else subprocess.DEVNULL,
                 stdout=subprocess.PIPE,
                 stderr=subprocess.STDOUT,
                 env=ortam_allowlist(),
@@ -196,6 +198,23 @@ class KomutServisi:
             if not ham:
                 break
             is_.satirlar.append(ham.decode("utf-8", errors="replace").rstrip("\r\n"))
+
+    async def girdi_gonder(self, is_id: str, metin: str) -> dict:
+        """Calisan arka plan isinin stdin'ine yazar (satir sonu yoksa eklenir)."""
+        is_ = self.getir(is_id)
+        s = is_.surec
+        if s is None or s.returncode is not None or is_.durum.durum != "calisiyor":
+            raise UygulamaHatasi("Komut calismiyor; girdi gonderilemez.")
+        if s.stdin is None:
+            raise UygulamaHatasi("Yalniz arka planda baslatilan komuta girdi gonderilebilir.")
+        if len(metin) > MAX_GIRDI:
+            raise UygulamaHatasi(f"Girdi en fazla {MAX_GIRDI} karakter olabilir.")
+        try:
+            s.stdin.write((metin if metin.endswith("\n") else metin + "\n").encode("utf-8"))
+            await s.stdin.drain()
+        except (BrokenPipeError, ConnectionResetError, OSError) as e:
+            raise UygulamaHatasi(f"Girdi gonderilemedi: {e}") from e
+        return {"gonderildi": len(metin), **self.ozet(is_)}
 
     async def bekle(self, is_: KomutIsi) -> KomutIsi:
         await is_._bitti.wait()

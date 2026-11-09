@@ -126,6 +126,34 @@ class GitAraclari:
             return {"hata": cikti.strip() or "git log basarisiz."}
         return {"klasor": str(cwd), "commitler": cikti.splitlines()}
 
+    # ---- yazan islemler (izin cagirani tarafindan: YanEtki.git, her zaman onay) ----
+    def dal_adi_dogrula(self, ad: str, cwd: Path) -> str:
+        ad = (ad or "").strip()
+        if not ad or ad.startswith("-"):
+            raise UygulamaHatasi("Gecersiz dal adi.")
+        kod, _ = _calistir(["check-ref-format", "--branch", ad], cwd)
+        if kod != 0:
+            raise UygulamaHatasi(f"Gecersiz dal adi: {ad}")
+        return ad
+
+    def dal(self, cwd: Path, ad: str, yeni: bool) -> dict:
+        kod, cikti = _calistir(["switch", *(["-c"] if yeni else []), ad], cwd)
+        if kod != 0:  # git, yerel degisikligi ezecek gecisi kendisi reddeder
+            raise UygulamaHatasi(cikti.strip() or "git switch basarisiz.")
+        return {"dal": ad, "olusturuldu": yeni, "cikti": cikti.strip()}
+
+    def commit(self, cwd: Path, mesaj: str, yollar: list[Path]) -> dict:
+        """YALNIZ verilen dosyalar commit edilir; kullanicinin diger degisiklikleri dokunulmaz."""
+        goreli = [str(p) for p in yollar]
+        kod, cikti = _calistir(["add", "--", *goreli], cwd)
+        if kod != 0:
+            raise UygulamaHatasi(cikti.strip() or "git add basarisiz.")
+        kod, cikti = _calistir(["commit", "-m", mesaj, "--only", "--", *goreli], cwd)
+        if kod != 0:
+            raise UygulamaHatasi(cikti.strip() or "git commit basarisiz.")
+        _, hash_ = _calistir(["rev-parse", "--short", "HEAD"], cwd)
+        return {"commit": hash_.strip(), "dosyalar": goreli, "cikti": cikti.strip()[:2000]}
+
 
 def kullanici_degisiklikleri(kapsam, klasor: str = "") -> set[str]:
     """Ajan calismaya BASLAMADAN once var olan degisiklikler (A2.3).
