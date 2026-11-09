@@ -40,13 +40,20 @@ Python 3.12 + FastAPI + pywebview; arayuz vanilla JS. Paketleme: PORTABLE (kulla
 - [x] A2 cekirdek: oku/listele/glob/ara (rg + python yedegi), yama/yaz/tasi/sil (hash + atomik +
       checkpoint), terminal (arka plan, durdur), git durum/diff/gecmis, dosya bazli geri alma.
       `tests/test_a2_araclar.py` 35 test; uctan uca Python/TS duzelt-test-geri al gecti
-- [ ] OpenRouter saglayici (AI Ayarlari: anahtar, model listesi, ucretsiz filtre, Test)  <- SIRADAKI
-- [ ] A2 kalan: terminale stdin, branch/worktree/commit (ayri izin), hunk bazli geri alma
+- [x] OpenRouter saglayici: AI Ayarlari'nda Yerel/OpenRouter secimi, anahtar ekle/sil (maskeli,
+      yalniz backend data/openrouter.json), canli model listesi (24 saat onbellek, Yenile, hata->eski
+      liste+uyari), ara + yalniz ucretsiz, fiyat/context/arac/resim rozetleri, Test (arac tanimli, sure+
+      maliyet). Sohbet aktif_model ile uzak modele gider. tests/test_openrouter.py 9 test
+- [ ] A2 kalan: terminale stdin, branch/worktree/commit (ayri izin), hunk bazli geri alma  <- SIRADAKI
 - [ ] A1.8 gercek izolasyon adaptoru (su an "yok" raporlaniyor)
 - [ ] A3 kalici Run/Step ajan dongusu | A4 baglam/hafiza/model profilleri | A5 ajan ekrani
 - [ ] A6 skills/komut/hooks | A7 MCP/plugin/mods | A8 alt ajanlar | A9-A12 | A13 kalite kapisi
 
 ## Son oturum
+- 2026-11-09 (6): OpenRouter saglayici eklendi (app/services/openrouter.py: YerelLLM alt sinifi,
+  ModelYonetici yerel listede olmayan id'yi uzak istemciye yonlendirir, yerel kilit/RAM etkilenmez;
+  akista 'reasoning' alani da okunur). Arayuz canli denendi: gercek listeden 467 model geldi.
+  Gercek anahtarla sohbet DENENMEDI (anahtar yok). 291 test, %93.
 - 2026-11-09 (5): A0-A2 `feature/ajan-katmani` dalina commit edildi (6eab028, push yok).
   3 hata duzeltildi: arka plan isi durdurulunca surec olmuyordu (process sizintisi);
   Windows'ta tirnakli yol iceren komutlar bozuluyordu (exec+liste `\"` kaciriyordu -> shell);
@@ -82,7 +89,8 @@ Python 3.12 + FastAPI + pywebview; arayuz vanilla JS. Paketleme: PORTABLE (kulla
   ozyineleme (alt cizgili ad); adres /v1 cift ekleniyordu; "İ".lower() hatasi; durdur kilitte asiliydi.
 
 ## Siradaki adim
-- **OpenRouter saglayici** (BRAIN-POLICY AI entegrasyon kurallari), sonra A2 kalanlari.
+- Kullanici anahtar girince OpenRouter ile gercek sohbet + Test denemesi.
+- A2 kalanlari: terminal stdin, branch/worktree/commit izni, hunk bazli geri alma; sonra A1.8, A3.
 - A1.8 gercek izolasyon: su an "yok" olarak raporlaniyor. A2 terminaliyle birlikte kisitli
   surec/ACL ya da istege bagli WSL/container adaptoru degerlendirilecek.
 - `openclaude` reposu (Twigpine) kullanilacaksa once BRAIN-POLICY dis kaynak taramasi + rapor.

@@ -42,8 +42,20 @@ export function ayarlarAc(sekme = "ai") {
     <div class="sekmeler"><button class="sekme" data-sekme="ai">AI Ayarları</button><button class="sekme" data-sekme="hakkinda">Hakkında</button></div>
     <div class="modal-govde" data-panel="ai">
       <div class="ayar-grup"><label>Sağlayıcı</label>
-        <div class="secenek-kart secili"><input type="radio" checked><div><div class="ust">Yerel (llama.cpp) <span class="rozet yesil">internetsiz</span></div>
-        <div class="alt">Modeller bu bilgisayarda çalışır, veri dışarı çıkmaz. Bu sağlayıcı API anahtarı gerektirmez.</div></div></div></div>
+        <label class="secenek-kart ${a.saglayici !== "openrouter" ? "secili" : ""}"><input type="radio" name="ay-sag" value="yerel" ${a.saglayici !== "openrouter" ? "checked" : ""}><div><div class="ust">Yerel (llama.cpp) <span class="rozet yesil">internetsiz</span></div>
+        <div class="alt">Modeller bu bilgisayarda çalışır, veri dışarı çıkmaz. API anahtarı gerekmez.</div></div></label>
+        <label class="secenek-kart ${a.saglayici === "openrouter" ? "secili" : ""}"><input type="radio" name="ay-sag" value="openrouter" ${a.saglayici === "openrouter" ? "checked" : ""}><div><div class="ust">OpenRouter <span class="rozet sari">internet</span></div>
+        <div class="alt">Uzak modeller (ücretsiz ve ücretli). Mesajlar ve ekler OpenRouter'a gönderilir. API anahtarı gerekir.</div></div></label></div>
+      <div class="ayar-grup" id="ay-or" ${a.saglayici === "openrouter" ? "" : "hidden"}><label>OpenRouter</label>
+        <div class="satir"><span id="ay-or-anahtar" class="ayar-not"></span>
+          <input class="alan" id="ay-or-yeni" type="password" autocomplete="off" placeholder="sk-or-... anahtarı yapıştır" style="flex:1">
+          <button class="btn" id="ay-or-kaydet">Kaydet</button><button class="btn tehlike" id="ay-or-sil">Sil</button></div>
+        <div class="satir"><input class="alan" id="ay-or-ara" placeholder="OpenRouter modeli ara..." style="flex:1">
+          <label class="onay"><input type="checkbox" id="ay-or-ucretsiz" checked> Yalnız ücretsiz</label>
+          <button class="btn" id="ay-or-yenile">Yenile</button></div>
+        <div id="ay-or-uyari" class="ayar-not"></div>
+        <div id="ay-or-modeller" class="ayar-grup" style="max-height:320px;overflow:auto"></div>
+        <div class="satir"><button class="btn" id="ay-or-test"><span data-ikon="oynat"></span>Seçili OpenRouter modelini test et</button><span id="ay-or-test-sonuc" class="ayar-not">Araç tanımlı kısa bir istek atar; süre ve maliyet gösterilir.</span></div></div>
       <div class="ayar-grup"><label>Model</label>
         <div class="satir"><input class="alan" id="ay-ara" placeholder="Model ara..."><label class="onay"><input type="checkbox" id="ay-indirilen"> Yalnız indirilenler</label>
         <label class="onay" title="Yerel modellerin hepsi ücretsizdir"><input type="checkbox" checked disabled> Yalnız ücretsiz</label></div>
@@ -102,6 +114,86 @@ export function ayarlarAc(sekme = "ai") {
   $("#ay-ara", govde).oninput = modelleriCiz;
   $("#ay-indirilen", govde).onchange = modelleriCiz;
   modelleriCiz();
+
+  // ---- OpenRouter ----
+  let orListe = [];
+  const orAnahtarCiz = async () => {
+    const d = await api("/api/openrouter/anahtar");
+    $("#ay-or-anahtar", govde).innerHTML = d.var ? `Anahtar: <code>${kacir(d.maskeli)}</code>` : '<span class="rozet kirmizi">anahtar yok</span>';
+    $("#ay-or-sil", govde).hidden = !d.var;
+  };
+  const orModelleriCiz = () => {
+    const kucuk = $("#ay-or-ara", govde).value.toLowerCase();
+    const ucretsiz = $("#ay-or-ucretsiz", govde).checked;
+    const sec = durum.ayarlar.or_model;
+    const liste = orListe.filter((m) => (!ucretsiz || m.ucretsiz) && (!kucuk || `${m.ad} ${m.id}`.toLowerCase().includes(kucuk)));
+    $("#ay-or-modeller", govde).innerHTML = liste.slice(0, 200).map((m) => `<label class="secenek-kart ${m.id === sec ? "secili" : ""}">
+      <input type="radio" name="ay-or-model" value="${kacir(m.id)}" ${m.id === sec ? "checked" : ""}>
+      <div><div class="ust">${kacir(m.ad)}
+        ${m.ucretsiz ? '<span class="rozet yesil">ücretsiz</span>' : `<span class="rozet">$${m.giris_1m} / $${m.cikis_1m} (1M token)</span>`}
+        <span class="rozet">context ${m.baglam.toLocaleString("tr-TR")}</span>
+        <span class="rozet ${m.araclar ? "yesil" : "sari"}">${m.araclar ? "araç" : "araç yok"}</span>
+        ${m.goruntu ? '<span class="rozet yesil">resim</span>' : ""}${m.json ? '<span class="rozet">JSON şema</span>' : ""}${m.dusunme ? '<span class="rozet">düşünme</span>' : ""}</div>
+        <div class="alt"><code>${kacir(m.id)}</code>${m.araclar ? "" : " · sohbet araçları bu modelde çalışmaz"}</div></div></label>`).join("")
+      || '<div class="ayar-not">Eşleşen model yok.</div>';
+    $$("input[name=ay-or-model]", govde).forEach((r) => {
+      r.onchange = async () => { await kaydet({ or_model: r.value }); orModelleriCiz(); };
+    });
+  };
+  const orListeYukle = async (yenile = false) => {
+    $("#ay-or-uyari", govde).innerHTML = '<span class="parilti">Model listesi alınıyor…</span>';
+    try {
+      const v = await api(`/api/openrouter/modeller${yenile ? "?yenile=true" : ""}`);
+      orListe = v.modeller;
+      $("#ay-or-uyari", govde).textContent = v.uyari || `${orListe.length} model · liste ${new Date(v.zaman * 1000).toLocaleString("tr-TR")}`;
+    } catch (err) {
+      $("#ay-or-uyari", govde).innerHTML = `<span class="rozet kirmizi">hata</span> ${kacir(err.message)}`;
+    }
+    orModelleriCiz();
+  };
+  let orYuklendi = false;
+  const orPanel = () => {
+    const acik = durum.ayarlar.saglayici === "openrouter";
+    $("#ay-or", govde).hidden = !acik;
+    if (acik && !orYuklendi) { orYuklendi = true; orAnahtarCiz(); orListeYukle(); }
+  };
+  $$("input[name=ay-sag]", govde).forEach((r) => {
+    r.onchange = async () => {
+      await kaydet({ saglayici: r.value });
+      $$("input[name=ay-sag]", govde).forEach((x) => x.closest(".secenek-kart").classList.toggle("secili", x.checked));
+      orPanel();
+    };
+  });
+  $("#ay-or-kaydet", govde).onclick = async () => {
+    const g = $("#ay-or-yeni", govde);
+    try {
+      await api("/api/openrouter/anahtar", { method: "PUT", govde: { anahtar: g.value } });
+      g.value = "";
+      bildir("Anahtar kaydedildi", "basari", 1500);
+      orAnahtarCiz();
+    } catch (err) { bildir(err.message, "hata"); }
+  };
+  $("#ay-or-sil", govde).onclick = async () => {
+    if (!(await onayla("Anahtarı sil", "OpenRouter API anahtarı bu bilgisayardan silinsin mi?", { evet: "Sil", tehlike: true }))) return;
+    await api("/api/openrouter/anahtar", { method: "DELETE" });
+    orAnahtarCiz();
+  };
+  $("#ay-or-ara", govde).oninput = orModelleriCiz;
+  $("#ay-or-ucretsiz", govde).onchange = orModelleriCiz;
+  $("#ay-or-yenile", govde).onclick = () => orListeYukle(true);
+  $("#ay-or-test", govde).onclick = async (e) => {
+    const b = e.currentTarget;
+    const sonuc = $("#ay-or-test-sonuc", govde);
+    b.disabled = true;
+    sonuc.innerHTML = '<span class="parilti">Deneniyor…</span>';
+    try {
+      const t = await api("/api/openrouter/test", { method: "POST", govde: {} });
+      sonuc.innerHTML = `<span class="rozet yesil">başarılı</span> "${kacir(t.cevap)}" · ${sayi(t.sure_sn)} sn · maliyet $${t.maliyet_usd}${t.arac_cagrisi ? " · araç çağırdı" : ""}`;
+    } catch (err) {
+      sonuc.innerHTML = `<span class="rozet kirmizi">hata</span> ${kacir(err.message)}`;
+    } finally { b.disabled = false; }
+  };
+  orPanel();
 
   const dusunmeCiz = () => {
     $("#ay-dusunme", govde).innerHTML = durum.bilgi.dusunme_secenekleri.map((d) => `<label class="secenek-kart ${d.deger === durum.ayarlar.dusunme ? "secili" : ""}">

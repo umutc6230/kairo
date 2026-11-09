@@ -8,6 +8,7 @@ import time
 from collections.abc import AsyncIterator, Callable
 from contextlib import asynccontextmanager
 from pathlib import Path
+from typing import Any
 
 from loguru import logger
 
@@ -20,8 +21,11 @@ LLMFabrikasi = Callable[..., YerelLLM]
 
 
 class ModelYonetici:
-    def __init__(self, ayarlar: AyarDeposu, fabrika: LLMFabrikasi = YerelLLM) -> None:
+    def __init__(
+        self, ayarlar: AyarDeposu, fabrika: LLMFabrikasi = YerelLLM, uzak: Any = None
+    ) -> None:
         self.ayarlar = ayarlar
+        self.uzak = uzak  # OpenRouterDeposu: yerel listede olmayan model id'leri buradan
         self._fabrika = fabrika
         self._llm: YerelLLM | None = None
         self._anahtar: tuple[str, str] | None = None  # (adres, dizin): degisirse yeni istemci
@@ -47,6 +51,8 @@ class ModelYonetici:
         return self._llm
 
     async def _hazirla(self, model: str) -> YerelLLM:
+        if model not in MODELLER and self.uzak is not None:
+            return self.uzak.istemci(model)  # OpenRouter: surec/RAM yok, yerel durum degismez
         llm = await self._istemci()
         llm.model = model
         baglam = self.ayarlar.oku().baglam_token
@@ -74,8 +80,16 @@ class ModelYonetici:
     @asynccontextmanager
     async def kullan(self, model: str | None = None) -> AsyncIterator[YerelLLM]:
         """Modeli hazirlar ve is bitene kadar kilitli tutar (bu sirada model degistirilemez)."""
+        model = model or self.ayarlar.oku().aktif_model
+        if model not in MODELLER and self.uzak is not None:  # uzak: yerel kilide gerek yok
+            llm = self.uzak.istemci(model)
+            try:
+                yield llm
+            finally:
+                await llm.kapat()
+            return
         async with self._kilit:
-            yield await self._hazirla(model or self.ayarlar.oku().model)
+            yield await self._hazirla(model)
 
     async def hazirla(self, model: str | None = None) -> dict:
         async with self.kullan(model):

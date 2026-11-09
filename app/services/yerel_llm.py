@@ -579,7 +579,11 @@ class YerelLLM:
         veri = r.json()
         self.son_zamanlama = veri.get("timings") or {}
         secim = veri["choices"][0]
-        self.son_dusunce = (secim.get("message") or {}).get("reasoning_content") or ""
+        self.son_dusunce = (
+            (secim.get("message") or {}).get("reasoning_content")
+            or (secim.get("message") or {}).get("reasoning")
+            or ""
+        )
         return secim
 
     @staticmethod
@@ -798,7 +802,7 @@ class YerelLLM:
                         self.son_zamanlama = parca["timings"]
                     for c in parca.get("choices", []):
                         delta = c.get("delta") or {}
-                        if dusunce := delta.get("reasoning_content"):
+                        if dusunce := (delta.get("reasoning_content") or delta.get("reasoning")):
                             self.son_dusunce += dusunce
                             if dusunce_cb:
                                 dusunce_cb(dusunce)
@@ -849,7 +853,7 @@ class YerelLLM:
                         self.son_zamanlama = parca["timings"]
                     for c in parca.get("choices", []):
                         delta = c.get("delta") or {}
-                        if dusunce := delta.get("reasoning_content"):
+                        if dusunce := (delta.get("reasoning_content") or delta.get("reasoning")):
                             self.son_dusunce += dusunce
                             yield {"tur": "dusunce", "metin": dusunce}
                         if metin := delta.get("content"):

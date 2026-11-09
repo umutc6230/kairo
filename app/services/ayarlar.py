@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from ipaddress import ip_address
 from pathlib import Path
+from typing import Literal
 from urllib.parse import urlsplit
 
 from pydantic import BaseModel, Field, field_validator
@@ -76,6 +77,12 @@ class KullaniciAyarlari(BaseModel):
     sistem_istemi: str = Field(default="", max_length=4000)
     sicaklik: float = Field(default=0.2, ge=0.0, le=2.0)
     max_tokens: int = Field(default=1024, ge=16, le=8192)
+    saglayici: Literal["yerel", "openrouter"] = "yerel"
+    or_model: str = Field(default="", max_length=200)  # OpenRouter model id (or. x/y:free)
+
+    @property
+    def aktif_model(self) -> str:
+        return self.or_model if self.saglayici == "openrouter" and self.or_model else self.model
 
     @field_validator("model")
     @classmethod

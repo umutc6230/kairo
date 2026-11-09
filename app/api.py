@@ -9,6 +9,7 @@ import time
 from collections.abc import AsyncIterator, Callable
 from contextlib import asynccontextmanager
 from pathlib import Path
+from typing import Any
 from urllib.parse import urlsplit
 
 from fastapi import FastAPI, Request, UploadFile
@@ -32,6 +33,7 @@ from app.services.ayarlar import AyarDeposu
 from app.services.ekler import EkDeposu
 from app.services.model_magaza import Indirici, Magaza, ModelKaydi, uyumluluk
 from app.services.model_yonetici import LLMFabrikasi, ModelYonetici
+from app.services.openrouter import OpenRouterDeposu
 from app.services.oturumlar import OturumDeposu
 from app.services.skiller import SkillDeposu
 from app.services.sohbet import MesajIstegi, SohbetServisi
@@ -80,6 +82,10 @@ class GeriAlIstegi(BaseModel):
 
 class AdIstegi(BaseModel):
     baslik: str
+
+
+class AnahtarIstegi(BaseModel):
+    anahtar: str = Field(max_length=300)
 
 
 class ModelIstegi(BaseModel):
@@ -136,13 +142,15 @@ def uygulama_olustur(
     skill_deposu: SkillDeposu | None = None,
     magaza: Magaza | None = None,
     kapat: Callable[[], None] | None = None,
+    or_transport: Any = None,
 ) -> FastAPI:
     kayit = ModelKaydi(veri_dizini)
     kayit.yukle()  # magazadan indirilen modeller MODELLER'e (ayar dogrulamasindan once)
     ayarlar = AyarDeposu(veri_dizini)
     oturumlar = OturumDeposu(veri_dizini)
     ekler = EkDeposu(veri_dizini)
-    yonetici = ModelYonetici(ayarlar, fabrika)
+    openrouter = OpenRouterDeposu(veri_dizini, transport=or_transport)
+    yonetici = ModelYonetici(ayarlar, fabrika, uzak=openrouter)
     talimatlar = TalimatDeposu(veri_dizini)
     skiller = skill_deposu or SkillDeposu(veri_dizini)
     projeler = WorkspaceDeposu(veri_dizini)
@@ -262,6 +270,27 @@ def uygulama_olustur(
     @app.post("/api/model/durdur")
     async def model_durdur(istek: DurdurIstegi) -> dict:
         return await yonetici.durdur(harici=istek.harici)
+
+    # ---- OpenRouter (anahtar backend'de kalir; arayuze yalniz maskeli hali gider) ----
+    @app.get("/api/openrouter/anahtar")
+    async def or_anahtar() -> dict:
+        return openrouter.anahtar_durumu()
+
+    @app.put("/api/openrouter/anahtar")
+    async def or_anahtar_kaydet(istek: AnahtarIstegi) -> dict:
+        return openrouter.anahtar_kaydet(istek.anahtar)
+
+    @app.delete("/api/openrouter/anahtar")
+    async def or_anahtar_sil() -> dict:
+        return openrouter.anahtar_sil()
+
+    @app.get("/api/openrouter/modeller")
+    async def or_modeller(yenile: bool = False) -> dict:
+        return await openrouter.modeller(yenile)
+
+    @app.post("/api/openrouter/test")
+    async def or_test(istek: ModelIstegi) -> dict:
+        return await openrouter.test(istek.model or ayarlar.oku().or_model)
 
     # ---- ayarlar ----
     @app.get("/api/ayarlar")

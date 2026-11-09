@@ -724,10 +724,10 @@ class SohbetServisi:
         sohbet mesaji bu kismi llama-server onbelleginden kullanir (dahili GPU'da dakikalar)."""
         ayar = self.yonetici.ayarlar.oku()
         sistem, araclar, _, _ = self.baglam_hazirla(ayar, "", [])
-        if not sistem:
-            return
+        if not sistem or ayar.saglayici == "openrouter":
+            return  # uzak modelde isitma ucretli istek olur, yerel onbellek de yok
         try:
-            async with self.yonetici.kullan(ayar.model) as llm:
+            async with self.yonetici.kullan(ayar.aktif_model) as llm:
                 await llm.sohbet(
                     [{"role": "system", "content": sistem}, {"role": "user", "content": "."}],
                     tools=araclar or None,
@@ -757,7 +757,7 @@ class SohbetServisi:
         yield {"tur": "kullanici_mesaji", "mesaj": kullanici.model_dump(), "baslik": baslik}
 
         ayar = self.yonetici.ayarlar.oku()
-        asistan = Mesaj(rol="asistan", model=ayar.model)
+        asistan = Mesaj(rol="asistan", model=ayar.aktif_model)
         yarim: list[str] = []
         yarim_dusunce: list[str] = []
         otomatik_kayit: list[dict] = []
@@ -765,8 +765,8 @@ class SohbetServisi:
         async def uret(gonder: Callable[[Olay], None]) -> dict:
             if self.yonetici.mesgul:
                 gonder({"tur": "durum", "metin": "Onceki islemin bitmesi bekleniyor..."})
-            gonder({"tur": "durum", "metin": f"Model hazirlaniyor: {ayar.model}"})
-            async with self.yonetici.kullan(ayar.model) as llm:
+            gonder({"tur": "durum", "metin": f"Model hazirlaniyor: {ayar.aktif_model}"})
+            async with self.yonetici.kullan(ayar.aktif_model) as llm:
                 yukleme = self.yonetici.yukleme_sn
                 parcalar: list[dict] = []
                 guncel = tahmini_token(istek.metin) + tahmini_token(ayar.sistem_istemi)
