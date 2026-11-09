@@ -2,6 +2,7 @@
 // GUVENLIK: model metni, dosya icerigi ve komut ciktisi DAIMA kacir() ile basilir; ham HTML yok.
 import { ikonlariYerlestir } from "./ikonlar.js";
 import { kacir } from "./md.js";
+import { artifactListesiCiz, diffGoster, reviewYap } from "./inceleme.js";
 import { $, $$, api, bildir, el, modal, onayla, sayi } from "./ortak.js";
 
 const DURUM_TR = {
@@ -335,6 +336,7 @@ async function baslat() {
 
 export async function gorevSayfasiYukle() {
   ustBilgi();
+  artifactListesiCiz($("#gr-artifactler"));
   await listeCiz();
   if (secili) gorevYenile();
   clearInterval(zamanlayici);
@@ -346,5 +348,7 @@ export async function gorevSayfasiYukle() {
 
 export function gorevlerKur() {
   $("#gr-baslat").onclick = baslat;
+  $("#gr-diff").onclick = diffGoster;
+  $("#gr-review").onclick = reviewYap;
   $("#gr-hedef").onkeydown = (e) => { if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) baslat(); };
 }

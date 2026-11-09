@@ -406,3 +406,11 @@ pre.duz { white-space: pre-wrap; font-family: var(--mono); font-size: 13px; marg
 .diff-eksi { background: rgba(220, 60, 60, .14); }
 .diff-arti { background: rgba(60, 170, 100, .16); }
 @media (max-width: 900px) { .gr-govde, .gr-izgara { grid-template-columns: 1fr; } }
+
+/* ---- review / artifact (A5.4-5) ---- */
+.gr-arac-cubugu { gap: 8px; }
+.artifact-liste { list-style: none; margin: 8px 0 0; padding: 0; display: flex; flex-direction: column; gap: 4px; }
+.artifact-oge { display: flex; gap: 8px; align-items: center; }
+.artifact-oge .gr-oge-hedef { flex: 1; min-width: 0; }
+.artifact-cerceve { width: 100%; height: 60vh; border: 1px solid var(--cizgi2); border-radius: 8px; background: #fff; }
+.bulgu { gap: 6px; }

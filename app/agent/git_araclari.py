@@ -105,6 +105,9 @@ class GitAraclari:
             return {"hata": "git bulunamadi.", "git": False}
         kod, cikti = _calistir(OKUMA_KOMUTLARI["diff_staged" if staged else "diff"], cwd)
         if kod != 0:
+            if "not a git repository" in cikti.lower():  # ham git kullanim metni yerine
+                return {"hata": "Bu klasor bir git deposu degil; diff/review icin git gerekir.",
+                        "repo": False}  # fmt: skip
             return {"hata": cikti.strip() or "git diff basarisiz."}
         return {
             "klasor": str(cwd),

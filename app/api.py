@@ -19,6 +19,7 @@ from loguru import logger
 from pydantic import BaseModel, Field, ValidationError
 
 from app import URUN_ADI, URUN_SAHIBI, URUN_SAHIBI_GITHUB, URUN_SAHIBI_X, __version__
+from app.agent import review as rv
 from app.agent.checkpoints import CheckpointDeposu
 from app.agent.izolasyon import adaptor_olustur
 from app.agent.policy import PolitikaMotoru, yerel_host_mu
@@ -32,6 +33,7 @@ from app.services import ekler as ekler_modulu
 from app.services import sistem
 from app.services.agecidi import AgGecidi, agecidi_uygulamasi
 from app.services.araclar import ARACLAR, ORNEK_ISTEMLER
+from app.services.artifactler import ARTIFACT_ARACI, ONIZLEME_CSP, ArtifactDeposu
 from app.services.ayarlar import AyarDeposu
 from app.services.ekler import EkDeposu
 from app.services.hafiza import HafizaDeposu
@@ -239,6 +241,7 @@ def uygulama_olustur(
     )
 
     hafiza = HafizaDeposu(veri_dizini)
+    artifactler = ArtifactDeposu(veri_dizini)
     sohbet.hafiza = hafiza
 
     def ajan_baglami(hedef: str) -> tuple[str, list, dict]:
@@ -257,6 +260,16 @@ def uygulama_olustur(
                     return {"hata": e.mesaj}
 
             isleyiciler = {**isleyiciler, "hafizaya_ekle": hafizaya_ekle}
+
+        def artifact_olustur(ad: str, tur: str, icerik: str) -> dict:
+            try:
+                a = artifactler.olustur(ad, tur, icerik, kaynak="ajan")
+            except UygulamaHatasi as e:
+                return {"hata": e.mesaj}
+            return {"artifact": a["id"], "ad": a["ad"], "tur": a["tur"], "boyut": a["boyut"]}
+
+        araclar_ = [*araclar_, ARTIFACT_ARACI]
+        isleyiciler = {**isleyiciler, "artifact_olustur": artifact_olustur}
         return sistem, araclar_, isleyiciler
 
     def model_yetenegi() -> ModelYetenegi:
@@ -516,6 +529,56 @@ def uygulama_olustur(
             hafiza.disa_aktar(),
             headers={"Content-Disposition": 'attachment; filename="hafiza.json"'},
         )
+
+    # ---- review (A5.4) ----
+    def _proje_git():
+        alan = sohbet.aktif_alan()
+        kayit = sohbet.ajan_araclari(alan)
+        if kayit is None:
+            raise UygulamaHatasi("Review icin once bir proje acin.")
+        return alan, kayit
+
+    @app.get("/api/review/diff")
+    async def review_diff(staged: bool = False) -> dict:
+        _, kayit = _proje_git()
+        return await asyncio.to_thread(kayit.git.git_diff, "", staged)
+
+    @app.post("/api/review")
+    async def review_yap(staged: bool = False) -> dict:
+        alan, kayit = _proje_git()
+        d = await asyncio.to_thread(kayit.git.git_diff, "", staged)
+        if d.get("hata"):
+            raise UygulamaHatasi(d["hata"])
+        diff = d.get("diff") or ""
+        if not diff.strip():
+            return {"ozet": "Incelenecek degisiklik yok (git diff bos).", "bulgular": [],
+                    "dosyalar": [], "diff_kesildi": False}  # fmt: skip
+        kural = rv.review_md_oku(alan.izinli_kokler) if alan.talimat_okunur_mu() else ""
+        async with yonetici.kullan() as llm:
+            try:
+                cevap = await llm.json_cikti(
+                    rv.istem(diff, kural), rv.SEMA, ad="review", max_tokens=3000,
+                    dusunme="kapali",
+                )  # fmt: skip
+            except YerelLLMHatasi as e:
+                raise UygulamaHatasi(f"Review yapilamadi: {e}") from e
+        sonuc = rv.sonuclandir(cevap if isinstance(cevap, dict) else {}, diff)
+        sonuc["review_md"] = bool(kural)
+        return sonuc
+
+    # ---- artifact'ler (A5.5): icerik yalniz oturumlu API ile; onizleme sandbox iframe ----
+    @app.get("/api/artifactler")
+    async def artifact_listesi() -> dict:
+        return {"artifactler": artifactler.liste()}
+
+    @app.get("/api/artifactler/{artifact_id}")
+    async def artifact_getir(artifact_id: str) -> dict:
+        meta, icerik = artifactler.getir(artifact_id)
+        return {**meta, "icerik": icerik, "csp": ONIZLEME_CSP}
+
+    @app.delete("/api/artifactler/{artifact_id}")
+    async def artifact_sil(artifact_id: str) -> dict:
+        return artifactler.sil(artifact_id)
 
     # ---- model yetenegi (A4.7) ----
     @app.get("/api/model/yetenek")

@@ -72,12 +72,23 @@ Python 3.12 + FastAPI + pywebview; arayuz vanilla JS. Paketleme: PORTABLE (kulla
       aktif model, duraklat/devam/iptal/tekrar, onay karti (degisiklik onizlemesi: diff/icerik/komut),
       belirsiz adim karari, yonlendirme; checkpoint diff + hunk secip geri alma + tum geri alma.
       Basari ikonu yalniz basarili+dogrulandi'dan. Tum dis metin kacir() ile. tests/test_a5_onay.py
-- [ ] A5 kalan: /diff /review + REVIEW.md (A5.4), artifact + izole iframe/CSP (A5.5), sanallastirma +
-      a11y testi (A5.6), ses dikte (A5.7), WebView2 penceresinde E2E  <- SIRADAKI
+- [x] A5.4 review (app/agent/review.py): git diff -> JSON semali bulgular (onem, dosya:satir, neden,
+      yeniden uretme, dogrulama onerisi); model 'dogrulandi' diyemez (hep model_varsayimi), konum diff'e
+      karsi kural tabanli denetlenir (uydurma dosya/satir isaretlenir); guvenilir projede REVIEW.md kural
+      olur (yetki veremez). Gorevler sayfasi + sohbette /diff /review (modele mesaj gitmez).
+- [x] A5.5 artifact (app/services/artifactler.py): tur beyaz listesi, 2 MB, siki kimlik; ajan araci
+      artifact_olustur; onizleme iframe sandbox=allow-scripts (allow-same-origin YOK) + srcdoc basinda
+      CSP (connect-src none). Icerik yalniz oturumlu API ile; acik uc yok. Indir/sil.
+- [ ] A5 kalan: sanallastirma + a11y testi (A5.6), ses dikte (A5.7), WebView2 penceresinde E2E  <- SIRADAKI
 - [ ] A5 ajan ekrani
 - [ ] A6 skills/komut/hooks | A7 MCP/plugin/mods | A8 alt ajanlar | A9-A12 | A13 kalite kapisi
 
 ## Son oturum
+- 2026-11-09 (12): A5.4 + A5.5. Tarayicida kotu niyetli artifact: betik calisti ama ust DOM, oturum
+  anahtari, top.location, localStorage, cerez, API fetch (mutlak+goreli), pywebview: HEPSI engellendi;
+  origin null. Canli review (OpenRouter nemotron-3-ultra:free): kasitli SQL enjeksiyonunu 26 sn'de
+  dogru konumla buldu. Bulgu: git olmayan projede ham git kullanim metni gosteriliyordu -> Turkce mesaj.
+  362 test, %92.
 - 2026-11-09 (11): A5 cekirdek. Gercek tarayicida E2E (izole veri YAS_VERI_DIZINI + betikli sahte
   OpenAI uyumlu model): proje ac -> gorev -> onay x2 (gercek tik) -> test gecti -> diff -> hunk geri
   al (diskte dogrulandi) -> ret yolu -> XSS (hedef + dosya icerigi) calismadi. E2E'nin buldugu
@@ -156,7 +167,7 @@ Python 3.12 + FastAPI + pywebview; arayuz vanilla JS. Paketleme: PORTABLE (kulla
 ## Siradaki adim
 - Kullanici anahtar girince OpenRouter ile gercek sohbet + Test denemesi.
 - Yerel E4B ile canli gorevi duzeltmelerden sonra tekrar dene (RAM bosken; ~30 dk).
-- A5 kalanlari: review (/diff /review, REVIEW.md), artifact izole onizleme, a11y; sonra A6.
+- A5 kalanlari: a11y/sanallastirma (A5.6), ses dikte (A5.7), WebView2 E2E; sonra A6 skills/komut/hooks.
 - Konteyneri gercekten denemek icin (kullanici onayiyla, indirme): podman machine init; podman machine start; podman pull python:3.12-slim
 - Arayuz: checkpoint ekraninda hunk secip geri alma, arka plan komutuna girdi kutusu.
 - A1.8 gercek izolasyon: su an "yok" olarak raporlaniyor. A2 terminaliyle birlikte kisitli
