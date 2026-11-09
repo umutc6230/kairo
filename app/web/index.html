@@ -37,6 +37,7 @@
       <aside id="kenar">
         <nav class="kenar-nav">
           <button class="nav-oge vurgulu" data-git="yeni"><span data-ikon="arti"></span>Yeni sohbet</button>
+          <button class="nav-oge" data-git="gorevler"><span data-ikon="sihir"></span>Ajan görevleri</button>
           <button class="nav-oge" data-git="ara"><span data-ikon="ara"></span>Ara</button>
           <button class="nav-oge" data-git="karsilastir"><span data-ikon="sutun"></span>Karşılaştır</button>
           <button class="nav-oge" data-git="ocr"><span data-ikon="tara"></span>OCR testi</button>
@@ -179,6 +180,30 @@
                 <label class="onay"><input type="checkbox" id="m-gorsel" checked> Yalnız resim/OCR destekleyenler</label></div>
               <div class="ayar-not">Gösterge: gereken RAM ≈ model boyutu × 1,15 + 1 GB. "Çalışır": Windows ve diğer programlara 5 GB bırakır; "Zorlanır": diğer programlar kapalıyken açılır.</div>
               <div id="m-sonuclar" class="skill-liste"></div>
+            </div>
+          </div>
+        </section>
+
+        <!-- AJAN GOREVLERI (A5) -->
+        <section class="gorunum sayfa" id="g-gorevler" hidden>
+          <div class="sayfa-ic genis">
+            <h1>Ajan görevleri</h1>
+            <p class="soluk">Ajan, açık projede dosyaları okuyup değiştirir, komut çalıştırır ve sonucu kanıtla bitirir. Onay gerektiren adımda durur; her dosya değişikliği geri alınabilir. <span id="gr-model"></span></p>
+            <div class="kart">
+              <label class="proje-alan">Görev hedefi
+                <textarea class="alan" id="gr-hedef" rows="2" placeholder="Örn: tests klasöründeki başarısız testleri düzelt" maxlength="8000"></textarea></label>
+              <label class="proje-alan">Kabul koşulları (her satır bir koşul, isteğe bağlı)
+                <textarea class="alan" id="gr-kabul" rows="2" placeholder="pytest -q tests çıkış kodu 0"></textarea></label>
+              <div class="satir">
+                <label class="soluk kucuk" for="gr-adim">En fazla adım</label><input class="alan" id="gr-adim" type="number" min="1" max="500" value="40" style="max-width:90px">
+                <label class="soluk kucuk" for="gr-sure">Süre (dk)</label><input class="alan" id="gr-sure" type="number" min="1" max="1440" value="30" style="max-width:90px">
+                <button class="btn ana" id="gr-baslat"><span data-ikon="oynat"></span>Görevi başlat</button>
+                <span class="soluk kucuk">Ctrl+Enter</span>
+              </div>
+            </div>
+            <div class="gr-govde">
+              <nav aria-label="Görev listesi"><ul class="gr-liste" id="gr-liste"></ul></nav>
+              <div id="gr-detay" class="gr-detay" aria-live="polite"><div class="soluk">Bir görev seçin ya da yeni görev başlatın.</div></div>
             </div>
           </div>
         </section>

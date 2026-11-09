@@ -112,6 +112,7 @@ class Adim(BaseModel):
     cikis_kodu: int | None = None  # komut adimlarinda gercek cikis kodu
     dosya: str = ""  # okunan/yazilan dosya (ozet icin; kirpilmis sonuctan parse edilmez)
     hash: str = ""
+    checkpoint: str = ""  # yazma adiminin checkpoint kimligi (diff / geri alma ekrani)
     zaman: str = Field(default_factory=lambda: datetime.now().isoformat(timespec="seconds"))
 
 
@@ -423,6 +424,8 @@ class AgentRunner:
             a.cikis_kodu = sonuc["cikis_kodu"]  # kanit kontrolu kirpilmis metne guvenmez
         if isinstance(sonuc, dict) and (h := sonuc.get("yeni_hash") or sonuc.get("hash")):
             a.dosya, a.hash = str(sonuc.get("goreli") or sonuc.get("dosya") or ""), str(h)
+        if isinstance(sonuc, dict) and isinstance(sonuc.get("checkpoint"), str):
+            a.checkpoint = sonuc["checkpoint"]
         # model kanit gosterirken adim numarasini bilmeli; yoksa numara uyduruyor (canli bulgu)
         sonuc = (
             {"adim": a.no, **sonuc} if isinstance(sonuc, dict) else {"adim": a.no, "sonuc": sonuc}

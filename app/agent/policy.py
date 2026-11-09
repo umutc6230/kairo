@@ -245,6 +245,15 @@ class OnayDeposu:
                 return o
         raise YetkiYok("Onay kaydi bulunamadi ya da suresi gecti.")
 
+    def tuket(self, onay_id: str) -> None:
+        """Tek seferlik onay bir kez kullanilinca biter; ayni islem tekrar onay ister."""
+        onaylar = self._liste()
+        for o in onaylar:
+            if o.id == onay_id and o.kapsam == "tek":
+                o.karar = "kullanildi"
+                self._yaz(onaylar)
+                return
+
     def gecerli_onay(self, islem_hash: str) -> Onay | None:
         return next((o for o in self._liste() if o.gecerli_mi(islem_hash)), None)
 
@@ -399,9 +408,11 @@ class PolitikaMotoru:
             raise YetkiYok(sonuc.neden)
         if sonuc.karar is Karar.sor:
             h = islem_hashi(istek, sonuc.cozulmus_yol)
-            if self.onaylar.gecerli_onay(h) is None:
+            gecerli = self.onaylar.gecerli_onay(h)
+            if gecerli is None:
                 onay = self.onaylar.olustur(istek, h)
                 raise OnayGerekli(sonuc.neden, onay.model_dump(mode="json"))
+            self.onaylar.tuket(gecerli.id)  # ayni onay ikinci kez kullanilamaz
         return sonuc
 
     def okuma_yolu(self, alan: CalismaAlani, arac: str, ham: str) -> Path:

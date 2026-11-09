@@ -67,11 +67,25 @@ Python 3.12 + FastAPI + pywebview; arayuz vanilla JS. Paketleme: PORTABLE (kulla
       aktar, otomatik ogrenme varsayilan KAPALI; Ayarlar > Hafiza sekmesi); oturum catal/temizle/disa
       aktar (temizle hafizaya dokunmaz); /api/model/yetenek. tests/test_a4_baglam.py 14 test
 - [ ] A4 ertelenen: alt klasor talimat kapsami (A4.2), arac/skill tanimlarini ihtiyaca gore yukleme (A4.6)
-- [ ] A5 ajan ekrani, review ve artifacts  <- SIRADAKI
+- [x] A5 cekirdek (A5.1-3): 'Ajan gorevleri' sayfasi (app/web/gorevler.js): gorev baslat (hedef, kabul,
+      butce), liste, canli adimlar + gercek terminal ciktisi + cikis kodu, plan, butce/baglam cubuklari,
+      aktif model, duraklat/devam/iptal/tekrar, onay karti (degisiklik onizlemesi: diff/icerik/komut),
+      belirsiz adim karari, yonlendirme; checkpoint diff + hunk secip geri alma + tum geri alma.
+      Basari ikonu yalniz basarili+dogrulandi'dan. Tum dis metin kacir() ile. tests/test_a5_onay.py
+- [ ] A5 kalan: /diff /review + REVIEW.md (A5.4), artifact + izole iframe/CSP (A5.5), sanallastirma +
+      a11y testi (A5.6), ses dikte (A5.7), WebView2 penceresinde E2E  <- SIRADAKI
 - [ ] A5 ajan ekrani
 - [ ] A6 skills/komut/hooks | A7 MCP/plugin/mods | A8 alt ajanlar | A9-A12 | A13 kalite kapisi
 
 ## Son oturum
+- 2026-11-09 (11): A5 cekirdek. Gercek tarayicida E2E (izole veri YAS_VERI_DIZINI + betikli sahte
+  OpenAI uyumlu model): proje ac -> gorev -> onay x2 (gercek tik) -> test gecti -> diff -> hunk geri
+  al (diskte dogrulandi) -> ret yolu -> XSS (hedef + dosya icerigi) calismadi. E2E'nin buldugu
+  GERCEK hatalar: (1) TEK SEFERLIK ONAY TUKETILMIYORDU: ikinci gorev yama+komutu onaysiz calistirdi
+  -> uygula() onayi tuketir; (2) yazma/yama onayi yalniz YOLA bagliydi -> islem hash'ine degisiklik
+  imzasi; (3) ekran her 1.5 sn yeniden ciziliyordu, tiklanan dugme DOM'dan kalkiyordu -> icerik
+  imzasi degismedikce cizme; (4) Python yamasi JS dizesine satir sonu sokmus, node --check
+  (CommonJS) kacirmisti -> modul kipinde JS testi eklendi. 353 test, %92.
 - 2026-11-09 (10): A4 tamamlandi. Canli: OpenRouter nemotron-3-ultra:free, 9K baglam, 2 ozet,
   BASARILI (14 adim, 97 sn, kanit=gecen test, en fazla %84 dolu). Bulgular: ozet dosya/hash'i
   2000 karaktere kirpilmis sonuctan parse ediyordu (buyuk okumada kayboluyordu) -> Adim.dosya/hash
@@ -142,7 +156,7 @@ Python 3.12 + FastAPI + pywebview; arayuz vanilla JS. Paketleme: PORTABLE (kulla
 ## Siradaki adim
 - Kullanici anahtar girince OpenRouter ile gercek sohbet + Test denemesi.
 - Yerel E4B ile canli gorevi duzeltmelerden sonra tekrar dene (RAM bosken; ~30 dk).
-- A5 ajan calisma ekrani, review ve artifacts (AGENT-GELISTIRME-TALIMATI.md A5).
+- A5 kalanlari: review (/diff /review, REVIEW.md), artifact izole onizleme, a11y; sonra A6.
 - Konteyneri gercekten denemek icin (kullanici onayiyla, indirme): podman machine init; podman machine start; podman pull python:3.12-slim
 - Arayuz: checkpoint ekraninda hunk secip geri alma, arka plan komutuna girdi kutusu.
 - A1.8 gercek izolasyon: su an "yok" olarak raporlaniyor. A2 terminaliyle birlikte kisitli

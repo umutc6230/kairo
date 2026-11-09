@@ -375,3 +375,34 @@ pre.duz { white-space: pre-wrap; font-family: var(--mono); font-size: 13px; marg
 .dugme-sira { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 10px; }
 .uyari-kutu.kucuk { font-size: 12.5px; padding: 6px 10px; }
 .bag { background: none; border: 0; color: var(--metin); text-decoration: underline; cursor: pointer; font: inherit; padding: 0; }
+
+/* ---- ajan gorevleri (A5) ---- */
+.gr-govde { display: grid; grid-template-columns: 260px 1fr; gap: 14px; align-items: start; }
+.gr-liste { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 4px; }
+.gr-oge { width: 100%; text-align: left; display: flex; flex-direction: column; gap: 4px; padding: 8px 10px; border-radius: 8px; border: 1px solid var(--cizgi2); background: var(--yuzey); color: inherit; cursor: pointer; }
+.gr-oge.aktif, .gr-oge:hover { border-color: var(--vurgu, #c96442); }
+.gr-oge-hedef { font-size: 13px; overflow: hidden; text-overflow: ellipsis; }
+.gr-detay { display: flex; flex-direction: column; gap: 12px; min-width: 0; }
+.gr-ust { display: flex; justify-content: space-between; gap: 12px; align-items: flex-start; flex-wrap: wrap; }
+.gr-hedef { font-size: 17px; font-weight: 600; display: flex; gap: 6px; align-items: center; }
+.gr-izgara { display: grid; grid-template-columns: minmax(0, 1fr) 300px; gap: 12px; align-items: start; }
+.gr-yan { display: flex; flex-direction: column; gap: 12px; }
+.adim-liste { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 4px; }
+.adim-baslik { width: 100%; display: flex; gap: 8px; align-items: center; background: none; border: 0; color: inherit; padding: 6px 4px; cursor: pointer; text-align: left; border-radius: 6px; }
+.adim-baslik:hover, .adim-baslik:focus-visible { background: var(--yuzey2, rgba(127,127,127,.12)); }
+.adim-arg { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 12px; }
+.adim-govde { padding: 4px 4px 10px 28px; display: flex; flex-direction: column; gap: 8px; }
+.adim-cikti { margin: 0; max-height: 320px; overflow: auto; white-space: pre-wrap; word-break: break-word; font-size: 12px; background: var(--yuzey2, rgba(127,127,127,.1)); padding: 8px; border-radius: 6px; }
+.butce-satir { display: grid; grid-template-columns: 52px 1fr auto; gap: 8px; align-items: center; }
+.butce-cubuk { height: 6px; border-radius: 3px; background: var(--cizgi2); overflow: hidden; }
+.butce-cubuk span { display: block; height: 100%; background: var(--vurgu, #c96442); }
+.plan-liste, .guncelleme-liste { margin: 0; padding-left: 18px; display: flex; flex-direction: column; gap: 4px; font-size: 13px; }
+.plan-tamam { text-decoration: line-through; opacity: .7; }
+.plan-suruyor { font-weight: 600; }
+.yesil-ikon { color: #3fa66b; display: inline-flex; }
+.diff-modal { display: flex; flex-direction: column; gap: 12px; }
+.hunk { display: flex; gap: 8px; align-items: flex-start; cursor: pointer; }
+.diff { font-family: var(--mono, monospace); font-size: 12px; white-space: pre-wrap; word-break: break-word; }
+.diff-eksi { background: rgba(220, 60, 60, .14); }
+.diff-arti { background: rgba(60, 170, 100, .16); }
+@media (max-width: 900px) { .gr-govde, .gr-izgara { grid-template-columns: 1fr; } }

@@ -11,6 +11,7 @@ Her islem sirayla: IZIN (PolitikaMotoru.uygula) -> BEKLENEN ESKI HASH -> CHECKPO
 
 from __future__ import annotations
 
+import hashlib
 import os
 import shutil
 from pathlib import Path
@@ -57,9 +58,14 @@ class YazmaAraclari:
         self.oturum_id = oturum_id
 
     # ---- ortak ----
-    def _izin(self, arac: str, yan_etki: YanEtki, yol: Path, ozet: str) -> None:
+    def _izin(self, arac: str, yan_etki: YanEtki, yol: Path, ozet: str, *degisiklik: str) -> None:
+        # degisiklik islem hash'ine girer: onaylanan yama/icerik degisirse onay gecmez
+        imza = hashlib.sha256("\x00".join(degisiklik).encode("utf-8")).hexdigest()[:16]
         self.politika.uygula(
-            Istek(arac=arac, yan_etki=yan_etki, yol=str(yol), ozet=ozet), self.alan
+            Istek(
+                arac=arac, yan_etki=yan_etki, yol=str(yol), komut=f"degisiklik:{imza}", ozet=ozet
+            ),
+            self.alan,
         )
 
     def _checkpoint(self, arac: str, durumlar: list[DosyaDurumu], aciklama: str) -> str:
@@ -101,6 +107,8 @@ class YazmaAraclari:
             YanEtki.yaz,
             p,
             f"{'Uzerine yaz' if vardi else 'Olustur'}: {self.kapsam.goreli(p)}",
+            icerik,
+            beklenen_hash or "",
         )
         self._hash_kontrol(p, beklenen_hash)
         veri = self._metin_kontrol(icerik)
@@ -135,7 +143,10 @@ class YazmaAraclari:
     ) -> dict:
         """Dosyadaki TEK ve BENZERSIZ bir metin parcasini degistirir (satir araligi degil)."""
         p = self.kapsam.coz(yol)
-        self._izin("dosya_yama", YanEtki.yaz, p, f"Yama: {self.kapsam.goreli(p)}")
+        self._izin(
+            "dosya_yama", YanEtki.yaz, p, f"Yama: {self.kapsam.goreli(p)}",
+            eski_metin, yeni_metin, beklenen_hash or "",
+        )  # fmt: skip
         if not p.is_file():
             raise UygulamaHatasi(f"Dosya bulunamadi: {p}")
         if not eski_metin:
@@ -188,6 +199,7 @@ class YazmaAraclari:
             YanEtki.yaz,
             h,
             f"Tasi: {self.kapsam.goreli(k)} -> {self.kapsam.goreli(h)}",
+            str(k),
         )
         if not k.exists():
             raise UygulamaHatasi(f"Kaynak bulunamadi: {k}")
@@ -215,7 +227,9 @@ class YazmaAraclari:
 
     def dosya_sil(self, yol: str, beklenen_hash: str | None = None) -> dict:
         p = self.kapsam.coz(yol)
-        self._izin("dosya_sil", YanEtki.sil, p, f"SIL: {self.kapsam.goreli(p)}")
+        self._izin(
+            "dosya_sil", YanEtki.sil, p, f"SIL: {self.kapsam.goreli(p)}", beklenen_hash or ""
+        )
         if not p.is_file():
             raise UygulamaHatasi(f"Dosya bulunamadi: {p}")
         # hash ZORUNLU: yoksa "sil + yeniden yaz" ile bayat-yazim korumasi atlatilabiliyordu

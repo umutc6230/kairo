@@ -7,9 +7,10 @@ import { sayfaModelleriniYenile, sayfalarKur } from "./sayfalar.js";
 import { modelSayfasiYukle, modellerKur } from "./modeller.js";
 import { projeKur } from "./proje.js";
 import { skillSayfasiYukle, skillerKur } from "./skiller.js";
+import { gorevSayfasiYukle, gorevlerKur } from "./gorevler.js";
 import { akisVar, durdur, mesajlariCiz, sohbetKur, yeniSohbetEkrani } from "./sohbet.js";
 
-const BASLIKLAR = { karsilastir: "Karşılaştır", ocr: "OCR testi", arac: "Araç testi", paket: "Test paketi", skiller: "Skill'ler ve talimatlar", modeller: "Modeller" };
+const BASLIKLAR = { karsilastir: "Karşılaştır", ocr: "OCR testi", arac: "Araç testi", paket: "Test paketi", skiller: "Skill'ler ve talimatlar", modeller: "Modeller", gorevler: "Ajan görevleri" };
 const gecmis = [];
 let gecmisKonum = -1;
 
@@ -33,6 +34,7 @@ function git(hedef, { kaydetme = false } = {}) {
   else {
     gorunumGoster(hedef.tur);
     if (hedef.tur === "skiller") skillSayfasiYukle();
+    if (hedef.tur === "gorevler") gorevSayfasiYukle();
     if (hedef.tur === "modeller") modelSayfasiYukle();
   }
   $("#btn-geri").disabled = gecmisKonum <= 0;
@@ -272,6 +274,7 @@ async function baslat() {
   sayfalarKur();
   projeKur();
   skillerKur(hepsiniYenile);
+  gorevlerKur();
   modellerKur(hepsiniYenile);
 
   $$(".nav-oge").forEach((n) => {

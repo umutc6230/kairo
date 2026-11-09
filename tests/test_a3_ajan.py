@@ -186,6 +186,7 @@ async def test_on_adimli_gorev_test_hatasi_duzeltme_ve_kanit(tmp_path, proje) ->
     assert json.loads(run.adimlar[5].sonuc)["cikis_kodu"] != 0
     assert "a + b" in (proje / "src" / "hesap.py").read_text(encoding="utf-8")
     assert [p.baslik for p in run.plan] == ["Duzelt"]
+    assert run.adimlar[7].checkpoint and run.adimlar[7].dosya.endswith("hesap.py")  # diff ekrani
     # gizli dusunce zinciri yok; arac sonuclari modele tool mesaji olarak gitti
     assert all(m["role"] != "tool" or m["tool_call_id"] for m in run.mesajlar)
 
