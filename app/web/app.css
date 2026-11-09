@@ -414,3 +414,12 @@ pre.duz { white-space: pre-wrap; font-family: var(--mono); font-size: 13px; marg
 .artifact-oge .gr-oge-hedef { flex: 1; min-width: 0; }
 .artifact-cerceve { width: 100%; height: 60vh; border: 1px solid var(--cizgi2); border-radius: 8px; background: #fff; }
 .bulgu { gap: 6px; }
+
+/* ---- dikte (A5.7) / a11y (A5.6) ---- */
+#btn-dikte.kayitta { color: #e5484d; animation: dikte-nabiz 1.2s ease-in-out infinite; }
+#btn-dikte[aria-disabled="true"] { opacity: .45; }
+.dikte-durum { position: absolute; bottom: 100%; left: 12px; margin-bottom: 6px; font-size: 12px; background: var(--yuzey); border: 1px solid var(--cizgi2); border-radius: 6px; padding: 4px 8px; }
+@keyframes dikte-nabiz { 50% { opacity: .45; } }
+.eski-mesajlar { align-self: center; margin: 8px 0; }
+:focus-visible { outline: 2px solid var(--vurgu, #c96442); outline-offset: 2px; }
+@media (prefers-reduced-motion: reduce) { *, *::before, *::after { animation-duration: .01ms !important; animation-iteration-count: 1 !important; transition-duration: .01ms !important; scroll-behavior: auto !important; } }

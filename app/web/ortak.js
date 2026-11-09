@@ -103,9 +103,14 @@ export function bildir(metin, tur = "bilgi", sureMs = 4500) {
   setTimeout(() => b.remove(), sureMs);
 }
 
+let modalSayac = 0;
+const ODAKLANABILIR = 'button:not([disabled]), [href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), iframe, [tabindex]:not([tabindex="-1"])';
+
 export function modal({ baslik, icerik, dugmeler = [], genis = false, kapaninca }) {
-  const arka = el(`<div class="modal-arka"><div class="modal ${genis ? "genis" : ""}">
-    <header><span>${kacir(baslik)}</span><button class="ikon-btn" data-ikon="x" title="Kapat"></button></header>
+  const baslikId = `modal-baslik-${++modalSayac}`;
+  const onceki = document.activeElement; // kapaninca odak buraya doner
+  const arka = el(`<div class="modal-arka"><div class="modal ${genis ? "genis" : ""}" role="dialog" aria-modal="true" aria-labelledby="${baslikId}">
+    <header><span id="${baslikId}">${kacir(baslik)}</span><button class="ikon-btn" data-ikon="x" title="Kapat" aria-label="Kapat"></button></header>
     <div class="modal-govde"></div><footer hidden></footer></div></div>`);
   const govde = $(".modal-govde", arka);
   if (typeof icerik === "string") govde.innerHTML = icerik;
@@ -116,6 +121,7 @@ export function modal({ baslik, icerik, dugmeler = [], genis = false, kapaninca 
     arka.remove();
     document.removeEventListener("keydown", tus);
     kapaninca?.();
+    if (onceki && document.contains(onceki)) onceki.focus?.();
   };
   for (const d of dugmeler) {
     const b = el(`<button class="btn ${d.tur || ""}">${kacir(d.metin)}</button>`);
@@ -123,11 +129,29 @@ export function modal({ baslik, icerik, dugmeler = [], genis = false, kapaninca 
     ayak.append(b);
     ayak.hidden = false;
   }
-  const tus = (e) => { if (e.key === "Escape") kapat(); };
+  const tus = (e) => {
+    // ust uste modallarda yalniz en ustteki tusa tepki verir
+    if (document.querySelector("#modal-kok > .modal-arka:last-child") !== arka) return;
+    if (e.key === "Escape") { kapat(); return; }
+    if (e.key !== "Tab") return;
+    const odak = [...arka.querySelectorAll(ODAKLANABILIR)].filter((x) => x.offsetParent !== null || x.tagName === "IFRAME");
+    if (!odak.length) return;
+    const ilk = odak[0];
+    const son = odak[odak.length - 1];
+    if (e.shiftKey && document.activeElement === ilk) { e.preventDefault(); son.focus(); }
+    else if (!e.shiftKey && document.activeElement === son) { e.preventDefault(); ilk.focus(); }
+    else if (!arka.contains(document.activeElement)) { e.preventDefault(); ilk.focus(); }
+  };
   document.addEventListener("keydown", tus);
   $("header .ikon-btn", arka).onclick = kapat;
   arka.addEventListener("mousedown", (e) => { if (e.target === arka) kapat(); });
   $("#modal-kok").append(arka);
+  // odagi pencereye tasi: once govdedeki ilk alan, yoksa ilk dugme, yoksa kapat dugmesi
+  setTimeout(() => {
+    if (arka.contains(document.activeElement)) return;
+    const hedef = govde.querySelector("input, textarea, select") || ayak.querySelector("button") || $("header .ikon-btn", arka);
+    hedef?.focus();
+  }, 0);
   return { kapat, govde, arka };
 }
 

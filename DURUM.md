@@ -79,11 +79,22 @@ Python 3.12 + FastAPI + pywebview; arayuz vanilla JS. Paketleme: PORTABLE (kulla
 - [x] A5.5 artifact (app/services/artifactler.py): tur beyaz listesi, 2 MB, siki kimlik; ajan araci
       artifact_olustur; onizleme iframe sandbox=allow-scripts (allow-same-origin YOK) + srcdoc basinda
       CSP (connect-src none). Icerik yalniz oturumlu API ile; acik uc yok. Indir/sil.
-- [ ] A5 kalan: sanallastirma + a11y testi (A5.6), ses dikte (A5.7), WebView2 penceresinde E2E  <- SIRADAKI
+- [x] A5.6 a11y: modal role=dialog/aria-modal/aria-labelledby, odak tasima + Tab tuzagi + kapaninca odak
+      geri; sohbet role=log; ikon dugmelere aria-label; :focus-visible; prefers-reduced-motion. Uzun sohbet
+      pencereleme (son 40 mesaj, 'daha eski' parti parti, kaydirma korunur); akista markdown kare basina 1.
+- [x] A5.7 yerel ses dikte (app/web/dikte.js + /api/dikte): mikrofon -> 16 kHz WAV -> yerel Gemma 4;
+      Web Speech (bulut) YOK; model sesi anlamiyorsa / OpenRouter seciliyse dugme devre disi + neden.
+      Kayit gostergesi, sure, 30 sn sinir, Esc iptal, izin hatasi.
+- [ ] A5 kalan: gercek WebView2 penceresinde E2E (pywebview iframe kopru enjeksiyonu kontrolu)
+- [ ] A6 skills, komutlar ve hooks  <- SIRADAKI
 - [ ] A5 ajan ekrani
-- [ ] A6 skills/komut/hooks | A7 MCP/plugin/mods | A8 alt ajanlar | A9-A12 | A13 kalite kapisi
+- [ ] A7 MCP/plugin/mods | A8 alt ajanlar | A9-A12 | A13 kalite kapisi
 
 ## Son oturum
+- 2026-11-09 (13): A5.6 + A5.7. Tarayicida: adsiz dugme/alan 0; 120 mesajlik sohbette 40 cizildi, 'daha
+  eski' calisti; gercek klavyeyle 60 Tab + 25 Shift+Tab odak modalda kaldi, Esc kapatti, odak acan dugmeye
+  dondu. Canli dikte: Windows TTS ile uretilen WAV -> gercek yerel Gemma E4B -> 'Please open the project
+  and run all the unit tests.' birebir (32.8 sn, model yukleme dahil). 366 test, %92.
 - 2026-11-09 (12): A5.4 + A5.5. Tarayicida kotu niyetli artifact: betik calisti ama ust DOM, oturum
   anahtari, top.location, localStorage, cerez, API fetch (mutlak+goreli), pywebview: HEPSI engellendi;
   origin null. Canli review (OpenRouter nemotron-3-ultra:free): kasitli SQL enjeksiyonunu 26 sn'de
@@ -167,7 +178,7 @@ Python 3.12 + FastAPI + pywebview; arayuz vanilla JS. Paketleme: PORTABLE (kulla
 ## Siradaki adim
 - Kullanici anahtar girince OpenRouter ile gercek sohbet + Test denemesi.
 - Yerel E4B ile canli gorevi duzeltmelerden sonra tekrar dene (RAM bosken; ~30 dk).
-- A5 kalanlari: a11y/sanallastirma (A5.6), ses dikte (A5.7), WebView2 E2E; sonra A6 skills/komut/hooks.
+- A6 skills, komutlar ve hooks (AGENT-GELISTIRME-TALIMATI.md A6). WebView2 E2E ayrica.
 - Konteyneri gercekten denemek icin (kullanici onayiyla, indirme): podman machine init; podman machine start; podman pull python:3.12-slim
 - Arayuz: checkpoint ekraninda hunk secip geri alma, arka plan komutuna girdi kutusu.
 - A1.8 gercek izolasyon: su an "yok" olarak raporlaniyor. A2 terminaliyle birlikte kisitli

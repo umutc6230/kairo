@@ -195,9 +195,14 @@ function asistanMesaji() {
       if (this.dusunceBas && this.sayac) this.dusunceBitir();
       this.durum("");
       this.metin += parca;
-      const g = d.querySelector(".govde-metin");
-      g.innerHTML = md(this.metin);
-      ikonlariYerlestir(g);
+      if (this.cizimBekliyor) return; // uzun cevapta her parcada tum metni yeniden isleme
+      this.cizimBekliyor = true;
+      requestAnimationFrame(() => {
+        this.cizimBekliyor = false;
+        const g = d.querySelector(".govde-metin");
+        g.innerHTML = md(this.metin);
+        ikonlariYerlestir(g);
+      });
     },
     aracCagrisi(o) {
       this.durum("");
@@ -268,11 +273,35 @@ export function bosDurum(goster) {
   $("#bos-durum").hidden = !goster;
 }
 
+const PENCERE = 40;
+
 export function mesajlariCiz(oturum) {
   $("#mesajlar .mesaj-sutun")?.remove();
   if (!oturum || !oturum.mesajlar.length) { bosDurum(true); return; }
   const s = sutun();
-  for (const m of oturum.mesajlar) s.append(m.rol === "kullanici" ? kullaniciMesaji(m) : kaydedilmisAsistan(m));
+  // Uzun sohbet: yalniz son PENCERE mesaj DOM'a girer; eskiler istenince parti parti eklenir.
+  const ciz = (m) => (m.rol === "kullanici" ? kullaniciMesaji(m) : kaydedilmisAsistan(m));
+  let bas = Math.max(0, oturum.mesajlar.length - PENCERE);
+  for (const m of oturum.mesajlar.slice(bas)) s.append(ciz(m));
+  const dahaEski = () => {
+    if (!bas) return;
+    const btn = el(`<button class="btn eski-mesajlar">Daha eski ${bas} mesajı göster</button>`);
+    btn.onclick = () => {
+      const kutu = $("#mesajlar");
+      const onceYukseklik = kutu.scrollHeight;
+      const yeniBas = Math.max(0, bas - PENCERE);
+      const parca = document.createDocumentFragment();
+      for (const m of oturum.mesajlar.slice(yeniBas, bas)) parca.append(ciz(m));
+      btn.replaceWith(parca);
+      bas = yeniBas;
+      ikonlariYerlestir(s);
+      kutu.scrollTop += kutu.scrollHeight - onceYukseklik; // okunan yer kaymasin
+      dahaEski();
+      s.querySelector(".eski-mesajlar")?.focus();
+    };
+    s.prepend(btn);
+  };
+  dahaEski();
   ikonlariYerlestir(s);
   sonaKaydir(true);
 }

@@ -8,6 +8,7 @@ const P = {
   kare: '<rect x="5" y="5" width="14" height="14" rx="1.5"/>',
   x: '<path d="M18 6 6 18M6 6l12 12"/>',
   arti: '<path d="M12 5v14M5 12h14"/>',
+  mikrofon: '<rect x="9" y="2" width="6" height="12" rx="3"/><path d="M5 10a7 7 0 0 0 14 0M12 17v5M8 22h8"/>',
   ara: '<circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/>',
   sutun: '<rect x="3" y="4" width="18" height="16" rx="2"/><path d="M9 4v16M15 4v16"/>',
   tara: '<path d="M3 7V5a2 2 0 0 1 2-2h2M17 3h2a2 2 0 0 1 2 2v2M21 17v2a2 2 0 0 1-2 2h-2M7 21H5a2 2 0 0 1-2-2v-2"/><path d="M7 9h10M7 12h10M7 15h6"/>',

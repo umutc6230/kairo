@@ -58,7 +58,7 @@
       <main id="ana">
         <!-- SOHBET -->
         <section class="gorunum" id="g-sohbet">
-          <div class="mesajlar" id="mesajlar">
+          <div class="mesajlar" id="mesajlar" role="log" aria-live="polite" aria-label="Sohbet mesajları">
             <div class="bos-durum" id="bos-durum">
               <div class="logo" data-ikon="logo"></div>
               <div class="kart-liste" id="model-kartlari"></div>
@@ -70,9 +70,11 @@
             <div class="yazma" id="yazma">
               <div class="ek-listesi" id="ek-listesi"></div>
               <div class="yazma-satir">
-                <button class="ikon-btn" id="btn-ek" title="Dosya ekle: resim, PDF, ses, metin" data-ikon="arti"></button>
-                <textarea id="girdi" rows="1" placeholder="Bir görev yaz ya da soru sor"></textarea>
-                <button class="gonder" id="btn-gonder" title="Gonder (Enter)" data-ikon="yukari" disabled></button>
+                <button class="ikon-btn" id="btn-ek" title="Dosya ekle: resim, PDF, ses, metin" aria-label="Dosya ekle" data-ikon="arti"></button>
+                <textarea id="girdi" rows="1" placeholder="Bir görev yaz ya da soru sor" aria-label="Mesaj"></textarea>
+                <button class="ikon-btn" id="btn-dikte" title="Sesle yaz" aria-label="Sesle yaz" aria-pressed="false" data-ikon="mikrofon"></button>
+                <button class="gonder" id="btn-gonder" title="Gönder (Enter)" aria-label="Gönder" data-ikon="yukari" disabled></button>
+                <div id="dikte-durum" class="dikte-durum" role="status" aria-live="polite" hidden></div>
               </div>
             </div>
             <div class="alt-satir">

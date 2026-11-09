@@ -119,6 +119,13 @@ class KararIstegi(BaseModel):
     karar: str
 
 
+DIKTE_MAX_SN = 30  # Gemma 4 ses girisi ~30 sn
+DIKTE_UZAK = "Dikte yalniz yerel Gemma 4 modeliyle calisir; ses buluta gonderilmez."
+DIKTE_SESSIZ = "Secili model sesi anlamiyor; dikte icin Gemma 4 (E4B/12B) secin."
+DIKTE_TALIMATI = "Bu ses kaydini oldugu gibi yaziya dok. Yalniz soylenen metni yaz."
+DIKTE_MAX_BAYT = 16000 * 2 * DIKTE_MAX_SN + 4096  # 16 kHz mono 16 bit WAV
+
+
 class TazeStatik(StaticFiles):
     """Basliksiz statik dosyayi tarayici tahminle onbellekler; guncellemeden sonra eski JS
     calisir. no-cache: her seferinde ETag ile dogrulanir (yerelde maliyetsiz)."""
@@ -614,6 +621,41 @@ def uygulama_olustur(
                 raise GecersizEk(f"Dosya {mb:.0f} MB sinirindan buyuk; yukleme durduruldu.")
             parcalar.append(parca)
         return ekler.kaydet(ad, b"".join(parcalar)).model_dump(exclude={"metin"})
+
+    # ---- ses dikte (A5.7): YALNIZ yerel ses destekli model; buluta ses gonderilmez ----
+    def dikte_durumu() -> dict:
+        a = ayarlar.oku()
+        if a.saglayici == "openrouter" and a.or_model:
+            return {"kullanilabilir": False, "model": a.or_model, "neden": DIKTE_UZAK}
+        p = MODELLER.get(a.model)
+        if p is None or not p.ses:
+            return {"kullanilabilir": False, "model": a.model, "neden": DIKTE_SESSIZ}
+        return {"kullanilabilir": True, "model": a.model, "neden": "", "max_sn": DIKTE_MAX_SN}
+
+    @app.get("/api/dikte/durum")
+    async def dikte_durum() -> dict:
+        return dikte_durumu()
+
+    @app.post("/api/dikte")
+    async def dikte(ses: UploadFile) -> dict:
+        d = dikte_durumu()
+        if not d["kullanilabilir"]:
+            raise UygulamaHatasi(d["neden"])
+        veri = await ses.read(DIKTE_MAX_BAYT + 1)
+        if len(veri) > DIKTE_MAX_BAYT:
+            raise UygulamaHatasi(f"Kayit en fazla {DIKTE_MAX_SN} saniye olabilir.")
+        if veri[:4] != b"RIFF" or veri[8:12] != b"WAVE":
+            raise UygulamaHatasi("Ses WAV biciminde olmali.")
+        bas = time.perf_counter()
+        async with yonetici.kullan(d["model"]) as llm:
+            metin = await llm.ses(
+                veri,
+                DIKTE_TALIMATI,
+                bicim="wav",
+                dusunme="kapali",
+                max_tokens=512,
+            )
+        return {"metin": metin.strip(), "sure_sn": round(time.perf_counter() - bas, 1)}
 
     @app.get("/api/ekler/{ek_id}")
     async def ek_getir(ek_id: str) -> FileResponse:

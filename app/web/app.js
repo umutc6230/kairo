@@ -8,6 +8,7 @@ import { modelSayfasiYukle, modellerKur } from "./modeller.js";
 import { projeKur } from "./proje.js";
 import { skillSayfasiYukle, skillerKur } from "./skiller.js";
 import { gorevSayfasiYukle, gorevlerKur } from "./gorevler.js";
+import { dikteDurumuYenile, dikteKur } from "./dikte.js";
 import { akisVar, durdur, mesajlariCiz, sohbetKur, yeniSohbetEkrani } from "./sohbet.js";
 
 const BASLIKLAR = { karsilastir: "Karşılaştır", ocr: "OCR testi", arac: "Araç testi", paket: "Test paketi", skiller: "Skill'ler ve talimatlar", modeller: "Modeller", gorevler: "Ajan görevleri" };
@@ -260,6 +261,7 @@ async function hepsiniYenile() {
   durum.ayarlar = await api("/api/ayarlar");
   await durumYenile();
   sayfaModelleriniYenile();
+  dikteDurumuYenile(); // model degisince dikte dugmesi durumu
 }
 
 // ---------------- acilis ----------------
@@ -275,6 +277,7 @@ async function baslat() {
   projeKur();
   skillerKur(hepsiniYenile);
   gorevlerKur();
+  dikteKur();
   modellerKur(hepsiniYenile);
 
   $$(".nav-oge").forEach((n) => {
