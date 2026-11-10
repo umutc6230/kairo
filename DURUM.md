@@ -206,7 +206,12 @@ Python 3.12 + FastAPI + pywebview; arayuz vanilla JS. Paketleme: PORTABLE (kulla
             iptal o gorevin surec agaclarini hemen kapatir. Olcum: durum < 1 sn, cocuk+torun < 5 sn.
             Donanim: Windows 11 Pro, yerel gelistirme makinesi.
       - [x] Ag kapaliyken yerel ajan calisir; web_ara anlasilir hata doner.
-      - [ ] JS birim + arayuz E2E (Playwright), gercek model degerlendirmesi (30 gorev x 3)  <- SIRADAKI
+      - [x] Arayuz E2E (tests/test_a13_e2e.py, kurulu Chrome + Playwright, gercek sunucular): masaustu
+            1280x800 /doctor + /schedule; telefon 390x844 uzak TLS -> eslesme -> tam arayuz, yerel anahtar
+            sayfada yok, yatay tasma yok, kenar cubugu ac/kapa, /status uzaktan. Ekranlar gorsel kontrol edildi.
+            BULGU+DUZELTME: telefonda model kartlari/uyari bandi 440px sabit -> ekrandan tasiyordu.
+            Kucuk bulgu (acik): acilisin ilk ~1 sn'sinde yazilan girdi, hazirlik bitince temizleniyor.
+      - [ ] Gercek model degerlendirmesi (30 gorev x 3 kosu)  <- SIRADAKI
 - 2026-11-10 (16): A6 bitti (hooks + slash + hook UI; tarayicida dogrulandi). DIKKAT: ayni dalda paralel
   bir oturum A6.1/A6.2 commit'ledi (14da54a, 1c791d4); benim skill commit'im (81b748a) onlarla ust uste.
   399 test geciyor.

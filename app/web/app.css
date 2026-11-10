@@ -456,4 +456,17 @@ pre.duz { white-space: pre-wrap; font-family: var(--mono); font-size: 13px; marg
   #kok.kenar-kapali #kenar { margin-left: calc(-1 * min(86vw, 320px) - 20px); box-shadow: none; }
   #ana { min-width: 0; width: 100%; }
   input, textarea, select { font-size: 16px; } /* iOS yakinlastirmasin */
+  #kok.kenar-kapali #kenar { visibility: hidden; transition: margin-left .2s, visibility 0s .2s; }
+  .baslik-orta { display: none; }
+  .baslik-sag { flex: 1; justify-content: flex-end; overflow: hidden; }
+  .mesajlar { padding: 16px 12px 8px; }
+  .logo, .kart-liste, .kart-satir { width: 100%; max-width: 440px; }
+  .bos-durum { align-items: stretch; }
+  .kart-satir span { min-width: 0; overflow-wrap: anywhere; }
+  .yazma-kap { padding: 0 10px 10px; }
+  .bant { flex-wrap: wrap; gap: 6px 10px; }
+  .bant > span { min-width: 0; overflow-wrap: anywhere; }
+  .alt-satir { flex-wrap: wrap; gap: 4px; }
+  .alt-sol, .alt-sag { min-width: 0; flex-wrap: wrap; }
+  .alt-sol > *, .alt-sag > * { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 }
