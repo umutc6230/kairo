@@ -1,0 +1,52 @@
+# A11.4: test + lint + JS sozdizimi + artifact raporu. Sir KULLANMAZ; fork PR'lari guvenle calisir.
+name: CI
+on:
+  push:
+    branches: [main, "feature/**"]
+  pull_request:  # pull_request_target DEGIL: PR kodu ayricalikli baglamda calismaz
+permissions:
+  contents: read
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  test:
+    runs-on: windows-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+      - name: Bagimliliklar
+        run: pip install -r requirements-dev.txt
+      - name: Lint (ruff)
+        run: |
+          ruff check . --output-format=github
+          ruff format --check .
+      - name: JS sozdizimi
+        shell: pwsh
+        run: |
+          $hata = 0
+          Get-ChildItem app/web -Filter *.js | ForEach-Object {
+            Get-Content $_.FullName -Raw | node --input-type=module --check
+            if ($LASTEXITCODE -ne 0) { Write-Host "::error file=$($_.FullName)::JS sozdizimi"; $hata = 1 }
+          }
+          exit $hata
+      - name: Testler
+        env:
+          YAS_VERI_DIZINI: ${{ runner.temp }}/yas-veri
+        run: python -m pytest -q -p no:warnings --junitxml=rapor/junit.xml --cov=app --cov-report=xml:rapor/coverage.xml
+      - name: Rapor artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-raporu
+          path: rapor/
+          retention-days: 14

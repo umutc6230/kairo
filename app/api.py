@@ -35,6 +35,7 @@ from app.agent.runner import AgentRunner, Butce, RunDeposu, RunDurum, olay_akisi
 from app.agent.takim import TakimPanosu
 from app.agent.tarayici import Tarayici, playwright_var
 from app.agent.terminal import KomutServisi
+from app.agent.webhook import WebhookDeposu, WebhookHatasi, hedef_olustur
 from app.agent.workspaces import Guven, Mod, WorkspaceDeposu
 from app.agent.yetenek import ModelYetenegi, dogrula, uzak_yetenek, yerel_yetenek
 from app.agent.zamanlayici import Tetik, Zamanlayici
@@ -409,7 +410,11 @@ def uygulama_olustur(
             if not yerel_host_mu(kaynak_konak):
                 return JSONResponse({"hata": "Dis kaynakli istek reddedildi."}, status_code=403)
         yol = istek.url.path
-        korunan = yol.startswith("/api") and yol != "/api/bilgi"  # yalniz urun bilgisi acik
+        # yalniz urun bilgisi ve HMAC imzali webhook tetikleme ucu oturum anahtarsiz
+        korunan = (
+            yol.startswith("/api") and yol != "/api/bilgi"
+            and not yol.startswith("/api/webhook/")
+        )  # fmt: skip
         if korunan and istek.headers.get(OTURUM_BASLIGI) != oturum_anahtari:
             return JSONResponse(
                 {"hata": "Oturum anahtari gecersiz; uygulamayi yeniden acin."}, status_code=403
@@ -1074,6 +1079,7 @@ def uygulama_olustur(
 
     # ---- zamanlamalar (A11): YALNIZ uygulama acikken; gozetimsiz onay yok ----
     zamanlayici = Zamanlayici(veri_dizini)
+    BITMIS_DURUMLAR = {"basarili", "dogrulanmadi", "basarisiz", "iptal"}  # noqa: N806
 
     def _run_durumu(run_id: str) -> str:
         try:
@@ -1116,6 +1122,8 @@ def uygulama_olustur(
         while True:
             try:
                 await zamanlayici_tick()
+                for w in webhooklar.liste():  # sira bekleyen olaylar
+                    await _webhook_isle(w["id"])
             except Exception as e:  # noqa: BLE001
                 logger.warning(f"Zamanlayici: {e}")
             await asyncio.sleep(30)
@@ -1150,6 +1158,74 @@ def uygulama_olustur(
     async def zamanlama_sil(zid: str) -> dict:
         zamanlayici.sil(zid)
         return {"silindi": zid}
+
+    # ---- webhook tetikleyicileri (A11.3): HMAC + zaman + tek kullanimlik teslim ----
+    webhooklar = WebhookDeposu(veri_dizini)
+    webhook_kilidi = asyncio.Lock()
+
+    async def _webhook_isle(wid: str) -> str:
+        """Onceki calisma bitmisse siradaki olayi baslatir; donus: durum."""
+        async with webhook_kilidi:
+            w = webhooklar.getir(wid)
+            if w.son_run and _run_durumu(w.son_run) not in BITMIS_DURUMLAR:
+                return "kuyrukta"
+            alan = sohbet.projeler.aktif() if sohbet.projeler else None
+            if alan is None or not alan.kokler or Path(alan.kokler[0]) != Path(w.proje_kok):
+                return "kuyrukta (webhook'un projesi acik degil)"
+            sira = webhooklar.siradaki(wid)
+            if sira is None:
+                return "bos"
+            w, olay = sira
+            run = await ajan.baslat(
+                hedef_olustur(w, olay["olay"]), [], Butce(max_adim=w.max_adim),
+                model=ayarlar.oku().aktif_model,
+            )  # fmt: skip
+            w = webhooklar.getir(wid)
+            w.son_run = run.id
+            webhooklar.kaydet(w)
+            return f"basladi:{run.id}"
+
+    @app.post("/api/webhook/{wid}")
+    async def webhook_tetikle(wid: str, istek: Request) -> Response:
+        govde = await istek.body()
+        try:
+            basliklar = {k.lower(): v for k, v in istek.headers.items()}
+            w = webhooklar.dogrula(wid, basliklar, govde)
+            sira = webhooklar.kuyruga_al(
+                w, basliklar["x-yas-teslim"], govde.decode("utf-8", errors="replace")
+            )
+        except WebhookHatasi as e:
+            return JSONResponse({"hata": e.mesaj}, status_code=e.kod)
+        try:
+            durum_ = await _webhook_isle(wid)
+        except Exception as e:  # noqa: BLE001 - olay kuyrukta kalir
+            durum_ = f"kuyrukta ({e})"
+        return JSONResponse({"kabul": True, "sira": sira, "durum": durum_}, status_code=202)
+
+    @app.get("/api/webhooklar")
+    async def webhook_listesi() -> dict:
+        return {"webhooklar": webhooklar.liste()}
+
+    @app.post("/api/webhooklar")
+    async def webhook_ekle(veri: dict) -> dict:
+        if not veri.get("proje_kok"):
+            alan = sohbet.projeler.aktif() if sohbet.projeler else None
+            if alan is None or not alan.kokler:
+                raise UygulamaHatasi("Webhook icin once bir proje acin.")
+            veri["proje_kok"] = alan.kokler[0]
+        try:
+            w = webhooklar.ekle(veri)
+        except ValidationError as e:
+            raise UygulamaHatasi(f"Gecersiz webhook: {e.errors()[0].get('msg')}") from e
+        return w.model_dump(exclude={"kuyruk"}) | {
+            "adres": f"/api/webhook/{w.id}",
+            "not": "Sir yalniz simdi gosterilir; saklayin.",
+        }
+
+    @app.delete("/api/webhooklar/{wid}")
+    async def webhook_sil(wid: str) -> dict:
+        webhooklar.sil(wid)
+        return {"silindi": wid}
 
     # ---- dinamik is akislari (A8.6): tipli adimlar, kod calistirma yok ----
     akislar = AkisDeposu(veri_dizini)

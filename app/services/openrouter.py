@@ -6,6 +6,7 @@ Model listesi GET /api/v1/models'ten cekilir, 24 saat diskte tutulur (atomik yaz
 
 from __future__ import annotations
 
+import os
 import time
 from pathlib import Path
 from typing import Any
@@ -110,7 +111,10 @@ class OpenRouterDeposu:
 
     # ---- anahtar ----
     def anahtar(self) -> str:
-        return (json_oku(self.anahtar_yolu, {}) or {}).get("anahtar", "")
+        # CI (A11.4): kisa omurlu sir ortamdan okunur, diske YAZILMAZ; alt sureclere gecmez
+        # (ortam_allowlist). Kayitli anahtar varsa o oncelikli.
+        kayitli = (json_oku(self.anahtar_yolu, {}) or {}).get("anahtar", "")
+        return kayitli or os.environ.get("YAS_OPENROUTER_ANAHTARI", "").strip()
 
     def anahtar_kaydet(self, anahtar: str) -> dict:
         anahtar = anahtar.strip()

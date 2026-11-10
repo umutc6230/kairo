@@ -177,7 +177,14 @@ Python 3.12 + FastAPI + pywebview; arayuz vanilla JS. Paketleme: PORTABLE (kulla
       kacirilan = atla|bir_kez, idempotent anahtar (restart dahil), overlap atlanir, sinirli retry,
       gozetimsiz onay YOK (onay_bekliyor = overlap). Projesi acik degilse calismaz, acik proje degistirilmez.
       /api/zamanlamalar + sohbette /schedule. Kabul: sahte saatle 9 test.
-- [ ] A11.3 webhook/channels (imza, replay), A11.4 CI entegrasyonu  <- SIRADAKI
+- [x] A11.3 webhook (app/agent/webhook.py): /api/webhook/<id> oturum anahtarsiz ama HMAC imzali
+      (zaman.teslim.govde), +-5 dk zaman penceresi, tek kullanimlik teslim kimligi (restart dahil), 64 KB,
+      FIFO kuyruk (5), olay metni hedefe YALNIZ VERI olarak (mod/izin degismez), sir bir kez gosterilir.
+- [x] A11.4 CI: .github/workflows/ci.yml (ruff + format + JS --check + pytest + junit/coverage artifact,
+      contents:read, pull_request_target yok). ajan.yml: yalniz workflow_dispatch + korumali 'ajan' ortami,
+      kisa omurlu YAS_OPENROUTER_ANAHTARI (diske yazilmaz, alt surece gecmez), CLI --openrouter-model,
+      push/PR yok, diff+olaylar artifact.
+- [ ] A12 <- SIRADAKI
 - 2026-11-10 (16): A6 bitti (hooks + slash + hook UI; tarayicida dogrulandi). DIKKAT: ayni dalda paralel
   bir oturum A6.1/A6.2 commit'ledi (14da54a, 1c791d4); benim skill commit'im (81b748a) onlarla ust uste.
   399 test geciyor.

@@ -1,0 +1,56 @@
+# A11.4: headless ajan gorevi. YALNIZ elle (workflow_dispatch) ve korumali "ajan" ortaminda calisir.
+# - Issue/PR metni hedefe otomatik konmaz; hedefi tetikleyen kisi yazar.
+# - Sir yalniz bu adimin ortaminda (YAS_OPENROUTER_ANAHTARI); diske yazilmaz, alt sureclere gecmez.
+# - Mod "onayli": onay gereken adimda CLI kod 3 ile durur; CI'da gozetimsiz onay YOK.
+# - Degisiklik push edilmez/PR acilmaz; sonuc ve diff artifact olarak indirilir.
+name: Ajan gorevi
+on:
+  workflow_dispatch:
+    inputs:
+      hedef:
+        description: "Gorev hedefi"
+        required: true
+      model:
+        description: "OpenRouter modeli"
+        default: "openai/gpt-oss-20b:free"
+      mod:
+        description: "onayli | otomatik"
+        default: "onayli"
+permissions:
+  contents: read
+jobs:
+  ajan:
+    runs-on: windows-latest
+    environment: ajan  # korumali ortam: onayli kisi + sir burada
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+      - run: pip install -r requirements.txt
+      - name: Ajan
+        id: ajan
+        shell: pwsh
+        env:
+          YAS_VERI_DIZINI: ${{ runner.temp }}/yas-veri
+          YAS_OPENROUTER_ANAHTARI: ${{ secrets.OPENROUTER_API_KEY }}
+          HEDEF: ${{ inputs.hedef }}
+          MODEL: ${{ inputs.model }}
+          MOD: ${{ inputs.mod }}
+        run: |
+          New-Item -ItemType Directory -Force rapor | Out-Null
+          python -m app agent "$env:HEDEF" --proje . --guven guvenilir --mod "$env:MOD" `
+            --openrouter-model "$env:MODEL" --json | Tee-Object rapor/olaylar.jsonl
+          $kod = $LASTEXITCODE
+          git diff | Out-File -Encoding utf8 rapor/degisiklik.diff
+          "cikis_kodu=$kod" | Out-File -Append -Encoding utf8 $env:GITHUB_OUTPUT
+          exit $kod
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: ajan-sonucu
+          path: rapor/

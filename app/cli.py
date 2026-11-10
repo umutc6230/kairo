@@ -35,6 +35,11 @@ def arg_ayristir(argv: list[str]) -> argparse.Namespace:
     p.add_argument("--onayla", metavar="ONAY_ID", action="append", default=[])
     p.add_argument("--reddet", metavar="ONAY_ID", action="append", default=[])
     p.add_argument("--json", action="store_true", help="Satir basina JSON olay")
+    p.add_argument(
+        "--openrouter-model",
+        metavar="MODEL",
+        help="OpenRouter modeli (anahtar: YAS_OPENROUTER_ANAHTARI ortam degiskeni)",
+    )
     return p.parse_args(argv)
 
 
@@ -106,6 +111,13 @@ def calistir(args: argparse.Namespace, s: Studio) -> int:
 
 def main(argv: list[str]) -> int:
     args = arg_ayristir(argv)
+    if args.openrouter_model:  # CI: gecici veri klasorunde saglayici secimi
+        from app.config import veri_dizini
+        from app.services.ayarlar import AyarDeposu
+
+        AyarDeposu(veri_dizini()).guncelle(
+            {"saglayici": "openrouter", "or_model": args.openrouter_model}
+        )
     sunucu, adres, anahtar = _sunucu_baslat()
     try:
         with Studio(adres, anahtar) as s:
