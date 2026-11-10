@@ -184,7 +184,22 @@ Python 3.12 + FastAPI + pywebview; arayuz vanilla JS. Paketleme: PORTABLE (kulla
       contents:read, pull_request_target yok). ajan.yml: yalniz workflow_dispatch + korumali 'ajan' ortami,
       kisa omurlu YAS_OPENROUTER_ANAHTARI (diske yazilmaz, alt surece gecmez), CLI --openrouter-model,
       push/PR yok, diff+olaylar artifact.
-- [ ] A12 <- SIRADAKI
+- [x] A12.1-3 Remote Control (app/uzak.py, app/web/uzak.html): VARSAYILAN KAPALI. Kullanici karari (2026-11-10):
+      telefon Tailscale uzerinden masaustu uygulamanin TAM arayuzunu kullanir (ince istemci, tum mantik PC'de).
+      Masaustu uygulama DEGISMEDI (pywebview); uzak erisim ek ve istege bagli.
+      - Varsayilan ag 'tailscale': yalniz Tailscale IP'sini dinler + 100.64/10, fd7a:115c:a1e0::/48 disi ret.
+      - TLS (kendinden imzali, Tailscale IP SAN'da, parmak izi gosterilir); sunucu ANA event loop'ta.
+      - Eslesme: 8 karakter, 5 dk, tek kullanimlik kod + rol (tam/izleyici/operator/onaylayici).
+        Token 256 bit, yalniz ozet saklanir, 12 sa + sessiz dondurme, cihaz omru 30 gun, aninda iptal.
+        Cerez HttpOnly+Secure+SameSite=Strict; Origin kontrolu (CSRF); rate limit; denetim (token yok).
+      - tam rol: ayni surecteki ana uygulamaya ASGI gecidi; yerel oturum anahtari telefona GITMEZ
+        (sayfaya 'uzak' gomulur, gecit gercek anahtari ekler). Diger roller yalniz sinirli beyaz liste.
+      - Telefon duzeni: <=700px kenar cubugu ust katman. Sohbette /uzak, /uzak ac|kapat|kod tam|iptal.
+      Kabul: 2 cihaz eslesme/revoke/reconnect, rol/beyaz liste/CSRF/IP reddi, GERCEK TLS ile tam arayuz.
+      Canli telefon denemesi YAPILMADI (Windows guvenlik duvari izni ilk acilista sorulabilir).
+- [~] A12.4-6 cloud worker / Projects handoff / Bedrock-Google-Microsoft gateway: DIS BAGIMLILIK BEKLIYOR
+      (hesap/sunucu yok; ucretli kaynak ayrica yetkilendirilmeli).
+- [ ] A13 kalite kapisi <- SIRADAKI (sonra portable paketleme)
 - 2026-11-10 (16): A6 bitti (hooks + slash + hook UI; tarayicida dogrulandi). DIKKAT: ayni dalda paralel
   bir oturum A6.1/A6.2 commit'ledi (14da54a, 1c791d4); benim skill commit'im (81b748a) onlarla ust uste.
   399 test geciyor.

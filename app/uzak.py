@@ -29,6 +29,7 @@ from collections import defaultdict, deque
 from collections.abc import Awaitable, Callable
 from pathlib import Path
 from typing import Any, Literal
+from urllib.parse import urlsplit
 
 from fastapi import FastAPI, Request
 from fastapi.responses import HTMLResponse, JSONResponse
@@ -36,8 +37,14 @@ from pydantic import BaseModel
 
 from app.services.depo import json_oku, json_yaz
 
-Rol = Literal["izleyici", "operator", "onaylayici"]
-ROL_SIRA = {"izleyici": 0, "operator": 1, "onaylayici": 2}
+# tam: telefondan masaustu uygulamanin TAM arayuzu (ince istemci; tum mantik bilgisayarda)
+Rol = Literal["izleyici", "operator", "onaylayici", "tam"]
+ROL_SIRA = {"izleyici": 0, "operator": 1, "onaylayici": 2, "tam": 3}
+TAILSCALE_AGLARI = [
+    ipaddress.ip_network("100.64.0.0/10"),
+    ipaddress.ip_network("fd7a:115c:a1e0::/48"),
+]
+CEREZ = "yas_uzak"
 KOD_OMRU = 300
 TOKEN_OMRU = 12 * 3600
 CIHAZ_OMRU = 30 * 24 * 3600
@@ -197,7 +204,7 @@ def yerel_ipler() -> list[str]:
     return sorted(ipler)
 
 
-def sertifika(dizin: Path) -> tuple[Path, Path, str]:
+def sertifika(dizin: Path, hostlar: list[str] | None = None) -> tuple[Path, Path, str]:
     from cryptography import x509
     from cryptography.hazmat.primitives import hashes, serialization
     from cryptography.hazmat.primitives.asymmetric import ec
@@ -205,12 +212,23 @@ def sertifika(dizin: Path) -> tuple[Path, Path, str]:
 
     dizin.mkdir(parents=True, exist_ok=True)
     cert_yol, key_yol = dizin / "sertifika.pem", dizin / "anahtar.pem"
+    istenen = set(hostlar or [])
+    if cert_yol.exists() and istenen:  # adres (or. Tailscale IP) degistiyse yeniden uret
+        mevcut = x509.load_pem_x509_certificate(cert_yol.read_bytes())
+        try:
+            san_ = mevcut.extensions.get_extension_for_class(x509.SubjectAlternativeName).value
+            kapsanan = {str(i) for i in san_.get_values_for_type(x509.IPAddress)}
+        except x509.ExtensionNotFound:
+            kapsanan = set()
+        if not istenen <= kapsanan:
+            cert_yol.unlink()
     if not (cert_yol.exists() and key_yol.exists()):
         anahtar = ec.generate_private_key(ec.SECP256R1())
         ad = x509.Name([x509.NameAttribute(NameOID.COMMON_NAME, "Yerel AI Studio Uzak")])
         simdi = dt.datetime.now(dt.UTC)
         san = [x509.DNSName("localhost")] + [
-            x509.IPAddress(ipaddress.ip_address(i)) for i in yerel_ipler()]  # fmt: skip
+            x509.IPAddress(ipaddress.ip_address(i))
+            for i in sorted(set(yerel_ipler()) | istenen)]  # fmt: skip
         c = (x509.CertificateBuilder().subject_name(ad).issuer_name(ad)
              .public_key(anahtar.public_key()).serial_number(x509.random_serial_number())
              .not_valid_before(simdi - dt.timedelta(minutes=5))
@@ -299,11 +317,15 @@ def uzak_uygulamasi(depo: UzakDeposu, ic_cagri: IcCagri, parmak_izi: str = "") -
         except ValueError:
             return JSONResponse({"hata": "Gecersiz istek."}, status_code=400)
         depo.denetle(sonuc["cihaz_id"], ip(istek), "/uzak/esles", 200)
-        return JSONResponse(sonuc)
+        return _cerezli(sonuc)
 
     def _token(istek: Request) -> str:
-        b = istek.headers.get("authorization", "")
-        return b[7:] if b.lower().startswith("bearer ") else ""
+        return token_al(istek.headers.get("authorization", ""), istek.headers.get("cookie", ""))
+
+    def _cerezli(sonuc: dict) -> JSONResponse:
+        cevap = JSONResponse(sonuc)
+        cevap.headers["Set-Cookie"] = cerez(sonuc["token"])
+        return cevap
 
     @app.post("/uzak/yenile")
     async def yenile(istek: Request) -> JSONResponse:
@@ -313,7 +335,7 @@ def uzak_uygulamasi(depo: UzakDeposu, ic_cagri: IcCagri, parmak_izi: str = "") -
             depo.denetle("-", ip(istek), "/uzak/yenile", e.kod)
             return JSONResponse({"hata": e.mesaj}, status_code=e.kod)
         depo.denetle(s["cihaz_id"], ip(istek), "/uzak/yenile", 200)
-        return JSONResponse(s)
+        return _cerezli(s)
 
     @app.get("/uzak/ben")
     async def ben(istek: Request) -> JSONResponse:
@@ -361,32 +383,176 @@ def uzak_uygulamasi(depo: UzakDeposu, ic_cagri: IcCagri, parmak_izi: str = "") -
     return app
 
 
+def token_al(yetki: str, cerezler: str) -> str:
+    if yetki.lower().startswith("bearer "):
+        return yetki[7:].strip()
+    for parca in cerezler.split(";"):
+        ad, _, deger = parca.strip().partition("=")
+        if ad == CEREZ:
+            return deger
+    return ""
+
+
+def cerez(token: str) -> str:
+    return f"{CEREZ}={token}; Path=/; Max-Age={CIHAZ_OMRU}; HttpOnly; Secure; SameSite=Strict"
+
+
+def tailscale_ip() -> str:
+    """Bu bilgisayarin Tailscale IPv4 adresi; Tailscale yok/bagli degilse bos."""
+    import shutil
+    import subprocess
+
+    exe = shutil.which("tailscale") or r"C:\Program Files\Tailscale\tailscale.exe"
+    try:
+        r = subprocess.run(  # noqa: S603 - sabit arguman
+            [exe, "ip", "-4"], capture_output=True, text=True, timeout=10,
+            creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
+        )  # fmt: skip
+    except (OSError, subprocess.TimeoutExpired):
+        return ""
+    satirlar = (r.stdout or "").strip().splitlines() if r.returncode == 0 else []
+    try:
+        ip = satirlar[0].strip() if satirlar else ""
+        return ip if ip and ipaddress.ip_address(ip) in TAILSCALE_AGLARI[0] else ""
+    except ValueError:
+        return ""
+
+
+def _yanit(durum: int, govde: dict | None = None, yonlendir: str = "") -> tuple[dict, bytes]:
+    basliklar = [(b"content-type", b"application/json"), (b"cache-control", b"no-store")]
+    if yonlendir:
+        basliklar.append((b"location", yonlendir.encode()))
+    bas = {"type": "http.response.start", "status": durum, "headers": basliklar}
+    return bas, json.dumps(govde or {}, ensure_ascii=False).encode()
+
+
+def tam_erisim_asgi(
+    depo: UzakDeposu, uzak_app: FastAPI, ana_app: Any, oturum_anahtari: str,
+    izinli_aglar: list | None = None,
+) -> Callable:  # fmt: skip
+    """Uzak sunucunun ASGI giris noktasi.
+
+    /uzak/* -> eslesme sayfasi + sinirli API. Diger her sey -> YALNIZ 'tam' rollu, gecerli tokenli
+    cihaz icin ayni surecteki ana uygulama (arayuz + API, akislar dahil). Istek yeniden yazilir:
+    yetki/cerez/origin basliklari silinir, Host loopback olur, oturum anahtarini SUNUCU ekler
+    (telefona gonderilmez). izinli_aglar verilirse (Tailscale) disindaki IP'ler reddedilir.
+    """
+    sinir = HizSiniri(900)
+    atla = {"authorization", "cookie", "origin", "referer", "host", "x-yas-oturum",
+            "x-yas-uzak-cihaz"}  # fmt: skip
+
+    async def yaz(send: Callable, durum: int, govde: dict | None = None, git: str = "") -> None:
+        bas, gov = _yanit(durum, govde, git)
+        await send(bas)
+        await send({"type": "http.response.body", "body": gov})
+
+    async def uygulama(scope: dict, receive: Callable, send: Callable) -> None:
+        if scope["type"] != "http":
+            return None
+        ip_ = (scope.get("client") or ("?", 0))[0]
+        if izinli_aglar is not None:
+            try:
+                icinde = any(ipaddress.ip_address(ip_) in a for a in izinli_aglar)
+            except ValueError:
+                icinde = False
+            if not icinde:
+                depo.denetle("-", ip_, scope.get("path", ""), 403)
+                return await yaz(send, 403, {"hata": "Yalniz Tailscale aginizdan erisilir."})
+        yol = scope.get("path", "")
+        if yol == "/uzak" or yol.startswith("/uzak/"):
+            return await uzak_app(scope, receive, send)
+        basliklar = {k.decode("latin-1").lower(): v.decode("latin-1") for k, v in scope["headers"]}
+        token = token_al(basliklar.get("authorization", ""), basliklar.get("cookie", ""))
+        sayfa = scope["method"] == "GET" and not yol.startswith("/api")
+
+        async def red(durum: int, mesaj: str) -> None:
+            depo.denetle("-", ip_, yol, durum)
+            if sayfa:  # tarayici: eslesme sayfasina
+                return await yaz(send, 302, {}, "/uzak/")
+            return await yaz(send, durum, {"hata": mesaj})
+
+        try:
+            c = depo.dogrula(token)
+        except UzakHata as e:
+            return await red(e.kod, e.mesaj)
+        if c.rol != "tam":
+            return await red(403, "Bu cihazin rolu tam arayuze erisemez.")
+        if not sinir.izin(c.id):
+            return await red(429, "Istek siniri asildi.")
+        kaynak = basliklar.get("origin") or ""
+        if kaynak and urlsplit(kaynak).netloc != basliklar.get("host", ""):
+            return await red(403, "Dis kaynakli istek reddedildi.")  # CSRF
+        yeni_token = ""
+        if c.son_kullanma - depo.saat() < 3 * 3600:  # sessiz yeniden baglanma: token dondur
+            try:
+                yeni_token = depo.yenile(token)["token"]
+            except UzakHata:
+                yeni_token = ""
+        yeni = [(k, v) for k, v in scope["headers"] if k.decode("latin-1").lower() not in atla]
+        yeni += [(b"host", b"127.0.0.1"), (b"x-yas-oturum", oturum_anahtari.encode()),
+                 (b"x-yas-uzak-cihaz", c.id.encode())]  # fmt: skip
+        ic = dict(scope, headers=yeni, client=("127.0.0.1", 0), scheme="http",
+                  server=("127.0.0.1", 80))  # fmt: skip
+        if yol.startswith("/api") or scope["method"] != "GET":
+            depo.denetle(c.id, ip_, f"{scope['method']} {yol}", 0)
+
+        async def gonder(mesaj: dict) -> None:
+            if mesaj["type"] == "http.response.start" and yeni_token:
+                h = [*mesaj.get("headers", []), (b"set-cookie", cerez(yeni_token).encode())]
+                mesaj = dict(mesaj, headers=h)
+            await send(mesaj)
+
+        return await ana_app(ic, receive, gonder)
+
+    return uygulama
+
+
 class UzakSunucu:
-    """Uzak sunucuyu ayri thread'de TLS ile calistirir; yerel API'den ac/kapat."""
+    """Uzak sunucuyu ANA event loop'ta calistirir: ana uygulamanin asyncio nesneleri
+    (gorevler, kilitler, akislar) baska bir loop'tan kullanilmaz."""
 
     def __init__(self) -> None:
         self.sunucu: Any = None
+        self.gorev: Any = None
         self.adres = ""
 
     def acik_mi(self) -> bool:
-        return self.sunucu is not None and not self.sunucu.should_exit
+        s = self.sunucu
+        return s is not None and s.started and not s.should_exit
 
-    def ac(self, app: FastAPI, port: int, cert: Path, key: Path, host: str = "0.0.0.0") -> None:  # noqa: S104
+    async def ac(self, asgi: Any, port: int, cert: Path, key: Path, host: str) -> None:
+        import asyncio
+        import contextlib
+
         import uvicorn
+
+        class _Sunucu(uvicorn.Server):
+            @contextlib.contextmanager
+            def capture_signals(self):  # Ctrl+C/sinyaller ana uygulamada kalir
+                yield
 
         if self.acik_mi():
             return
-        cfg = uvicorn.Config(app, host=host, port=port, ssl_certfile=str(cert),
-                             ssl_keyfile=str(key), log_level="warning")  # fmt: skip
-        self.sunucu = uvicorn.Server(cfg)
-        threading.Thread(target=self.sunucu.run, daemon=True).start()
+        cfg = uvicorn.Config(asgi, host=host, port=port, ssl_certfile=str(cert),
+                             ssl_keyfile=str(key), log_level="warning", lifespan="off")  # fmt: skip
+        self.sunucu = _Sunucu(cfg)
+        self.gorev = asyncio.create_task(self.sunucu.serve())
         for _ in range(100):
-            if self.sunucu.started:
+            if self.sunucu.started or self.gorev.done():
                 break
-            time.sleep(0.05)
-        self.adres = f"https://{host}:{port}/uzak/"
+            await asyncio.sleep(0.05)
+        if not self.sunucu.started:
+            self.sunucu = None
+            raise OSError(f"{host}:{port} dinlenemedi (port kullanimda olabilir).")
+        self.adres = f"https://{host}:{port}/"
 
-    def kapat(self) -> None:
+    async def kapat(self) -> None:
+        import asyncio
+        import contextlib
+
         if self.sunucu is not None:
             self.sunucu.should_exit = True
+            if self.gorev is not None:
+                with contextlib.suppress(Exception):
+                    await asyncio.wait_for(self.gorev, 5)
         self.sunucu = None

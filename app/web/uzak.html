@@ -44,14 +44,14 @@ async function api(yol, govde) {
 
 function eslesmeEkrani(hata = "") {
   clearInterval(zamanlayici); document.getElementById("ben").textContent = "";
-  K.innerHTML = `<div class="kart"><b>Cihazı eşleştir</b><p class="soluk">Bilgisayarda sohbete <code>/uzak kod</code> yazın; çıkan 8 karakterlik kodu girin. Tarayıcının gösterdiği sertifika parmak izinin bilgisayardakiyle aynı olduğunu kontrol edin.</p>
+  K.innerHTML = `<div class="kart"><b>Cihazı eşleştir</b><p class="soluk">Bilgisayarda sohbete <code>/uzak kod tam</code> yazın; çıkan 8 karakterlik kodu girin. Tarayıcının gösterdiği sertifika parmak izinin bilgisayardakiyle aynı olduğunu kontrol edin.</p>
     <input id="kod" placeholder="Kod" autocomplete="one-time-code" autocapitalize="characters" maxlength="9">
     <input id="ad" placeholder="Cihaz adı (ör. telefonum)" style="margin-top:8px" maxlength="40">
     <div class="satir"><button class="ana" id="esles">Eşleştir</button></div><p id="mesaj" class="hata">${esc(hata)}</p></div>`;
   document.getElementById("esles").onclick = async () => {
     try {
       const v = await api("/uzak/esles", { kod: document.getElementById("kod").value, cihaz: document.getElementById("ad").value });
-      kaydet(v.token); basla();
+      kaydet(v.token); if (v.rol === "tam") { location.href = "/"; return; } basla();
     } catch (e) { document.getElementById("mesaj").textContent = e.message; }
   };
 }
@@ -59,6 +59,7 @@ function eslesmeEkrani(hata = "") {
 async function basla() {
   try {
     const b = await api("/uzak/ben"); rol = b.rol;
+    if (rol === "tam") { location.href = "/"; return; }
     document.getElementById("ben").textContent = `${b.ad} · ${b.rol}`;
     // token suresi yaklasinca dondur (eskisi gecersiz olur)
     if (b.son_kullanma * 1000 - Date.now() < 3 * 3600 * 1000) { const y = await api("/uzak/yenile", {}); kaydet(y.token); }

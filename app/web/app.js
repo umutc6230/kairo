@@ -325,6 +325,12 @@ async function baslat() {
     };
   });
   $("#btn-kenar").onclick = () => $("#kok").classList.toggle("kenar-kapali");
+  // Telefon (Tailscale uzak erisim, ince istemci): kenar cubugu ust katman; secim yapinca kapanir
+  const dar = window.matchMedia("(max-width: 700px)");
+  if (dar.matches) $("#kok").classList.add("kenar-kapali");
+  $("#kenar").addEventListener("click", (e) => {
+    if (dar.matches && e.target.closest(".nav-oge, .oturum, #btn-ayarlar")) $("#kok").classList.add("kenar-kapali");
+  });
   $("#btn-geri").onclick = () => { if (gecmisKonum > 0) git(gecmis[--gecmisKonum], { kaydetme: true }); };
   $("#btn-ileri").onclick = () => { if (gecmisKonum < gecmis.length - 1) git(gecmis[++gecmisKonum], { kaydetme: true }); };
   $("#btn-ayarlar").onclick = () => ayarlarAc();

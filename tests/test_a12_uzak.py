@@ -3,7 +3,6 @@ yetkisiz run/onay/dosya erisimi reddi, rate limit, denetim kaydi ve GERCEK TLS u
 
 from __future__ import annotations
 
-import json
 import socket
 
 import httpx
@@ -92,7 +91,8 @@ async def test_rol_ve_beyaz_liste(ortam, app) -> None:
                        ("GET", "/uzak/api/checkpointler")]:  # fmt: skip
         r = await c.request(metod, yol, headers=op, json={})
         assert r.status_code == 404, (yol, r.status_code)
-    # tokensiz hicbir sey
+    # tokensiz (cerez de yok) hicbir sey
+    c.cookies.clear()
     assert (await c.get("/uzak/api/gorevler")).status_code == 401
     # yerel API uzak uygulamada yok
     assert (await c.get("/api/gorevler", headers=op)).status_code == 404
@@ -115,26 +115,54 @@ def _bos_port() -> int:
         return s.getsockname()[1]
 
 
-async def test_gercek_tls_sunucu(app, tmp_path) -> None:
-    cert, key, parmak = uzak.sertifika(tmp_path / "tls")
+async def test_gercek_tls_sunucu_tam_rol(app, tmp_path) -> None:
+    """Gercek TLS + ayni event loop: telefon (tam rol) masaustu arayuzunu ve API'yi kullanir;
+    yerel oturum anahtari telefona GITMEZ; cerezle oturum; diger roller tam arayuze giremez."""
+    cert, key, parmak = uzak.sertifika(tmp_path / "tls", ["127.0.0.1"])
     depo = uzak.UzakDeposu(tmp_path)
+    uapp = uzak.uzak_uygulamasi(depo, app.state.uzak_ic_cagri, parmak)
+    asgi = uzak.tam_erisim_asgi(depo, uapp, app, app.state.oturum_anahtari)
     sunucu = uzak.UzakSunucu()
     port = _bos_port()
-    sunucu.ac(uzak.uzak_uygulamasi(depo, app.state.uzak_ic_cagri, parmak), port, cert, key,
-              host="127.0.0.1")  # fmt: skip
+    await sunucu.ac(asgi, port, cert, key, "127.0.0.1")
+    taban = f"https://127.0.0.1:{port}"
     try:
         assert sunucu.acik_mi()
-        kod = depo.kod_olustur("izleyici")["kod"]
-        async with httpx.AsyncClient(verify=str(cert), base_url=f"https://127.0.0.1:{port}") as c:
-            r = await c.post("/uzak/esles", json={"kod": kod, "cihaz": "tls-test"})
-            assert r.status_code == 200
-            h = {"Authorization": "Bearer " + r.json()["token"]}
-            r = await c.get("/uzak/ben", headers=h)
-            assert r.json()["parmak_izi"] == parmak and r.headers["cache-control"] == "no-store"
+        async with httpx.AsyncClient(verify=str(cert), base_url=taban) as c:
+            # eslesmeden once: arayuz -> eslesme sayfasina, API -> 401
+            assert (await c.get("/")).headers["location"] == "/uzak/"
+            assert (await c.get("/api/gorevler")).status_code == 401
             assert "Eşleştir" in (await c.get("/uzak/")).text
-        with pytest.raises(httpx.ConnectError):  # duz HTTP / dogrulanmamis sertifika yok
-            async with httpx.AsyncClient() as c:
-                await c.get(f"https://127.0.0.1:{port}/uzak/ben")
+            kod = depo.kod_olustur("tam")["kod"]
+            r = await c.post("/uzak/esles", json={"kod": kod, "cihaz": "telefon"})
+            assert r.status_code == 200 and "HttpOnly" in r.headers["set-cookie"]
+            sayfa = await c.get("/")  # cerezle tam arayuz
+            assert sayfa.status_code == 200 and "yas-oturum" in sayfa.text
+            assert app.state.oturum_anahtari not in sayfa.text  # anahtar telefona gitmez
+            assert 'content="uzak"' in sayfa.text
+            assert (await c.get("/api/gorevler")).status_code == 200  # tum API
+            assert (await c.get("/api/uzak")).json()["ag"] == "tailscale"
+            # baska siteden (CSRF) istek
+            r = await c.post("/api/uzak/kapat", headers={"Origin": "https://kotu.example"})
+            assert r.status_code == 403
+        async with httpx.AsyncClient(verify=str(cert), base_url=taban) as c2:
+            kod = depo.kod_olustur("operator")["kod"]
+            await c2.post("/uzak/esles", json={"kod": kod, "cihaz": "tablet"})
+            assert (await c2.get("/api/gorevler")).status_code == 403  # tam degil
+            assert (await c2.get("/uzak/api/gorevler")).status_code == 200  # sinirli API
+        with pytest.raises(httpx.ConnectError):  # dogrulanmamis sertifika
+            async with httpx.AsyncClient() as c3:
+                await c3.get(f"{taban}/uzak/")
     finally:
-        sunucu.kapat()
-    assert json.loads(depo.denetim_yolu.read_text(encoding="utf-8").splitlines()[0])["sonuc"] == 200
+        await sunucu.kapat()
+    assert not sunucu.acik_mi()
+
+
+async def test_tailscale_disi_ip_reddedilir(app, tmp_path) -> None:
+    depo = uzak.UzakDeposu(tmp_path)
+    uapp = uzak.uzak_uygulamasi(depo, app.state.uzak_ic_cagri)
+    asgi = uzak.tam_erisim_asgi(depo, uapp, app, "x", uzak.TAILSCALE_AGLARI)
+    for ip, beklenen in [("192.168.1.20", 403), ("100.89.62.5", 200)]:
+        async with httpx.AsyncClient(transport=httpx.ASGITransport(app=asgi, client=(ip, 5000)),
+                                     base_url="https://umut") as c:  # fmt: skip
+            assert (await c.get("/uzak/")).status_code == beklenen, ip

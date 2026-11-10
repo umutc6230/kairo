@@ -367,7 +367,7 @@ def uygulama_olustur(
         yield
         if zd:
             zd.cancel()
-        uzak_sunucu.kapat()  # A12: uzak erisim uygulamayla birlikte kapanir
+        await uzak_sunucu.kapat()  # A12: uzak erisim uygulamayla birlikte kapanir
         await ajan.kapat()  # calisan gorevler guvenli sinirda duraklatilir
         mcp.kapat()  # MCP sunucu surecleri yetim kalmasin
         for kz in sohbet.kod_zekasi.values():  # dil sunuculari
@@ -1250,13 +1250,20 @@ def uygulama_olustur(
 
     app.state.uzak_ic_cagri = _ic_cagri
 
+    def _uzak_hostlar() -> list[str]:
+        if ayarlar.oku().uzak_ag == "tailscale":
+            ts = uzak_mod.tailscale_ip()
+            return [ts] if ts else []
+        return [i for i in uzak_mod.yerel_ipler() if i != "127.0.0.1"]
+
     def _uzak_durum() -> dict:
         _, _, parmak = uzak_mod.sertifika(veri_dizini / "uzak-tls")
-        port = ayarlar.oku().uzak_port
+        a = ayarlar.oku()
+        hostlar = _uzak_hostlar()
         return {
-            "acik": uzak_sunucu.acik_mi(), "port": port, "parmak_izi": parmak,
-            "adresler": [f"https://{i}:{port}/uzak/" for i in uzak_mod.yerel_ipler()
-                         if i != "127.0.0.1"],
+            "acik": uzak_sunucu.acik_mi(), "port": a.uzak_port, "ag": a.uzak_ag,
+            "parmak_izi": parmak, "adresler": [f"https://{h}:{a.uzak_port}/" for h in hostlar],
+            "tailscale_yok": a.uzak_ag == "tailscale" and not hostlar,
             "cihazlar": uzak_depo.liste(), "denetim": uzak_depo.denetim(20),
         }  # fmt: skip
 
@@ -1266,19 +1273,28 @@ def uygulama_olustur(
 
     @app.post("/api/uzak/ac")
     async def uzak_ac() -> dict:
-        cert, key, _ = await asyncio.to_thread(uzak_mod.sertifika, veri_dizini / "uzak-tls")
-        uapp = uzak_mod.uzak_uygulamasi(uzak_depo, _ic_cagri, _uzak_durum()["parmak_izi"])
+        a = ayarlar.oku()
+        hostlar = await asyncio.to_thread(_uzak_hostlar)
+        if not hostlar:
+            raise UygulamaHatasi(
+                "Tailscale bagli degil: Tailscale'i acip oturum acin."
+                if a.uzak_ag == "tailscale" else "Yerel ag adresi bulunamadi."
+            )  # fmt: skip
+        cert, key, parmak = await asyncio.to_thread(
+            uzak_mod.sertifika, veri_dizini / "uzak-tls", hostlar
+        )
+        uapp = uzak_mod.uzak_uygulamasi(uzak_depo, _ic_cagri, parmak)
+        aglar = uzak_mod.TAILSCALE_AGLARI if a.uzak_ag == "tailscale" else None
+        asgi = uzak_mod.tam_erisim_asgi(uzak_depo, uapp, app, oturum_anahtari, aglar)
         try:
-            await asyncio.to_thread(uzak_sunucu.ac, uapp, ayarlar.oku().uzak_port, cert, key)
+            await uzak_sunucu.ac(asgi, a.uzak_port, cert, key, hostlar[0])
         except OSError as e:
             raise UygulamaHatasi(f"Uzak erisim acilamadi: {e}") from e
-        if not uzak_sunucu.acik_mi():
-            raise UygulamaHatasi("Uzak erisim acilamadi (port kullanimda olabilir).")
         return await asyncio.to_thread(_uzak_durum)
 
     @app.post("/api/uzak/kapat")
     async def uzak_kapat() -> dict:
-        uzak_sunucu.kapat()
+        await uzak_sunucu.kapat()
         return {"acik": False}
 
     @app.post("/api/uzak/kod")
@@ -1446,13 +1462,15 @@ def uygulama_olustur(
     web = web_dizini()
 
     @app.get("/")
-    async def ana_sayfa() -> Response:
+    async def ana_sayfa(istek: Request) -> Response:
         """index.html'e oturum anahtarini gomer: baska origin bu sayfayi OKUYAMAZ (A1.9)."""
         try:
             html = (web / "index.html").read_text(encoding="utf-8")
         except OSError:  # pragma: no cover - paket hatasi
             return JSONResponse({"hata": "Arayuz dosyasi bulunamadi."}, status_code=500)
-        etiket = f'<meta name="yas-oturum" content="{oturum_anahtari}">'
+        # uzak (telefon) istemciye gercek anahtar GONDERILMEZ; uzak gecit kendisi ekler
+        anahtar = "uzak" if istek.headers.get("x-yas-uzak-cihaz") else oturum_anahtari
+        etiket = f'<meta name="yas-oturum" content="{anahtar}">'
         html = html.replace("</head>", f"  {etiket}\n</head>", 1)
         return Response(
             html, media_type="text/html; charset=utf-8", headers={"Cache-Control": "no-store"}

@@ -93,19 +93,19 @@ export const KOMUTLAR = {
     },
   },
   "/uzak": {
-    aciklama: "Telefondan erişim (varsayılan kapalı): /uzak | /uzak ac | /uzak kapat | /uzak kod [izleyici|operator|onaylayici] | /uzak iptal <cihaz>",
+    aciklama: "Telefondan erişim, Tailscale üzerinden (varsayılan kapalı): /uzak | /uzak ac | /uzak kapat | /uzak kod [tam|izleyici|operator|onaylayici] | /uzak iptal <cihaz>",
     calistir: async (arg = "") => {
       const [islem, deger] = arg.trim().split(/\s+/);
       if (islem === "ac") { await api("/api/uzak/ac", { method: "POST" }); bildir("Uzak erişim açık (yalnız TLS).", "basari"); }
       else if (islem === "kapat") { await api("/api/uzak/kapat", { method: "POST" }); return bildir("Uzak erişim kapatıldı.", "basari"); }
       else if (islem === "kod") {
-        const k = await api("/api/uzak/kod", { method: "POST", govde: { rol: deger || "izleyici" } });
+        const k = await api("/api/uzak/kod", { method: "POST", govde: { rol: deger || "tam" } });
         const d = await api("/api/uzak");
         return bilgiPenceresi("Eşleşme kodu (5 dk, tek kullanımlık)", [["Kod", `${k.kod.slice(0, 4)}-${k.kod.slice(4)}`], ["Rol", k.rol],
           ["Adres", d.adresler.join("  ") || "-"], ["Sertifika parmak izi", d.parmak_izi], ["Durum", d.acik ? "açık" : "KAPALI: önce /uzak ac"]]);
       } else if (islem === "iptal" && deger) { await api(`/api/uzak/cihaz/${encodeURIComponent(deger)}`, { method: "DELETE" }); return bildir("Cihaz eşleşmesi iptal edildi.", "basari"); }
       const d = await api("/api/uzak");
-      const satirlar = [["Durum", d.acik ? "açık" : "kapalı"], ["Adres", d.adresler.join("  ") || "-"], ["Parmak izi", d.parmak_izi]];
+      const satirlar = [["Durum", d.acik ? "açık" : "kapalı"], ["Ağ", d.ag === "tailscale" ? (d.tailscale_yok ? "Tailscale bağlı değil" : "yalnız Tailscale") : "yerel ağ"], ["Adres", d.adresler.join("  ") || "-"], ["Parmak izi", d.parmak_izi]];
       d.cihazlar.forEach((c) => satirlar.push([`${c.id} ${c.ad}`, `${c.rol}${c.iptal ? " (iptal)" : ""}`]));
       bilgiPenceresi("Uzak erişim", satirlar);
     },

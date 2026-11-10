@@ -444,3 +444,16 @@ pre.duz { white-space: pre-wrap; font-family: var(--mono); font-size: 13px; marg
 
 #hap-izole.secili { color: var(--vurgu, #c96442); font-weight: 600; }
 .ajan-izole { display: flex; flex-direction: column; gap: 6px; }
+
+/* ---- telefon (A12: Tailscale uzerinden ince istemci) ---- */
+@media (max-width: 700px) {
+  .baslik-sol, #kok.kenar-kapali .baslik-sol { width: auto; }
+  #btn-geri, #btn-ileri, #ram-metni, #agecidi-hapi { display: none !important; }
+  .baslik-sag { gap: 4px; min-width: 0; }
+  .baslik-sag .hap { max-width: 42vw; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  #kenar { position: fixed; z-index: 50; top: var(--baslik-yukseklik, 44px); bottom: 0; left: 0;
+    width: min(86vw, 320px); box-shadow: 0 0 0 100vmax rgba(0, 0, 0, .35); }
+  #kok.kenar-kapali #kenar { margin-left: calc(-1 * min(86vw, 320px) - 20px); box-shadow: none; }
+  #ana { min-width: 0; width: 100%; }
+  input, textarea, select { font-size: 16px; } /* iOS yakinlastirmasin */
+}
