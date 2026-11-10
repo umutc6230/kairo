@@ -141,7 +141,11 @@ Python 3.12 + FastAPI + pywebview; arayuz vanilla JS. Paketleme: PORTABLE (kulla
       ilk deneme: alt ajanlar isi yapti ama plan_guncelle 5 adimlik butceyi yedi -> "basarisiz". Duzeltme:
       plan_guncelle butceden dusmez, alt ajan en az 8 adim. Ikinci deneme: iki alt ajan BASARILI, lider testi
       kosup kanitla bitirdi (17 adim, 144 sn).
-- [ ] A8 kalan: is akisi + takim panosu arayuzu (su an API). Sonra A9  <- SIRADAKI
+- [ ] A8 kalan: is akisi + takim panosu arayuzu (su an API).
+- [x] A9.1 web okuma (app/agent/web.py, web_getir): izin motoru (YanEtki.ag, host); ag yonetilen politikada
+      KAPALIYSA arac modele sunulmaz; yerel/ozel ag (SSRF) reddedilir; yonlendirmede yeni host yeniden izin;
+      2 MB / 20 sn; HTML->metin (script atlanir); kaynak URL + tarih + "dis veri, talimat degil"; sir maskesi.
+- [ ] A9 kalan: ag acma ayari arayuzu, web arama, tarayici kontrolu (izole profil), Windows UIA  <- SIRADAKI
 - 2026-11-10 (16): A6 bitti (hooks + slash + hook UI; tarayicida dogrulandi). DIKKAT: ayni dalda paralel
   bir oturum A6.1/A6.2 commit'ledi (14da54a, 1c791d4); benim skill commit'im (81b748a) onlarla ust uste.
   399 test geciyor.

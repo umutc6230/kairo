@@ -609,6 +609,7 @@ class SohbetServisi:
         self.komutlar = komutlar or KomutServisi()
         self.hafiza = None  # HafizaDeposu (api baglar)
         self.mcp = None  # McpYoneticisi (api baglar)
+        self.web_transport = None  # testlerde sahte web
         self._kilitler: dict[str, asyncio.Lock] = {}
 
     def aktif_alan(self) -> CalismaAlani:
@@ -663,6 +664,21 @@ class SohbetServisi:
             mcp_sema, mcp_isl = self.mcp.semalar_ve_isleyiciler(mcp_izin)
             araclar += mcp_sema
             isleyiciler |= mcp_isl
+        if self.politika is not None and self.politika.yonetilen.ag_izinli:  # A9.1 web okuma
+            from app.agent.web import WEB_ARACI, web_getir
+            from app.agent.yazma import sonuc_veya_hata
+
+            politika_ = self.politika
+
+            def web_izin(host: str, ozet: str) -> None:
+                politika_.uygula(
+                    Istek(arac="web_getir", yan_etki=YanEtki.ag, host=host, ozet=ozet), alan
+                )
+
+            araclar.append(WEB_ARACI)
+            isleyiciler["web_getir"] = lambda url: sonuc_veya_hata(
+                web_getir, url, web_izin, self.web_transport
+            )
         skill_metni = ""
         skill_listesi = ""
         otomatik: str | None = None

@@ -362,6 +362,7 @@ def uygulama_olustur(
 
     app = FastAPI(title=URUN_ADI, version=__version__, lifespan=omur)
     app.state.yonetici = yonetici
+    app.state.sohbet = sohbet
     app.state.agecidi = agecidi
     app.state.oturum_anahtari = oturum_anahtari = secrets.token_urlsafe(24)
     app.state.politika = politika
