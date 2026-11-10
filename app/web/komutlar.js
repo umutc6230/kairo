@@ -43,6 +43,14 @@ export const KOMUTLAR = {
   "/diff": { aciklama: "Çalışma ağacı diff'i", calistir: () => diffGoster() },
   "/review": { aciklama: "Diff'i kod review'dan geçirir (/review derin: güvenlik + doğruluk geçişleri)", calistir: (arg) => reviewYap(arg === "derin") },
   "/agents": { aciklama: "Ajan görevleri sayfası", calistir: () => git("gorevler") },
+  "/browser": {
+    aciklama: "Tarayıcı durumu; /browser kapat: acil durdurma",
+    calistir: async (arg) => {
+      if (arg === "kapat") { await api("/api/tarayici/kapat", { method: "POST" }); bildir("Tarayıcı kapatıldı.", "basari", 2000); return; }
+      const d = await api("/api/tarayici");
+      bilgiPenceresi("Tarayıcı", [["Durum", d.acik ? "açık" : "kapalı"], ["Playwright", d.playwright ? "kurulu" : "yok (pip install playwright)"], ["Ayar", durum.ayarlar?.tarayici_acik ? "açık" : "kapalı (Ayarlar > AI Ayarları)"]]);
+    },
+  },
   "/akis": { aciklama: "İş akışları: listele, JSON ile başlat, onaydan sonra devam", calistir: () => akisPenceresi() },
   "/goal": {
     aciklama: "/goal <hedef>: ajan görevi başlatır",
@@ -64,7 +72,7 @@ export const KOMUTLAR = {
   "/compact": { aciklama: "Ajan görevlerinde bağlam dolunca otomatik özetlenir", calistir: () => bildir("Özetleme ajan görevlerinde otomatik; sohbet için henüz elle özet yok.", "bilgi") },
 };
 
-const HENUZ_YOK = ["/cost", "/resume", "/rewind", "/browser", "/loop", "/schedule", "/doctor"];
+const HENUZ_YOK = ["/cost", "/resume", "/rewind", "/loop", "/schedule", "/doctor"];
 
 // Is akislari (A8.6): adimlar yalniz "ajan" ya da "komut"; kod calistirma yok.
 const AKIS_ORNEK = JSON.stringify({ ad: "duzelt ve test et", adimlar: [

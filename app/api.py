@@ -31,6 +31,7 @@ from app.agent.mcp import McpYoneticisi
 from app.agent.policy import PolitikaMotoru, yerel_host_mu
 from app.agent.runner import AgentRunner, Butce, RunDeposu, RunDurum, olay_akisi
 from app.agent.takim import TakimPanosu
+from app.agent.tarayici import Tarayici, playwright_var
 from app.agent.terminal import KomutServisi
 from app.agent.workspaces import Guven, Mod, WorkspaceDeposu
 from app.agent.yetenek import ModelYetenegi, dogrula, uzak_yetenek, yerel_yetenek
@@ -276,6 +277,7 @@ def uygulama_olustur(
     hafiza = HafizaDeposu(veri_dizini)
     hooklar = HookDeposu(veri_dizini)
     mcp = McpYoneticisi(veri_dizini)
+    sohbet.tarayici = Tarayici(veri_dizini)
     sohbet.mcp = mcp
     artifactler = ArtifactDeposu(veri_dizini)
     sohbet.hafiza = hafiza
@@ -356,6 +358,8 @@ def uygulama_olustur(
         yield
         await ajan.kapat()  # calisan gorevler guvenli sinirda duraklatilir
         mcp.kapat()  # MCP sunucu surecleri yetim kalmasin
+        if sohbet.tarayici.acik_mi():
+            await asyncio.to_thread(sohbet.tarayici.kapat)
         await komutlar.hepsini_durdur()  # yetim test/dev-server surecleri kalmasin
         await agecidi.durdur()
         await yonetici.kapat()  # yalniz bizim baslattigimiz model sunucusunu durdurur
@@ -666,6 +670,15 @@ def uygulama_olustur(
     async def plugin_kaldir(ad: str) -> dict:
         pluginler.kaldir(ad)
         return {"silindi": ad}
+
+    # ---- tarayici acil durdurma (A9.6): ajan calisirken bile hemen kapatir ----
+    @app.post("/api/tarayici/kapat")
+    async def tarayici_kapat() -> dict:
+        return await asyncio.to_thread(sohbet.tarayici.kapat)
+
+    @app.get("/api/tarayici")
+    async def tarayici_durum() -> dict:
+        return {"acik": sohbet.tarayici.acik_mi(), "playwright": playwright_var()}
 
     # ---- MCP (A7): sunucular yalniz oturumlu arayuzden; sirlar maskeli doner ----
     @app.get("/api/mcp")

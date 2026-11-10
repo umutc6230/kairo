@@ -149,7 +149,12 @@ Python 3.12 + FastAPI + pywebview; arayuz vanilla JS. Paketleme: PORTABLE (kulla
 - [x] A9 internet ayari: Ayarlar'da 'Internet erisimi' (ag_acik, varsayilan kapali); kurum ag_yasak ile ezer
       (ust sinir). web_ara (DuckDuckGo HTML): web_getir ile ayni izin/SSRF/yonlendirme cekirdegi, javascript:
       linkleri elenir, ozetlerde sir maskeli, her istek onay ister. tests/test_a9_web.py
-- [ ] A9 kalan: tarayici kontrolu (izole profil, A9.2-4), Windows UIA (A9.5-6)  <- SIRADAKI
+- [x] A9.2-4 tarayici (app/agent/tarayici.py, Playwright ISTEGE BAGLI, requirements'ta yok): yalniz <veri>/tarayici-profili
+      (kullanici profili/cerez/sifre/debug portu yok); git/oku/tikla/yaz/sec/yukle/ekran/hatalar; gezinme ag kuralina
+      bagli, dis sitede etkilesim HER ZAMAN onay (eleman+deger onizlemeli), yukleme yalniz proje kokunden.
+      Ayarlar'da 'Tarayici kontrolu' (varsayilan kapali), /browser + /browser kapat (acil durdurma).
+      Kabul: yerel fixture sitede GERCEK gorunmez Chrome ile form/select/yukleme/konsol hatasi/404/ekran.
+- [ ] A9.5-6 Windows UIA masaustu kontrolu  <- SIRADAKI
 - 2026-11-10 (16): A6 bitti (hooks + slash + hook UI; tarayicida dogrulandi). DIKKAT: ayni dalda paralel
   bir oturum A6.1/A6.2 commit'ledi (14da54a, 1c791d4); benim skill commit'im (81b748a) onlarla ust uste.
   399 test geciyor.

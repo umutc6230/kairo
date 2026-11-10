@@ -75,6 +75,8 @@ export function ayarlarAc(sekme = "ai") {
         <label class="anahtar"><input type="checkbox" id="ay-araclar" ${a.sohbet_araclari ? "checked" : ""}><span></span></label></div>
       <div class="anahtar-satir"><div><div>İnternet erişimi</div><div class="ayar-not">Açıkken model web'de arama yapabilir ve sayfa okuyabilir (<code>web_ara</code>, <code>web_getir</code>). Her istek yine onay ister; yerel ağ adresleri okunmaz. Kurum politikası kapattıysa açılamaz.</div></div>
         <label class="anahtar"><input type="checkbox" id="ay-ag" ${a.ag_acik ? "checked" : ""}><span></span></label></div>
+      <div class="anahtar-satir"><div><div>Tarayıcı kontrolü</div><div class="ayar-not">Proje açıkken ajan ayrı bir tarayıcı profiliyle (senin Chrome profilin, çerezlerin ve şifrelerin değil) sayfa açabilir, form doldurabilir, tıklayabilir, ekran görüntüsü alabilir. Dış sitelerde her tıklama ve yazma ayrıca onay ister. Acil durdurma: sohbette <code>/browser kapat</code>.</div></div>
+        <label class="anahtar"><input type="checkbox" id="ay-tarayici" ${a.tarayici_acik ? "checked" : ""}><span></span></label></div>
       <div class="ayar-grup"><label>Sistem istemi (isteğe bağlı)</label><textarea class="alan" id="ay-sistem" rows="3" placeholder="Örn: Her zaman Türkçe ve kısa cevap ver.">${kacir(a.sistem_istemi)}</textarea></div>
       <div class="satir"><div class="ayar-grup" style="flex:1"><label>Sıcaklık (${a.sicaklik})</label><input type="range" id="ay-sicaklik" min="0" max="1.5" step="0.1" value="${a.sicaklik}"></div>
         <div class="ayar-grup" style="flex:1"><label>En fazla cevap token</label><input class="alan" id="ay-max" type="number" min="16" max="8192" value="${a.max_tokens}"></div></div>
@@ -465,6 +467,7 @@ export function ayarlarAc(sekme = "ai") {
   alanKaydet("#ay-oto", "otomatik_baslat");
   alanKaydet("#ay-araclar", "sohbet_araclari");
   alanKaydet("#ay-ag", "ag_acik");
+  alanKaydet("#ay-tarayici", "tarayici_acik");
   const sunucuKaydet = async (degisiklik) => { await kaydet(degisiklik); sunucuDurumuCiz(govde); };
   $("#ay-sunucu-acik", govde).onchange = (e) => sunucuKaydet({ sunucu_acik: e.target.checked });
   $("#ay-sunucu-port", govde).onchange = (e) => sunucuKaydet({ sunucu_port: Number(e.target.value) });

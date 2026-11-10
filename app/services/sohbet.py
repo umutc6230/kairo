@@ -609,6 +609,7 @@ class SohbetServisi:
         self.komutlar = komutlar or KomutServisi()
         self.hafiza = None  # HafizaDeposu (api baglar)
         self.mcp = None  # McpYoneticisi (api baglar)
+        self.tarayici = None  # Tarayici (api baglar)
         self.web_transport = None  # testlerde sahte web
         self._kilitler: dict[str, asyncio.Lock] = {}
 
@@ -682,6 +683,18 @@ class SohbetServisi:
             isleyiciler["web_ara"] = lambda sorgu: sonuc_veya_hata(
                 web_ara, sorgu, web_izin, self.web_transport
             )
+        if (
+            self.tarayici is not None
+            and ajan_kaydi is not None
+            and getattr(ayar, "tarayici_acik", False)
+        ):  # A9.2: izole tarayici; gezinme ag kuralina, dis sitede etkilesim onaya bagli
+            from app.agent import tarayici as tr
+
+            araclar += tr.SEMALAR
+            isleyiciler |= tr.isleyiciler(
+                self.tarayici, self.politika, alan, ajan_kaydi.kapsam,
+                self.tarayici.profil.parent / "ekran-goruntuleri",
+            )  # fmt: skip
         skill_metni = ""
         skill_listesi = ""
         otomatik: str | None = None

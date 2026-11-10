@@ -79,7 +79,7 @@ def test_ag_kapaliyken_kapali_aciksa_sunulur(app) -> None:
 # ---------------- A9 web arama + kullanici internet ayari
 ARAMA_HTML = (
     '<div><a class="result__a" href="//duckduckgo.com/l/?uddg=https%3A%2F%2Fpython.org%2F">'
-    'Python <b>Resmi</b></a>'
+    "Python <b>Resmi</b></a>"
     '<a class="result__snippet">Dil sitesi token=gizli1234567890abcdef</a></div>'
     '<div><a class="result__a" href="javascript:alert(1)">Kotu</a></div>'
 )
