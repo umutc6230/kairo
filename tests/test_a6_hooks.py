@@ -1,0 +1,77 @@
+"""A6 hooks: deny, timeout, fail-closed/open, sir maskeleme, ajan entegrasyonu."""
+
+from __future__ import annotations
+
+import json
+import sys
+from pathlib import Path
+
+from test_a3_ajan import SahteModel, bitir, cagri, kur
+
+from app.agent.hooks import HookDeposu
+from app.agent.runner import AdimDurum, RunDurum
+
+PY = f'"{sys.executable}"'
+
+
+def _betik(tmp_path: Path, ad: str, kod: str) -> str:
+    p = tmp_path / f"{ad}.py"
+    p.write_text(kod, encoding="utf-8")
+    return f'{PY} "{p}"'
+
+
+def test_engel_timeout_ve_bilgi_hatasi(tmp_path) -> None:
+    d = HookDeposu(tmp_path)
+    reddet = _betik(tmp_path, "r", "import sys; sys.stderr.write('rm yasak'); sys.exit(2)")
+    yavas = _betik(tmp_path, "y", "import time; time.sleep(5)")
+    bozuk = _betik(tmp_path, "b", "import sys; sys.exit(1)")
+    d.ekle({"ad": "bilgi-bozuk", "olay": "pre_tool", "tur": "bilgi", "komut": bozuk})
+    assert d.tetikle("pre_tool", {}, arac="x").izin  # bilgi hook'u hatasi durdurmaz
+
+    d.ekle({"ad": "yavas", "olay": "pre_tool", "tur": "guvenlik", "komut": yavas, "timeout": 1})
+    s = d.tetikle("pre_tool", {}, arac="x")
+    assert not s.izin and "zaman asimi" in s.neden  # guvenlik: fail-closed
+
+    d2 = HookDeposu(tmp_path / "d2")
+    d2.ekle({"ad": "rm", "olay": "pre_tool", "tur": "guvenlik", "komut": reddet,
+             "arac": "komut_calistir"})  # fmt: skip
+    assert d2.tetikle("pre_tool", {}, arac="proje_listele").izin  # arac filtresi
+    s = d2.tetikle("pre_tool", {}, arac="komut_calistir")
+    assert not s.izin and "rm yasak" in s.neden
+
+
+def test_hook_girdisi_sir_maskelenir(tmp_path) -> None:
+    cikti = tmp_path / "girdi.json"
+    kaydet = _betik(tmp_path, "k", f"import sys; open({str(cikti)!r},'w').write(sys.stdin.read())")
+    d = HookDeposu(tmp_path)
+    d.ekle({"ad": "log", "olay": "post_tool", "komut": kaydet})
+    d.tetikle("post_tool", {"sonuc": "api_key=sk-or-v1-abcdefghijklmnopqrstuvwxyz0123456789"})
+    veri = json.loads(cikti.read_text(encoding="utf-8"))
+    assert veri["surum"] == 1 and veri["olay"] == "post_tool"
+    assert "abcdefghijklmnop" not in cikti.read_text(encoding="utf-8")
+
+
+async def test_guvenlik_hooku_ajan_aracini_durdurur(tmp_path) -> None:
+    proje = tmp_path / "proje"
+    proje.mkdir()
+    hooks = HookDeposu(tmp_path / "h")
+    hooks.ekle({"ad": "yazma-yasak", "olay": "pre_tool", "tur": "guvenlik",
+                "arac": "proje_dosya_yaz",
+                "komut": _betik(tmp_path, "r", "import sys; sys.exit(2)")})  # fmt: skip
+    model = SahteModel([cagri("proje_dosya_yaz", yol="a.txt", icerik="x"),
+                        cagri("gorevi_bitir", ozet="yazamadim", kanit_adimlari=[])])  # fmt: skip
+    runner, *_ = kur(tmp_path, proje, model, hooks=hooks)
+    run = await bitir(runner, (await runner.baslat("dosya yaz")).id)
+    assert run.adimlar[0].durum is AdimDurum.reddedildi and "yazma-yasak" in run.adimlar[0].sonuc
+    assert not (proje / "a.txt").exists() and run.durum is RunDurum.dogrulanmadi
+
+
+async def test_hook_api(istemci) -> None:
+    r = await istemci.post("/api/hooks", json={"ad": "t", "olay": "pre_tool", "komut": "exit 0"})
+    h = r.json()
+    assert r.status_code == 200 and h["tur"] == "bilgi"
+    assert (await istemci.post(f"/api/hooks/{h['id']}/test")).json()["durum"] == "izin"
+    bad = await istemci.post("/api/hooks", json={"ad": "t", "olay": "yok", "komut": "x"})
+    assert bad.status_code == 422
+    assert "pre_tool" in (await istemci.get("/api/hooks")).json()["olaylar"]
+    assert (await istemci.delete(f"/api/hooks/{h['id']}")).status_code == 200

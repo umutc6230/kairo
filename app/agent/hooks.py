@@ -1,0 +1,161 @@
+"""Hook'lar (A6.4-5): olaylarda kullanicinin tanimladigi komut calisir.
+
+Sozlesme (surum 1): komut stdin'den JSON alir {"surum", "olay", "veri"} (sirlar maskelenmis).
+- cikis 0: devam; cikis 2: ENGELLE (stderr = neden); diger kod / timeout / baslatilamama = hata.
+- tur "guvenlik": hata ya da timeout da ENGELLER (fail-closed).
+- tur "bilgi": hata loglanir, gorev durmaz (fail-open); engelleyemez.
+Hook'lar yalniz oturumlu API/arayuzden eklenir; model, skill ya da proje dosyasi hook ekleyemez.
+Hook calisirken yeni hook tetiklenmez (recursion siniri 1). Ortam allowlist ile verilir.
+"""
+
+from __future__ import annotations
+
+import json
+import subprocess
+import sys
+import threading
+import uuid
+from pathlib import Path
+from typing import Literal
+
+from loguru import logger
+from pydantic import BaseModel, Field
+
+from app.agent.dosyalar import ortam_allowlist
+from app.agent.policy import maskele
+from app.exceptions import Bulunamadi
+from app.services.depo import json_oku, json_yaz
+
+SOZLESME_SURUMU = 1
+OLAYLAR = (
+    "run_baslangic", "run_bitis", "prompt", "pre_tool", "post_tool", "izin", "compact",
+)  # fmt: skip
+MAX_CIKTI = 4000
+
+Olay = Literal["run_baslangic", "run_bitis", "prompt", "pre_tool", "post_tool", "izin", "compact"]
+
+
+class Hook(BaseModel):
+    id: str = Field(default_factory=lambda: uuid.uuid4().hex[:12])
+    ad: str = Field(min_length=1, max_length=80)
+    olay: Olay
+    tur: Literal["guvenlik", "bilgi"] = "bilgi"
+    komut: str = Field(min_length=1, max_length=2000)
+    arac: str = Field(default="", max_length=80)  # pre/post_tool icin filtre; bos = hepsi
+    timeout: int = Field(default=10, ge=1, le=120)
+    aktif: bool = True
+
+
+class HookSonucu(BaseModel):
+    izin: bool = True
+    neden: str = ""
+    calisan: list[dict] = []
+
+
+_yerel = threading.local()
+
+
+def _maskeli(x: object) -> object:
+    if isinstance(x, str):
+        return maskele(x)
+    if isinstance(x, dict):
+        return {k: _maskeli(v) for k, v in x.items()}
+    if isinstance(x, list | tuple):
+        return [_maskeli(v) for v in x]
+    return x
+
+
+class HookDeposu:
+    def __init__(self, veri_dizini: Path) -> None:
+        self.yol = veri_dizini / "hooks.json"
+
+    def liste(self) -> list[Hook]:
+        sonuc = []
+        for h in json_oku(self.yol, []) or []:
+            try:
+                sonuc.append(Hook(**h))
+            except ValueError:
+                continue
+        return sonuc
+
+    def _yaz(self, hooks: list[Hook]) -> None:
+        json_yaz(self.yol, [h.model_dump() for h in hooks])
+
+    def ekle(self, veri: dict) -> Hook:
+        h = Hook(**veri)
+        self._yaz([*self.liste(), h])
+        return h
+
+    def guncelle(self, hook_id: str, veri: dict) -> Hook:
+        hooks = self.liste()
+        for i, h in enumerate(hooks):
+            if h.id == hook_id:
+                hooks[i] = Hook(**(h.model_dump() | veri | {"id": hook_id}))
+                self._yaz(hooks)
+                return hooks[i]
+        raise Bulunamadi("Hook bulunamadi.")
+
+    def sil(self, hook_id: str) -> None:
+        hooks = self.liste()
+        kalan = [h for h in hooks if h.id != hook_id]
+        if len(kalan) == len(hooks):
+            raise Bulunamadi("Hook bulunamadi.")
+        self._yaz(kalan)
+
+    @staticmethod
+    def _calistir(h: Hook, olay: str, veri: dict, cwd: Path | None) -> tuple[str, str]:
+        """('izin'|'engel'|'hata', mesaj)."""
+        # maske DEGERLERE uygulanir: serilestirilmis metne uygulamak JSON tirnaklarini bozuyordu
+        girdi = json.dumps({"surum": SOZLESME_SURUMU, "olay": olay, "veri": _maskeli(veri)},
+                           ensure_ascii=False, default=str)  # fmt: skip
+        try:
+            r = subprocess.run(  # noqa: S602 - kullanicinin kendi tanimladigi hook komutu
+                h.komut,
+                shell=True,
+                input=girdi.encode("utf-8"),
+                capture_output=True,
+                timeout=h.timeout,
+                cwd=str(cwd) if cwd and cwd.is_dir() else None,
+                env=ortam_allowlist(),
+                creationflags=subprocess.CREATE_NO_WINDOW if sys.platform == "win32" else 0,
+            )
+        except subprocess.TimeoutExpired:
+            return "hata", f"{h.timeout} sn zaman asimi"
+        except OSError as e:
+            return "hata", f"baslatilamadi: {e}"
+        hata = maskele(r.stderr.decode("utf-8", "replace").strip())[:MAX_CIKTI]
+        if r.returncode == 0:
+            return "izin", ""
+        if r.returncode == 2:
+            return "engel", hata or "Hook islemi engelledi."
+        return "hata", f"cikis {r.returncode}: {hata}"
+
+    def tetikle(
+        self, olay: str, veri: dict, *, arac: str = "", cwd: Path | None = None
+    ) -> HookSonucu:
+        if getattr(_yerel, "icinde", False):  # hook icinden yeni hook yok
+            return HookSonucu()
+        sonuc = HookSonucu()
+        _yerel.icinde = True
+        try:
+            for h in self.liste():
+                if not h.aktif or h.olay != olay or (h.arac and h.arac != arac):
+                    continue
+                durum, mesaj = self._calistir(h, olay, veri, cwd)
+                sonuc.calisan.append({"hook": h.ad, "tur": h.tur, "durum": durum, "mesaj": mesaj})
+                if durum == "hata":
+                    logger.warning("Hook hatasi ({}): {}", h.ad, mesaj)
+                engeller = h.tur == "guvenlik" and durum in ("engel", "hata")
+                if engeller and sonuc.izin:
+                    sonuc.izin = False
+                    sonuc.neden = f"Guvenlik hook'u '{h.ad}' engelledi: {mesaj}"
+        finally:
+            _yerel.icinde = False
+        return sonuc
+
+    def test_et(self, hook_id: str) -> dict:
+        h = next((x for x in self.liste() if x.id == hook_id), None)
+        if h is None:
+            raise Bulunamadi("Hook bulunamadi.")
+        durum, mesaj = self._calistir(h, h.olay, {"test": True, "arac": h.arac or "ornek"}, None)
+        return {"durum": durum, "mesaj": mesaj}

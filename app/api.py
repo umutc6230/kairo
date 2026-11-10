@@ -21,6 +21,8 @@ from pydantic import BaseModel, Field, ValidationError
 from app import URUN_ADI, URUN_SAHIBI, URUN_SAHIBI_GITHUB, URUN_SAHIBI_X, __version__
 from app.agent import review as rv
 from app.agent.checkpoints import CheckpointDeposu
+from app.agent.hooks import OLAYLAR as HOOK_OLAYLARI
+from app.agent.hooks import HookDeposu
 from app.agent.izolasyon import adaptor_olustur
 from app.agent.policy import PolitikaMotoru, yerel_host_mu
 from app.agent.runner import AgentRunner, Butce, RunDeposu, RunDurum, olay_akisi
@@ -259,6 +261,7 @@ def uygulama_olustur(
 
     skiller.proje_kaynaklari = proje_skill_kaynaklari
     hafiza = HafizaDeposu(veri_dizini)
+    hooklar = HookDeposu(veri_dizini)
     artifactler = ArtifactDeposu(veri_dizini)
     sohbet.hafiza = hafiza
 
@@ -309,6 +312,7 @@ def uygulama_olustur(
         lambda: yonetici.kullan(),
         onay_durumu,
         yetenek=model_yetenegi,
+        hooks=hooklar,
         hafiza=lambda: (
             hafiza.sistem_metni(sohbet.aktif_alan().id) if ayarlar.oku().hafiza_acik else ""
         ),
@@ -597,6 +601,28 @@ def uygulama_olustur(
     @app.delete("/api/artifactler/{artifact_id}")
     async def artifact_sil(artifact_id: str) -> dict:
         return artifactler.sil(artifact_id)
+
+    # ---- hooks (A6.4-5): yalniz oturumlu arayuzden eklenir; model/skill/proje ekleyemez ----
+    @app.get("/api/hooks")
+    async def hook_listesi() -> dict:
+        return {"hooks": [h.model_dump() for h in hooklar.liste()], "olaylar": list(HOOK_OLAYLARI)}
+
+    @app.post("/api/hooks")
+    async def hook_ekle(veri: dict) -> dict:
+        return hooklar.ekle(veri).model_dump()
+
+    @app.put("/api/hooks/{hook_id}")
+    async def hook_guncelle(hook_id: str, veri: dict) -> dict:
+        return hooklar.guncelle(hook_id, veri).model_dump()
+
+    @app.delete("/api/hooks/{hook_id}")
+    async def hook_sil(hook_id: str) -> dict:
+        hooklar.sil(hook_id)
+        return {"silindi": hook_id}
+
+    @app.post("/api/hooks/{hook_id}/test")
+    async def hook_test(hook_id: str) -> dict:
+        return await asyncio.to_thread(hooklar.test_et, hook_id)
 
     # ---- model yetenegi (A4.7) ----
     @app.get("/api/model/yetenek")

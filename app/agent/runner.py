@@ -270,6 +270,7 @@ class AgentRunner:
         bekleme: tuple[float, ...] = BEKLEME_SN,
         yetenek: Callable[[], ModelYetenegi] | None = None,
         hafiza: Callable[[], str] | None = None,
+        hooks: Any = None,  # HookDeposu
     ) -> None:
         self.depo = depo
         self.araclar = araclar
@@ -278,6 +279,7 @@ class AgentRunner:
         self.bekleme = bekleme
         self.yetenek = yetenek
         self.hafiza = hafiza or (lambda: "")
+        self.hooks = hooks
         self._gorevler: dict[str, asyncio.Task] = {}
         self._iptal: set[str] = set()
         self._duraklat: set[str] = set()
@@ -673,6 +675,18 @@ class AgentRunner:
             self._arac_mesaji(run, a, {"hata": f"Bilinmeyen ya da izin verilmeyen arac: {a.arac}"})
             self.depo.kaydet(run)
             return
+        if self.hooks is not None:  # pre_tool: guvenlik hook'u engelleyebilir (fail-closed)
+            h = await asyncio.to_thread(
+                self.hooks.tetikle, "pre_tool",
+                {"run": run.id, "arac": a.arac, "argumanlar": a.argumanlar}, arac=a.arac,
+            )  # fmt: skip
+            if not h.izin:
+                a.durum = AdimDurum.reddedildi
+                run.hata_sayaci[anahtar] = run.hata_sayaci.get(anahtar, 0) + 1
+                ret = {"hata": h.neden, "karar": "ret", "not": "Ayni cagriyi tekrarlama."}
+                self._arac_mesaji(run, a, ret)
+                self.depo.kaydet(run)
+                return
         if a.yan_etkili:  # NIYET once diske: cokerse belirsiz kalir, otomatik tekrar edilmez
             a.durum = AdimDurum.niyet
             self.depo.kaydet(run)
@@ -700,6 +714,12 @@ class AgentRunner:
             run.hata_sayaci[anahtar] = run.hata_sayaci.get(anahtar, 0) + 1
         self._arac_mesaji(run, a, sonuc)
         self.depo.kaydet(run)
+        if self.hooks is not None:  # post_tool: bilgilendirme; sonuc zaten uygulandi
+            await asyncio.to_thread(
+                self.hooks.tetikle, "post_tool",
+                {"run": run.id, "arac": a.arac, "durum": str(a.durum), "sonuc": a.sonuc[:2000]},
+                arac=a.arac,
+            )  # fmt: skip
 
     def _plan(self, run: Run, a: Adim) -> None:
         try:

@@ -1,4 +1,4 @@
-﻿"""A6 skill: metadata, bozuk frontmatter, duzenleme, proje kapsami."""
+"""A6 skill: metadata, bozuk frontmatter, duzenleme, proje kapsami."""
 
 from __future__ import annotations
 
