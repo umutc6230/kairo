@@ -473,7 +473,8 @@ async function ajanaGonder(oturumId, metin) {
         return;
       }
     }
-    const r = await api("/api/gorevler", { method: "POST", govde: { hedef: metin } });
+    const izole = document.getElementById("hap-izole")?.getAttribute("aria-pressed") === "true";
+    const r = await api("/api/gorevler", { method: "POST", govde: { hedef: metin, izole } });
     ajanKaydet(oturumId, { run: r.id, metin });
     if (!kayitlar.length) await api(`/api/oturumlar/${oturumId}`, { method: "PATCH", govde: { baslik: metin.slice(0, 60) } }).catch(() => {});
     document.dispatchEvent(new Event("oturumlar-degisti")); // baslik kaydedildikten SONRA

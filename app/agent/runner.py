@@ -145,6 +145,8 @@ class Run(BaseModel):
     izinli_araclar: list[str] = []  # alt ajanin dar arac seti
     sahip_dosyalar: list[str] = []  # alt ajanin yazabilecegi dosyalar (goreli yol)
     cocuklar: list[str] = []
+    calisma_koku: str = ""  # izole worktree (A8.3); bos = proje kokunde
+    dal: str = ""
     hata_sayaci: dict[str, int] = {}
     olusturma: str = Field(default_factory=lambda: datetime.now().isoformat(timespec="seconds"))
     guncelleme: str = ""
@@ -305,6 +307,7 @@ class AgentRunner:
         self.yetenek = yetenek
         self.hafiza = hafiza or (lambda: "")
         self.hooks = hooks
+        self.araclar_kok: Callable[[str, str], tuple] | None = None
         self._gorevler: dict[str, asyncio.Task] = {}
         self._iptal: set[str] = set()
         self._duraklat: set[str] = set()
@@ -322,6 +325,7 @@ class AgentRunner:
         kabul: list[str] | None = None,
         butce: Butce | None = None,
         model: str = "",
+        izole_kur: Callable[[str], tuple[str, str]] | None = None,
     ) -> Run:
         if self.yetenek is not None:  # aracsiz modelle gorev baslamaz (acik hata)
             dogrula(self.yetenek(), araclar_gerekli=True)
@@ -333,6 +337,8 @@ class AgentRunner:
             {"role": "user", "content": f"GOREV: {run.hedef}\n\nKABUL KOSULLARI:\n{kabul_metni}"}
         ]
         await self._hook("run_baslangic", {"run": run.id, "hedef": run.hedef})  # engel: baslamaz
+        if izole_kur is not None:  # A8.3: ayri worktree + ajan/<id> dali
+            run.calisma_koku, run.dal = izole_kur(run.id)
         self.depo.kaydet(run)
         self._calistir(run.id)
         return run
@@ -487,7 +493,10 @@ class AgentRunner:
         run = self.depo.getir(run_id)
         bas = time.monotonic() - run.kullanim.sure_sn
         try:
-            sistem, semalar, isleyiciler = self.araclar(run.hedef)
+            if run.calisma_koku and self.araclar_kok is not None:  # izole worktree araclari
+                sistem, semalar, isleyiciler = self.araclar_kok(run.hedef, run.calisma_koku)
+            else:
+                sistem, semalar, isleyiciler = self.araclar(run.hedef)
             if hafiza := self.hafiza():
                 sistem = f"{sistem}\n\n{hafiza}".strip()
             semalar = [*semalar, *RUNNER_ARACLARI]

@@ -189,6 +189,11 @@ function modHapiCiz() {
   if (!b) return;
   const aktif = projeDurumu.aktif;
   b.hidden = !aktif;
+  const iz = $("#hap-izole");
+  if (iz) {
+    iz.hidden = !aktif;
+    iz.onclick = () => { const a = iz.getAttribute("aria-pressed") !== "true"; iz.setAttribute("aria-pressed", String(a)); iz.classList.toggle("secili", a); };
+  }
   if (!aktif) return;
   $("#hap-mod-metni").textContent = MOD_TR[projeDurumu.izin?.mod]?.ad || aktif.mod;
   b.onclick = () => menuAc(b, Object.entries(MOD_TR).map(([k, v]) => ({

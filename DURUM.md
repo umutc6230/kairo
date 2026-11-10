@@ -126,8 +126,11 @@ Python 3.12 + FastAPI + pywebview; arayuz vanilla JS. Paketleme: PORTABLE (kulla
 - [x] A8.7 derin review (/review derin, ?derin=true): guvenlik + dogruluk odakli ayri gecisler, dosya/satir
       bazli birlestirme, en ciddi onem kalir; ayni modelin tekrari BAGIMSIZ KANIT SAYILMAZ (model_varsayimi).
 - [x] Agent View: sag panelde alt ajanlar (durum, yazabildigi dosyalar, araclari, adim/butce, sonuc).
-- [ ] A8 kalan: team lideri + ortak gorev listesi/claim/mesaj kutusu (A8.2), worktree entegrasyonu (A8.3),
-      dinamik is akislari (A8.6)  <- SIRADAKI
+- [x] A8.3 izole worktree (app/agent/worktree.py): composer'da "Ayri dal" -> gorev ajan/<id> dalinda ayri
+      worktree'de calisir; ana agaca dokunmaz. "Ana dala birlestir": istege bagli test once worktree'de;
+      kullanici degisikligi varsa birlestirmez; catismada merge --abort + catisan dosyalar (sessiz cozum yok);
+      "At" dali siler. Tarayicida uctan uca dogrulandi (gercek git). Bulgu: autocrlf satir sonu.
+- [ ] A8 kalan: team lideri + ortak gorev listesi/claim/mesaj kutusu (A8.2), dinamik is akislari (A8.6)  <- SIRADAKI
 - 2026-11-10 (16): A6 bitti (hooks + slash + hook UI; tarayicida dogrulandi). DIKKAT: ayni dalda paralel
   bir oturum A6.1/A6.2 commit'ledi (14da54a, 1c791d4); benim skill commit'im (81b748a) onlarla ust uste.
   399 test geciyor.

@@ -139,7 +139,26 @@ function sohbetCiz(r) {
     ${bekleyenKartlari(r)}
     ${r.hata ? `<div class="uyari-kutu kucuk">${kacir(r.hata)}</div>` : ""}
     ${r.sonuc?.ozet ? `<div class="ajan-sonuc">${basari ? '<span data-ikon="tik" class="yesil-ikon" aria-label="doğrulandı"></span>' : ""}${kacir(r.sonuc.ozet)}${r.sonuc.kanit?.length ? ` <span class="soluk kucuk">(kanıt: adım ${kacir(r.sonuc.kanit.join(", "))})</span>` : ' <span class="rozet sari">doğrulanmadı</span>'}</div>` : ""}
+    ${r.calisma_koku ? `<div class="ajan-izole soluk kucuk">Ayrı dalda çalıştı: <code>${kacir(r.dal)}</code>${["basarili", "dogrulanmadi"].includes(r.durum) ? `
+      <div class="satir"><input class="alan" data-entegre-test placeholder="Birleştirmeden önce test komutu (isteğe bağlı)" style="flex:1">
+      <button class="btn ana" data-entegre>Ana dala birleştir</button><button class="btn tehlike" data-at>Değişiklikleri at</button></div>` : ""}</div>` : ""}
     <div class="ajan-kontrol">${rozet(r.durum)}${kontroller(r)}</div>`;
+  const ent = kap.querySelector("[data-entegre]");
+  if (ent) {
+    ent.onclick = async () => {
+      ent.disabled = true;
+      try {
+        const s = await api(`/api/gorevler/${r.id}/entegre`, { method: "POST", govde: { test_komutu: kap.querySelector("[data-entegre-test]").value } });
+        const mesaj = { birlestirildi: "Ana dala birleştirildi.", degisiklik_yok: "Birleştirilecek değişiklik yok.",
+          test_basarisiz: "Test başarısız; birleştirilmedi.", kullanici_degisikligi_var: s.not, catisma: `Çakışma: ${(s.catisan || []).join(", ")}. ${s.not}` }[s.durum] || s.durum;
+        bildir(mesaj, s.durum === "birlestirildi" ? "basari" : "uyari", 6000);
+      } catch (e) { bildir(e.message, "hata"); } finally { ent.disabled = false; }
+    };
+    kap.querySelector("[data-at]").onclick = async () => {
+      if (!(await onayla("Değişiklikleri at", "Ajanın ayrı daldaki tüm değişiklikleri silinsin mi? Ana dala dokunulmaz.", { evet: "At", tehlike: true }))) return;
+      try { await api(`/api/gorevler/${r.id}/at`, { method: "POST" }); bildir("Atıldı.", "basari", 1500); } catch (e) { bildir(e.message, "hata"); }
+    };
+  }
   ikonlariYerlestir(kap);
   baglantilar(r);
   sagPanelCiz(r);

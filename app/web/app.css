@@ -441,3 +441,6 @@ pre.duz { white-space: pre-wrap; font-family: var(--mono); font-size: 13px; marg
 @media (max-width: 1100px) { .sag-panel { display: none; } }
 
 .alt-ajan { border-left: 2px solid var(--cizgi2); padding: 4px 8px; margin: 4px 0; font-size: 13px; }
+
+#hap-izole.secili { color: var(--vurgu, #c96442); font-weight: 600; }
+.ajan-izole { display: flex; flex-direction: column; gap: 6px; }

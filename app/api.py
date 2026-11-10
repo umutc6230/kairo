@@ -20,6 +20,7 @@ from pydantic import BaseModel, Field, ValidationError
 
 from app import URUN_ADI, URUN_SAHIBI, URUN_SAHIBI_GITHUB, URUN_SAHIBI_X, __version__
 from app.agent import review as rv
+from app.agent import worktree as wt
 from app.agent.checkpoints import CheckpointDeposu
 from app.agent.hooks import OLAYLAR as HOOK_OLAYLARI
 from app.agent.hooks import HookDeposu
@@ -91,6 +92,11 @@ class GorevIstegi(BaseModel):
     hedef: str = Field(min_length=1, max_length=8000)
     kabul: list[str] = Field(default=[], max_length=20)
     butce: Butce = Field(default_factory=Butce)
+    izole: bool = False  # ayri git worktree'de calis (A8.3)
+
+
+class EntegreIstegi(BaseModel):
+    test_komutu: str = Field(default="", max_length=2000)
 
 
 class GorevMesaji(BaseModel):
@@ -311,6 +317,14 @@ def uygulama_olustur(
 
     run_deposu = RunDeposu(veri_dizini)
     run_deposu.kurtar()  # onceki oturumda yarim kalanlar: belirsiz yan etki kullaniciya sorulur
+
+    def ajan_baglami_kok(hedef: str, kok: str) -> tuple[str, list, dict]:
+        """Izole worktree: ayni proje ayarlari, araclar YALNIZ worktree kokunde."""
+        sistem, araclar_, isleyiciler = ajan_baglami(hedef)
+        alan = sohbet.aktif_alan().model_copy(update={"kokler": [kok], "ek_klasorler": []})
+        kayit = sohbet.ajan_araclari(alan)
+        return sistem, araclar_, {**isleyiciler, **kayit.isleyiciler()}
+
     ajan = AgentRunner(
         run_deposu,
         ajan_baglami,
@@ -322,6 +336,7 @@ def uygulama_olustur(
             hafiza.sistem_metni(sohbet.aktif_alan().id) if ayarlar.oku().hafiza_acik else ""
         ),
     )
+    ajan.araclar_kok = ajan_baglami_kok
     isitmalar: set[asyncio.Task] = set()
     agecidi = AgGecidi(agecidi_uygulamasi(yonetici, ayarlar, kapat))
     magaza = magaza or Magaza()
@@ -991,10 +1006,40 @@ def uygulama_olustur(
     async def gorev_baslat(istek: GorevIstegi) -> dict:
         ajan_baglami(istek.hedef)  # proje yoksa hemen Turkce hata
         dogrula(model_yetenegi(), araclar_gerekli=True, dusunme=ayarlar.oku().dusunme)
+        izole_kur = None
+        if istek.izole:
+            proje = Path(sohbet.aktif_alan().kokler[0])
+            wt.depo_koku(proje)  # git yoksa hemen Turkce hata
+
+            def izole_kur(run_id: str) -> tuple[str, str]:
+                yol, dal = wt.olustur(proje, veri_dizini / "worktrees", run_id)
+                return str(yol), dal
+
         run = await ajan.baslat(
-            istek.hedef, istek.kabul, istek.butce, model=ayarlar.oku().aktif_model
-        )
+            istek.hedef, istek.kabul, istek.butce, model=ayarlar.oku().aktif_model,
+            izole_kur=izole_kur,
+        )  # fmt: skip
         return run.ozet()
+
+    @app.post("/api/gorevler/{run_id}/entegre")
+    async def gorev_entegre(run_id: str, istek: EntegreIstegi) -> dict:
+        r = run_deposu.getir(run_id)
+        if not r.calisma_koku:
+            raise UygulamaHatasi("Bu gorev izole calismadi; entegre edilecek dal yok.")
+        if r.durum not in (RunDurum.basarili, RunDurum.dogrulanmadi):
+            raise UygulamaHatasi("Once gorev bitmeli.")
+        proje = Path(sohbet.aktif_alan().kokler[0])
+        return await asyncio.to_thread(
+            wt.entegre_et, proje, Path(r.calisma_koku), r.dal, r.hedef, istek.test_komutu
+        )
+
+    @app.post("/api/gorevler/{run_id}/at")
+    async def gorev_at(run_id: str) -> dict:
+        r = run_deposu.getir(run_id)
+        if not r.calisma_koku:
+            raise UygulamaHatasi("Bu gorev izole calismadi.")
+        proje = Path(sohbet.aktif_alan().kokler[0])
+        return await asyncio.to_thread(wt.at, proje, Path(r.calisma_koku), r.dal)
 
     @app.get("/api/gorevler")
     async def gorev_listesi() -> dict:
