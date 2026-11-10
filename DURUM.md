@@ -112,8 +112,13 @@ Python 3.12 + FastAPI + pywebview; arayuz vanilla JS. Paketleme: PORTABLE (kulla
       riskli desen, kurulum scripti; scriptler ASLA calismaz) -> onayla kur; surum sakla, geri al, ac/kapat, kaldir;
       kurum politikasi (plugin-politika.json yasak/izinli; sonradan yasak hemen etkili). Plugin yalniz skill tasir.
       Ayarlar > Plugin'ler + /plugin. Bulgu: Windows'ta kaydedilen plugin.json BOM'lu -> utf-8-sig.
-- [ ] A7 kalan: streamable HTTP + OAuth, resources/prompts, plugin manifest/
-      karantina/surum/geri alma, katalog, uzanti API'si, kurumsal politika  <- SIRADAKI
+- [x] A7.1 MCP streamable HTTP (JSON + SSE cevap, Mcp-Session-Id, 404'te yeniden initialize, 401 Turkce);
+      uzak adres https (http yalniz loopback), URL'de parola yok; kimlik basligi backend'de, disari ****;
+      uzak sunucunun araclari izinli isaretlense de HER ZAMAN onay ister; resources/list (ilan edilirse).
+      Arayuz: Baglayicilar'da URL + Authorization, "uzak" rozeti. Sahte uzak sunucuyla 5 test.
+- [x] A7.5 katalog: data/plugin-katalog.json {name, version, yol, sha256}; klasor hash'i uyusmazsa kurulmaz.
+- [ ] A7 kalan: OAuth akisi (simdilik baslik elle), MCP prompts, uzanti/Mods API'si (A7.6: izole worker),
+      plugin eval + token/sure raporu. Sonra A8 alt ajanlar  <- SIRADAKI
 - 2026-11-10 (16): A6 bitti (hooks + slash + hook UI; tarayicida dogrulandi). DIKKAT: ayni dalda paralel
   bir oturum A6.1/A6.2 commit'ledi (14da54a, 1c791d4); benim skill commit'im (81b748a) onlarla ust uste.
   399 test geciyor.
