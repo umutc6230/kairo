@@ -130,7 +130,10 @@ Python 3.12 + FastAPI + pywebview; arayuz vanilla JS. Paketleme: PORTABLE (kulla
       worktree'de calisir; ana agaca dokunmaz. "Ana dala birlestir": istege bagli test once worktree'de;
       kullanici degisikligi varsa birlestirmez; catismada merge --abort + catisan dosyalar (sessiz cozum yok);
       "At" dali siler. Tarayicida uctan uca dogrulandi (gercek git). Bulgu: autocrlf satir sonu.
-- [ ] A8 kalan: team lideri + ortak gorev listesi/claim/mesaj kutusu (A8.2), dinamik is akislari (A8.6)  <- SIRADAKI
+- [x] A8.6 dinamik is akislari (app/agent/akis.py, /api/akislar): tipli adimlar (ajan | komut; kod/eval YOK),
+      bagimlilik + dongu tespiti, kosul (onceki adim basarili/basarisiz), sinirli tekrar (<=3), bagimlisi
+      basarisizsa atlanir; komut izin motorundan gecer, onayda akis durur, devamda tamamlananlar yinelenmez.
+- [ ] A8 kalan: team lideri + ortak gorev listesi/claim/heartbeat/mesaj kutusu (A8.2); akis arayuzu  <- SIRADAKI
 - 2026-11-10 (16): A6 bitti (hooks + slash + hook UI; tarayicida dogrulandi). DIKKAT: ayni dalda paralel
   bir oturum A6.1/A6.2 commit'ledi (14da54a, 1c791d4); benim skill commit'im (81b748a) onlarla ust uste.
   399 test geciyor.

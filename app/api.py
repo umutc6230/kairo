@@ -19,8 +19,10 @@ from loguru import logger
 from pydantic import BaseModel, Field, ValidationError
 
 from app import URUN_ADI, URUN_SAHIBI, URUN_SAHIBI_GITHUB, URUN_SAHIBI_X, __version__
+from app.agent import akis as akis_mod
 from app.agent import review as rv
 from app.agent import worktree as wt
+from app.agent.akis import Akis, AkisDeposu
 from app.agent.checkpoints import CheckpointDeposu
 from app.agent.hooks import OLAYLAR as HOOK_OLAYLARI
 from app.agent.hooks import HookDeposu
@@ -1020,6 +1022,60 @@ def uygulama_olustur(
             izole_kur=izole_kur,
         )  # fmt: skip
         return run.ozet()
+
+    # ---- dinamik is akislari (A8.6): tipli adimlar, kod calistirma yok ----
+    akislar = AkisDeposu(veri_dizini)
+    akis_gorevleri: set[asyncio.Task] = set()
+
+    def _akis_baslat(a: Akis) -> None:
+        alan = sohbet.aktif_alan()
+        kayit = sohbet.ajan_araclari(alan)
+        if kayit is None:
+            raise UygulamaHatasi("Is akisi icin once bir proje acin.")
+
+        async def ajan_adimi(hedef: str) -> tuple[str, str, str]:
+            r = await ajan.baslat(hedef, model=ayarlar.oku().aktif_model)
+            g = ajan._gorevler.get(r.id)
+            if g:
+                await asyncio.wait({g})
+            r = run_deposu.getir(r.id)
+            return str(r.durum), r.sonuc.ozet or r.hata, r.id
+
+        t = asyncio.create_task(
+            akis_mod.calistir(
+                a, akislar, ajan_adimi, lambda k: kayit.komut_calistir(k, timeout=600)
+            )
+        )
+        akis_gorevleri.add(t)
+        t.add_done_callback(akis_gorevleri.discard)
+
+    @app.post("/api/akislar")
+    async def akis_olustur(veri: dict) -> dict:
+        a = akis_mod.dogrula_veri(veri)
+        for x in a.adimlar:  # istemci durum gonderip adim atlatamaz
+            x.durum, x.deneme, x.sonuc, x.run_id = "bekliyor", 0, "", ""
+        akislar.kaydet(a)
+        _akis_baslat(a)
+        return a.model_dump()
+
+    @app.get("/api/akislar")
+    async def akis_listesi() -> dict:
+        return {"akislar": akislar.liste()}
+
+    @app.get("/api/akislar/{akis_id}")
+    async def akis_getir(akis_id: str) -> dict:
+        return akislar.getir(akis_id).model_dump()
+
+    @app.post("/api/akislar/{akis_id}/devam")
+    async def akis_devam(akis_id: str) -> dict:
+        a = akislar.getir(akis_id)
+        if a.durum == "calisiyor":
+            raise UygulamaHatasi("Akis zaten calisiyor.")
+        for x in a.adimlar:
+            if x.durum in ("onay_bekliyor", "calisiyor"):
+                x.durum = "bekliyor"
+        _akis_baslat(a)
+        return a.model_dump()
 
     @app.post("/api/gorevler/{run_id}/entegre")
     async def gorev_entegre(run_id: str, istek: EntegreIstegi) -> dict:
