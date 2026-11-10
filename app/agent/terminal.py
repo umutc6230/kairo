@@ -12,9 +12,11 @@ from __future__ import annotations
 
 import asyncio
 import contextlib
+import contextvars
 import subprocess
 import sys
 import uuid
+import weakref
 from collections import deque
 from collections.abc import Callable
 from datetime import datetime
@@ -25,6 +27,26 @@ from pydantic import BaseModel, Field
 from app.agent.dosyalar import ortam_allowlist
 from app.agent.izolasyon import IzolasyonAdaptoru, YokAdaptoru
 from app.exceptions import Bulunamadi, UygulamaHatasi
+
+# A13: ajanin baslattigi komut hangi gorevin? Runner arac cagrisindan once ayarlar
+# (asyncio.to_thread baglami kopyalar); iptal o gorevin surec agaclarini hemen kapatir.
+AKTIF_RUN: contextvars.ContextVar[str] = contextvars.ContextVar("aktif_run", default="")
+_SERVISLER: weakref.WeakSet = weakref.WeakSet()
+
+
+async def run_komutlarini_durdur(run_id: str) -> int:
+    """Gorevin calisan tum komutlarini (on plan + arka plan) process-tree olarak durdurur."""
+    if not run_id:
+        return 0
+    sayi = 0
+    for servis in list(_SERVISLER):
+        for is_id, is_ in list(servis.isler.items()):
+            if is_.durum.sahip == run_id and is_.durum.durum == "calisiyor":
+                with contextlib.suppress(Bulunamadi, OSError):
+                    await servis.durdur(is_id)
+                    sayi += 1
+    return sayi
+
 
 VARSAYILAN_TIMEOUT = 120
 MAX_TIMEOUT = 900
@@ -44,6 +66,7 @@ class KomutDurumu(BaseModel):
     sure_sn: float | None = None
     arka_plan: bool = False
     izolasyon: str = "yok"
+    sahip: str = ""  # ajan gorevi (run) kimligi
 
 
 def _kirp(metin: str, sinir: int = MAX_CIKTI_KARAKTER) -> tuple[str, bool]:
@@ -127,6 +150,7 @@ class KomutServisi:
         self.isler: dict[str, KomutIsi] = {}
         self.en_fazla_is = en_fazla_is
         self.izolasyon = izolasyon  # her cagrida guncel ayardan uretilir
+        _SERVISLER.add(self)
 
     def _yer_ac(self) -> None:
         bitmis = [i for i in self.isler.values() if i.durum.durum != "calisiyor"]
@@ -146,6 +170,7 @@ class KomutServisi:
         timeout: int = VARSAYILAN_TIMEOUT,
         arka_plan: bool = False,
         kok: Path | None = None,
+        sahip: str = "",
     ) -> KomutIsi:
         if not komut.strip():
             raise UygulamaHatasi("Bos komut calistirilamaz.")
@@ -158,7 +183,9 @@ class KomutServisi:
         self._yer_ac()
         timeout = max(1, min(int(timeout), MAX_TIMEOUT))
         is_ = KomutIsi(
-            KomutDurumu(komut=komut, cwd=str(cwd), arka_plan=arka_plan, izolasyon=adaptor.ad)
+            KomutDurumu(
+                komut=komut, cwd=str(cwd), arka_plan=arka_plan, izolasyon=adaptor.ad, sahip=sahip
+            )  # fmt: skip
         )
         ortak = {
             "cwd": str(cwd),

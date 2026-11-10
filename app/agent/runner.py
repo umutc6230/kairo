@@ -30,6 +30,7 @@ from pydantic import BaseModel, Field
 
 from app.agent.ozet import mesaj_token, ozetle_gerekirse
 from app.agent.takim import SEMALAR as TAKIM_SEMALARI
+from app.agent.terminal import AKTIF_RUN, run_komutlarini_durdur
 from app.agent.yetenek import ModelYetenegi, butce_dokumu, dogrula, tahmini_token
 from app.exceptions import Bulunamadi, UygulamaHatasi
 from app.services.depo import json_oku, json_yaz
@@ -390,7 +391,10 @@ class AgentRunner:
         g = self._gorevler.get(run_id)
         if g and not g.done() and run_id not in self._aracta:
             g.cancel()
-        await self._bitmesini_bekle(run_id)
+        # A13: arac calisiyorsa (or. uzun komut) bitmesini BEKLEMEZ; gorevin surec agaclari
+        # hemen kapatilir, arac sonucu doner ve dongu iptal bayragini gorur.
+        await run_komutlarini_durdur(run_id)
+        await self._bitmesini_bekle(run_id, 5.0)
         run = self.depo.getir(run_id)
         if run.durum not in BITMIS:
             run.durum = RunDurum.iptal
@@ -764,11 +768,13 @@ class AgentRunner:
             a.durum = AdimDurum.niyet
             self.depo.kaydet(run)
         self._aracta.add(run.id)
+        jeton = AKTIF_RUN.set(run.id)  # komutlar bu goreve kaydedilir (iptal)
         try:
             sonuc = await asyncio.to_thread(fonk, **a.argumanlar)
         except (TypeError, ValueError, OSError, UygulamaHatasi) as e:
             sonuc = {"hata": f"{type(e).__name__}: {e}"}
         finally:
+            AKTIF_RUN.reset(jeton)
             self._aracta.discard(run.id)
         if isinstance(sonuc, dict) and sonuc.get("karar") == "onay_bekliyor":
             a.durum = AdimDurum.onay_bekliyor

@@ -15,7 +15,7 @@ from app.agent.checkpoints import CheckpointDeposu
 from app.agent.dosyalar import AjanDosyaAraclari, KokKapsami
 from app.agent.git_araclari import GitAraclari
 from app.agent.policy import Istek, Karar, PolitikaMotoru, YanEtki
-from app.agent.terminal import KomutServisi
+from app.agent.terminal import AKTIF_RUN, KomutServisi
 from app.agent.workspaces import CalismaAlani
 from app.agent.yazma import YazmaAraclari, sonuc_veya_hata
 
@@ -277,10 +277,13 @@ class AjanAracKaydi:
                 self.alan,
             )
 
+            sahip = AKTIF_RUN.get()  # bu thread'e runner'in baglamindan kopyalandi
+
             async def calistir() -> dict:
                 is_ = await self.komutlar.baslat(
-                    komut, cwd, timeout=timeout, arka_plan=arka_plan, kok=self.kapsam.kok_of(cwd)
-                )
+                    komut, cwd, timeout=timeout, arka_plan=arka_plan,
+                    kok=self.kapsam.kok_of(cwd), sahip=sahip,
+                )  # fmt: skip
                 if arka_plan:
                     return {
                         **self.komutlar.ozet(is_),

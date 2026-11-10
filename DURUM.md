@@ -199,7 +199,14 @@ Python 3.12 + FastAPI + pywebview; arayuz vanilla JS. Paketleme: PORTABLE (kulla
       Canli telefon denemesi YAPILMADI (Windows guvenlik duvari izni ilk acilista sorulabilir).
 - [~] A12.4-6 cloud worker / Projects handoff / Bedrock-Google-Microsoft gateway: DIS BAGIMLILIK BEKLIYOR
       (hesap/sunucu yok; ucretli kaynak ayrica yetkilendirilmeli).
-- [ ] A13 kalite kapisi <- SIRADAKI (sonra portable paketleme)
+- [~] A13 kalite kapisi (devam ediyor):
+      - [x] Python kapsami %91 (hedef %90); ruff temiz.
+      - [x] Iptal kapisi (tests/test_a13_kapi.py): BULGU: komut calisirken iptal 30 sn bekliyordu ve surec
+            agaci oldurulmuyordu. Duzeltme: komutlar gorev kimligiyle isaretlenir (AKTIF_RUN contextvar),
+            iptal o gorevin surec agaclarini hemen kapatir. Olcum: durum < 1 sn, cocuk+torun < 5 sn.
+            Donanim: Windows 11 Pro, yerel gelistirme makinesi.
+      - [x] Ag kapaliyken yerel ajan calisir; web_ara anlasilir hata doner.
+      - [ ] JS birim + arayuz E2E (Playwright), gercek model degerlendirmesi (30 gorev x 3)  <- SIRADAKI
 - 2026-11-10 (16): A6 bitti (hooks + slash + hook UI; tarayicida dogrulandi). DIKKAT: ayni dalda paralel
   bir oturum A6.1/A6.2 commit'ledi (14da54a, 1c791d4); benim skill commit'im (81b748a) onlarla ust uste.
   399 test geciyor.
