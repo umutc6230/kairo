@@ -1,5 +1,5 @@
 // Sohbet gorunumu: mesajlar, dusunce blogu, yazma alani, ekler, akis ve durdurma.
-import { diffGoster, reviewYap } from "./inceleme.js";
+import { komutMu } from "./komutlar.js";
 import { ikon, ikonlariYerlestir } from "./ikonlar.js";
 import { kacir, md } from "./md.js";
 import {
@@ -320,10 +320,9 @@ export function yeniSohbetEkrani() {
 export async function gonder() {
   const girdi = $("#girdi");
   const metin = girdi.value.trim();
-  if (metin === "/diff" || metin === "/review") { // yerel komut: modele mesaj olarak gitmez
+  if (komutMu(metin)) { // yerel slash komut: modele mesaj olarak gitmez
     girdi.value = "";
     boyutla();
-    (metin === "/diff" ? diffGoster : reviewYap)();
     return;
   }
   if (akisKontrol || (!metin && !bekleyenEkler.length) || bekleyenEkler.some((e) => e.yukleniyor)) return;

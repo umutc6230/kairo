@@ -75,3 +75,37 @@ async def test_hook_api(istemci) -> None:
     assert bad.status_code == 422
     assert "pre_tool" in (await istemci.get("/api/hooks")).json()["olaylar"]
     assert (await istemci.delete(f"/api/hooks/{h['id']}")).status_code == 200
+
+
+async def test_run_baslangic_ve_prompt_hooklari(tmp_path) -> None:
+    import pytest
+
+    from app.exceptions import UygulamaHatasi
+
+    proje = tmp_path / "proje"
+    proje.mkdir()
+    iz = tmp_path / "olaylar.txt"
+    yaz = _betik(
+        tmp_path,
+        "w",
+        f"import sys,json; open({str(iz)!r},'a').write(json.load(sys.stdin)['olay']+'\\n')",
+    )
+    hooks = HookDeposu(tmp_path / "h")
+    for olay in ("run_baslangic", "run_bitis"):
+        hooks.ekle({"ad": olay, "olay": olay, "komut": yaz})
+    model = SahteModel([cagri("gorevi_bitir", ozet="x", kanit_adimlari=[])])
+    runner, *_ = kur(tmp_path, proje, model, hooks=hooks)
+    await bitir(runner, (await runner.baslat("x")).id)
+    assert iz.read_text(encoding="utf-8").split() == ["run_baslangic", "run_bitis"]
+
+    hooks.ekle({"ad": "yasak", "olay": "run_baslangic", "tur": "guvenlik",
+                "komut": _betik(tmp_path, "r", "import sys; sys.exit(2)")})  # fmt: skip
+    with pytest.raises(UygulamaHatasi, match="yasak"):
+        await runner.baslat("engellenecek")
+
+
+async def test_slash_komut_dosyasi_ve_html(istemci) -> None:
+    js = (await istemci.get("/web/komutlar.js")).text
+    for k in ("/help", "/status", "/hooks", "/goal", "/clear", "/memory"):
+        assert f'"{k}"' in js
+    assert "henüz yok" in js  # hazir olmayan komut sahte cevap vermez

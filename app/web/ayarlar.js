@@ -39,7 +39,7 @@ export function ayarlarAc(sekme = "ai") {
   const a = durum.ayarlar;
   const s = durum.sunucu || {};
   const govde = el(`<div>
-    <div class="sekmeler"><button class="sekme" data-sekme="ai">AI Ayarları</button><button class="sekme" data-sekme="hafiza">Hafıza</button><button class="sekme" data-sekme="hakkinda">Hakkında</button></div>
+    <div class="sekmeler"><button class="sekme" data-sekme="ai">AI Ayarları</button><button class="sekme" data-sekme="hafiza">Hafıza</button><button class="sekme" data-sekme="hooks">Hook'lar</button><button class="sekme" data-sekme="hakkinda">Hakkında</button></div>
     <div class="modal-govde" data-panel="ai">
       <div class="ayar-grup"><label>Sağlayıcı</label>
         <label class="secenek-kart ${a.saglayici !== "openrouter" ? "secili" : ""}"><input type="radio" name="ay-sag" value="yerel" ${a.saglayici !== "openrouter" ? "checked" : ""}><div><div class="ust">Yerel (llama.cpp) <span class="rozet yesil">internetsiz</span></div>
@@ -96,6 +96,17 @@ export function ayarlarAc(sekme = "ai") {
       <div class="satir"><input class="alan" id="hf-yeni" placeholder="Yeni not: ör. Testler pytest -q ile çalışır" style="flex:1" maxlength="1000">
         <button class="btn" id="hf-ekle">Ekle</button><button class="btn" id="hf-disa">Dışa aktar</button></div>
       <div id="hf-liste" class="ayar-grup"></div>
+    </div>
+    <div class="modal-govde" data-panel="hooks" hidden>
+      <div class="ayar-not">Hook, bir olayda (ör. araç çalışmadan önce) bu bilgisayarda çalışan komuttur. Olay bilgisini JSON olarak stdin'den alır (sırlar maskeli). Çıkış kodu 2 işlemi <b>engeller</b>. <b>Güvenlik</b> hook'u hata verir ya da zaman aşımına uğrarsa da engeller; <b>bilgi</b> hook'u yalnız kaydedilir. Komut senin yetkilerinle çalışır.</div>
+      <div class="satir"><input class="alan" id="hk-ad" placeholder="Ad" style="max-width:140px" maxlength="80">
+        <select class="secim" id="hk-olay" aria-label="Olay"></select>
+        <select class="secim" id="hk-tur" aria-label="Tür"><option value="bilgi">bilgi</option><option value="guvenlik">güvenlik</option></select>
+        <input class="alan" id="hk-arac" placeholder="Araç (boş: hepsi)" style="max-width:150px" maxlength="80"></div>
+      <div class="satir"><input class="alan" id="hk-komut" placeholder="Komut, ör. python C:\\hooks\\kontrol.py" style="flex:1" maxlength="2000">
+        <input class="alan" id="hk-sure" type="number" min="1" max="120" value="10" style="max-width:80px" aria-label="Zaman aşımı (sn)">
+        <button class="btn" id="hk-ekle">Ekle</button></div>
+      <div id="hk-liste" class="ayar-grup"></div>
     </div>
     <div class="modal-govde" data-panel="hakkinda" hidden>
       <div class="hakkinda-logo">${ikon("logo")}</div>
@@ -170,6 +181,54 @@ export function ayarlarAc(sekme = "ai") {
     } catch (err) { bildir(err.message, "hata"); }
   };
   hafizaCiz();
+
+  // ---- Hook'lar ----
+  const hookCiz = async () => {
+    const kap = $("#hk-liste", govde);
+    try {
+      const { hooks, olaylar } = await api("/api/hooks");
+      const sec = $("#hk-olay", govde);
+      if (!sec.options.length) sec.innerHTML = olaylar.map((o) => `<option>${kacir(o)}</option>`).join("");
+      kap.innerHTML = hooks.map((h) => `<div class="secenek-kart ${h.aktif ? "" : "pasif"}" data-hk="${kacir(h.id)}">
+        <div style="flex:1"><div class="ust"><b>${kacir(h.ad)}</b> <span class="rozet">${kacir(h.olay)}</span>
+          <span class="rozet ${h.tur === "guvenlik" ? "kirmizi" : ""}">${kacir(h.tur)}</span>${h.arac ? ` <span class="rozet">${kacir(h.arac)}</span>` : ""}</div>
+          <div class="alt"><code>${kacir(h.komut)}</code> · ${kacir(h.timeout)} sn</div><div class="alt hk-sonuc"></div></div>
+        <button class="btn" data-is="test">Test et</button><button class="btn" data-is="ac">${h.aktif ? "Kapat" : "Aç"}</button><button class="btn tehlike" data-is="sil">Sil</button></div>`).join("")
+        || '<div class="ayar-not">Henüz hook yok.</div>';
+      $$("[data-hk]", kap).forEach((kart) => {
+        const id = kart.dataset.hk;
+        const h = hooks.find((x) => x.id === id);
+        $$("[data-is]", kart).forEach((b) => {
+          b.onclick = async () => {
+            try {
+              if (b.dataset.is === "test") {
+                const t = await api(`/api/hooks/${id}/test`, { method: "POST" });
+                $(".hk-sonuc", kart).textContent = `Test: ${t.durum}${t.mesaj ? " - " + t.mesaj : ""}`;
+                return;
+              }
+              if (b.dataset.is === "sil") {
+                if (!(await onayla("Hook'u sil", "Bu hook silinsin mi?", { evet: "Sil", tehlike: true }))) return;
+                await api(`/api/hooks/${id}`, { method: "DELETE" });
+              } else {
+                await api(`/api/hooks/${id}`, { method: "PUT", govde: { aktif: !h.aktif } });
+              }
+              hookCiz();
+            } catch (err) { bildir(err.message, "hata"); }
+          };
+        });
+      });
+    } catch (err) { kap.innerHTML = `<span class="rozet kirmizi">hata</span> ${kacir(err.message)}`; }
+  };
+  $("#hk-ekle", govde).onclick = async () => {
+    const d = (id) => $(id, govde).value.trim();
+    try {
+      await api("/api/hooks", { method: "POST", govde: { ad: d("#hk-ad"), olay: d("#hk-olay"), tur: d("#hk-tur"), arac: d("#hk-arac"), komut: d("#hk-komut"), timeout: Number(d("#hk-sure")) || 10 } });
+      $("#hk-komut", govde).value = "";
+      $("#hk-ad", govde).value = "";
+      hookCiz();
+    } catch (err) { bildir(err.message, "hata"); }
+  };
+  hookCiz();
 
   const modelleriCiz = () => {
     $("#ay-modeller", govde).innerHTML = modelKartlari($("#ay-ara", govde).value, $("#ay-indirilen", govde).checked);

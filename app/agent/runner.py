@@ -307,9 +307,18 @@ class AgentRunner:
         run.mesajlar = [
             {"role": "user", "content": f"GOREV: {run.hedef}\n\nKABUL KOSULLARI:\n{kabul_metni}"}
         ]
+        await self._hook("run_baslangic", {"run": run.id, "hedef": run.hedef})  # engel: baslamaz
         self.depo.kaydet(run)
         self._calistir(run.id)
         return run
+
+    async def _hook(self, olay: str, veri: dict) -> None:
+        """Guvenlik hook'u engellerse islem UygulamaHatasi ile durur."""
+        if self.hooks is None:
+            return
+        h = await asyncio.to_thread(self.hooks.tetikle, olay, veri)
+        if not h.izin:
+            raise UygulamaHatasi(h.neden)
 
     def _calistir(self, run_id: str) -> None:
         if self.calisiyor_mu(run_id):
@@ -325,6 +334,7 @@ class AgentRunner:
         run = self.depo.getir(run_id)
         if run.durum in BITMIS:
             raise UygulamaHatasi("Biten goreve mesaj eklenemez; 'tekrar' ile yeniden baslatin.")
+        await self._hook("prompt", {"run": run_id, "metin": metin})
         run.kuyruk.append(metin.strip()[:4000])
         return self.depo.kaydet(run)
 
@@ -530,6 +540,10 @@ class AgentRunner:
             self.depo.kaydet(run)
             self._iptal.discard(run_id)
             self._duraklat.discard(run_id)
+            if self.hooks is not None and run.durum in BITMIS:  # bilgilendirme; hata yutulur
+                await asyncio.to_thread(
+                    self.hooks.tetikle, "run_bitis", {"run": run.id, "durum": str(run.durum)}
+                )
 
     def _adim_olustur(self, run: Run, c: dict) -> Adim:
         ad = (c.get("function") or {}).get("name", "")
@@ -569,6 +583,8 @@ class AgentRunner:
         if ozetle_gerekirse(run, mesaj_siniri, self.depo.dizin / f"{run.id}.arsiv.jsonl"):
             run.ozet_sayisi += 1
             run.guncellemeler.append("Baglam doldu: eski adimlar ozetlendi (arsivde duruyor).")
+            if self.hooks is not None:  # bilgilendirme (senkron: _baglami_hazirla async degil)
+                self.hooks.tetikle("compact", {"run": run.id, "ozet_sayisi": run.ozet_sayisi})
         for m in run.mesajlar[:-2]:  # son iki mesaj ham kalir
             if mesaj_token(run.mesajlar) <= mesaj_siniri:
                 break
