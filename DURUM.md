@@ -102,7 +102,12 @@ Python 3.12 + FastAPI + pywebview; arayuz vanilla JS. Paketleme: PORTABLE (kulla
       ayri ozellik sayfalari kalkti (test sayfalari menude yok, kodu duruyor). Proje acikken SOHBET = AJAN:
       adimlar/onay/diff/sonuc mesaj akisinda; plan, baglam %, degisen dosyalar, butce SAG PANELDE;
       composer'da mod secici. Tarayicida uctan uca dogrulandi. Sohbet-gorev bagi localStorage'da (sunucuya tasinacak).
-- [ ] A7 MCP, plugin, marketplace  <- SIRADAKI
+- [x] A7.1-3 MCP istemcisi (app/agent/mcp.py, bagimlilik yok): stdio JSON-RPC, initialize/tools list/call,
+      mcp__<sunucu>__<arac> ad ayirma, bozuk arac/sema elenir, kopmada yeniden baglanma, 30 sn zaman asimi;
+      sirlar backend'de (disari ****), cikti veri olarak + maskeli; her cagri izin motorundan (izinli arac=oku,
+      digerleri dis=her zaman onay). /api/mcp CRUD+test. tests/test_a7_mcp.py (gercek stdio test sunucusu).
+- [ ] A7 kalan: streamable HTTP + OAuth, resources/prompts, MCP arayuzu (Ozellestir), plugin manifest/
+      karantina/surum/geri alma, katalog, uzanti API'si, kurumsal politika  <- SIRADAKI
 - 2026-11-10 (16): A6 bitti (hooks + slash + hook UI; tarayicida dogrulandi). DIKKAT: ayni dalda paralel
   bir oturum A6.1/A6.2 commit'ledi (14da54a, 1c791d4); benim skill commit'im (81b748a) onlarla ust uste.
   399 test geciyor.

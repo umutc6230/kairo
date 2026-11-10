@@ -16,7 +16,7 @@ from pydantic import BaseModel, Field
 
 from app.agent.araclar import AjanAracKaydi
 from app.agent.checkpoints import CheckpointDeposu
-from app.agent.policy import PolitikaMotoru
+from app.agent.policy import Istek, PolitikaMotoru, YanEtki
 from app.agent.terminal import KomutServisi
 from app.agent.workspaces import CalismaAlani, Guven, Mod, WorkspaceDeposu
 from app.exceptions import Bulunamadi, SesDesteklenmiyor, UygulamaHatasi, YerelLLMHatasi
@@ -608,6 +608,7 @@ class SohbetServisi:
         self.checkpointler = checkpointler
         self.komutlar = komutlar or KomutServisi()
         self.hafiza = None  # HafizaDeposu (api baglar)
+        self.mcp = None  # McpYoneticisi (api baglar)
         self._kilitler: dict[str, asyncio.Lock] = {}
 
     def aktif_alan(self) -> CalismaAlani:
@@ -645,6 +646,23 @@ class SohbetServisi:
         if ajan_kaydi is not None:  # A2: proje aciksa zengin dosya/komut/git araclari
             araclar += ajan_kaydi.semalar()
             isleyiciler |= ajan_kaydi.isleyiciler()
+        if self.mcp is not None and self.politika is not None:  # A7: ayni izin katmanindan gecer
+            politika = self.politika
+
+            def mcp_izin(ad: str, salt_okunur: bool, ozet: str, kw: dict) -> None:
+                politika.uygula(
+                    Istek(
+                        arac=ad,
+                        yan_etki=YanEtki.oku if salt_okunur else YanEtki.dis,
+                        komut=json.dumps(kw, sort_keys=True, ensure_ascii=False)[:4000],
+                        ozet=ozet,
+                    ),
+                    alan,
+                )
+
+            mcp_sema, mcp_isl = self.mcp.semalar_ve_isleyiciler(mcp_izin)
+            araclar += mcp_sema
+            isleyiciler |= mcp_isl
         skill_metni = ""
         skill_listesi = ""
         otomatik: str | None = None

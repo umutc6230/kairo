@@ -24,6 +24,7 @@ from app.agent.checkpoints import CheckpointDeposu
 from app.agent.hooks import OLAYLAR as HOOK_OLAYLARI
 from app.agent.hooks import HookDeposu
 from app.agent.izolasyon import adaptor_olustur
+from app.agent.mcp import McpYoneticisi
 from app.agent.policy import PolitikaMotoru, yerel_host_mu
 from app.agent.runner import AgentRunner, Butce, RunDeposu, RunDurum, olay_akisi
 from app.agent.terminal import KomutServisi
@@ -262,6 +263,8 @@ def uygulama_olustur(
     skiller.proje_kaynaklari = proje_skill_kaynaklari
     hafiza = HafizaDeposu(veri_dizini)
     hooklar = HookDeposu(veri_dizini)
+    mcp = McpYoneticisi(veri_dizini)
+    sohbet.mcp = mcp
     artifactler = ArtifactDeposu(veri_dizini)
     sohbet.hafiza = hafiza
 
@@ -330,6 +333,7 @@ def uygulama_olustur(
             await agecidi.baslat(a.sunucu_port)
         yield
         await ajan.kapat()  # calisan gorevler guvenli sinirda duraklatilir
+        mcp.kapat()  # MCP sunucu surecleri yetim kalmasin
         await komutlar.hepsini_durdur()  # yetim test/dev-server surecleri kalmasin
         await agecidi.durdur()
         await yonetici.kapat()  # yalniz bizim baslattigimiz model sunucusunu durdurur
@@ -601,6 +605,28 @@ def uygulama_olustur(
     @app.delete("/api/artifactler/{artifact_id}")
     async def artifact_sil(artifact_id: str) -> dict:
         return artifactler.sil(artifact_id)
+
+    # ---- MCP (A7): sunucular yalniz oturumlu arayuzden; sirlar maskeli doner ----
+    @app.get("/api/mcp")
+    async def mcp_listesi() -> dict:
+        return {"sunucular": [s.disari() for s in mcp.liste()]}
+
+    @app.post("/api/mcp")
+    async def mcp_ekle(veri: dict) -> dict:
+        return mcp.ekle(veri)
+
+    @app.put("/api/mcp/{ad}")
+    async def mcp_guncelle(ad: str, veri: dict) -> dict:
+        return mcp.guncelle(ad, veri)
+
+    @app.delete("/api/mcp/{ad}")
+    async def mcp_sil(ad: str) -> dict:
+        mcp.sil(ad)
+        return {"silindi": ad}
+
+    @app.post("/api/mcp/{ad}/test")
+    async def mcp_test(ad: str) -> dict:
+        return await asyncio.to_thread(mcp.test, ad)
 
     # ---- hooks (A6.4-5): yalniz oturumlu arayuzden eklenir; model/skill/proje ekleyemez ----
     @app.get("/api/hooks")
