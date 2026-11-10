@@ -86,7 +86,10 @@ async def test_gorev_ekrani_dosyalari_sunulur(istemci) -> None:
     js = await istemci.get("/web/gorevler.js")
     assert js.status_code == 200 and "kacir" in js.text
     html = (await istemci.get("/")).text
-    assert 'id="g-gorevler"' in html and 'data-git="gorevler"' in html
+    # Claude Code duzeni: ayri ozellik sayfasi menude yok; sol kenar Yeni/Ara/Artifact/Ozellestir
+    for hedef in ("yeni", "ara", "artifactler", "ozellestir"):
+        assert f'data-git="{hedef}"' in html
+    assert 'data-git="gorevler"' not in html and 'data-git="karsilastir"' not in html
 
 
 @pytest.mark.skipif(__import__("shutil").which("node") is None, reason="node yok")
