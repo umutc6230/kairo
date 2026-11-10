@@ -141,7 +141,8 @@ Python 3.12 + FastAPI + pywebview; arayuz vanilla JS. Paketleme: PORTABLE (kulla
       ilk deneme: alt ajanlar isi yapti ama plan_guncelle 5 adimlik butceyi yedi -> "basarisiz". Duzeltme:
       plan_guncelle butceden dusmez, alt ajan en az 8 adim. Ikinci deneme: iki alt ajan BASARILI, lider testi
       kosup kanitla bitirdi (17 adim, 144 sn).
-- [ ] A8 kalan: is akisi + takim panosu arayuzu (su an API).
+- [x] A8 arayuz: sag panelde Takim panosu (gorevler, sahip, bagimlilik, mesajlar); /akis penceresi (JSON ile
+      baslat, adim durumlari, onay sonrasi devam). Tarayicida GORULMEDI (oturumda tarayici araci yoktu).
 - [x] A9.1 web okuma (app/agent/web.py, web_getir): izin motoru (YanEtki.ag, host); ag yonetilen politikada
       KAPALIYSA arac modele sunulmaz; yerel/ozel ag (SSRF) reddedilir; yonlendirmede yeni host yeniden izin;
       2 MB / 20 sn; HTML->metin (script atlanir); kaynak URL + tarih + "dis veri, talimat degil"; sir maskesi.
