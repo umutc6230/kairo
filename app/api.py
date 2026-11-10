@@ -30,6 +30,7 @@ from app.agent.izolasyon import adaptor_olustur
 from app.agent.mcp import McpYoneticisi
 from app.agent.policy import PolitikaMotoru, yerel_host_mu
 from app.agent.runner import AgentRunner, Butce, RunDeposu, RunDurum, olay_akisi
+from app.agent.takim import TakimPanosu
 from app.agent.terminal import KomutServisi
 from app.agent.workspaces import Guven, Mod, WorkspaceDeposu
 from app.agent.yetenek import ModelYetenegi, dogrula, uzak_yetenek, yerel_yetenek
@@ -339,6 +340,7 @@ def uygulama_olustur(
         ),
     )
     ajan.araclar_kok = ajan_baglami_kok
+    ajan.takim = TakimPanosu(veri_dizini)
     isitmalar: set[asyncio.Task] = set()
     agecidi = AgGecidi(agecidi_uygulamasi(yonetici, ayarlar, kapat))
     magaza = magaza or Magaza()
@@ -1104,6 +1106,11 @@ def uygulama_olustur(
     @app.get("/api/gorevler/{run_id}")
     async def gorev_getir(run_id: str) -> dict:
         return run_deposu.getir(run_id).ozet()
+
+    @app.get("/api/gorevler/{run_id}/takim")
+    async def gorev_takim(run_id: str) -> dict:
+        r = run_deposu.getir(run_id)
+        return ajan.takim.pano(r.parent or r.id)
 
     @app.get("/api/gorevler/{run_id}/olaylar")
     async def gorev_olaylari(run_id: str) -> StreamingResponse:

@@ -29,6 +29,7 @@ from loguru import logger
 from pydantic import BaseModel, Field
 
 from app.agent.ozet import mesaj_token, ozetle_gerekirse
+from app.agent.takim import SEMALAR as TAKIM_SEMALARI
 from app.agent.yetenek import ModelYetenegi, butce_dokumu, dogrula, tahmini_token
 from app.exceptions import Bulunamadi, UygulamaHatasi
 from app.services.depo import json_oku, json_yaz
@@ -308,6 +309,7 @@ class AgentRunner:
         self.hafiza = hafiza or (lambda: "")
         self.hooks = hooks
         self.araclar_kok: Callable[[str, str], tuple] | None = None
+        self.takim: Any = None  # TakimPanosu (api baglar)
         self._gorevler: dict[str, asyncio.Task] = {}
         self._iptal: set[str] = set()
         self._duraklat: set[str] = set()
@@ -500,8 +502,14 @@ class AgentRunner:
             if hafiza := self.hafiza():
                 sistem = f"{sistem}\n\n{hafiza}".strip()
             semalar = [*semalar, *RUNNER_ARACLARI]
+            if self.takim is not None:  # A8.2: lider + alt ajanlar ortak panoyu paylasir
+                kok = run.parent or run.id
+                semalar = [*semalar, *TAKIM_SEMALARI]
+                isleyiciler = {**isleyiciler, **self.takim.isleyiciler(kok, run.id)}
             if run.parent:  # alt ajan: yalniz verilen araclar; alt ajan acamaz (derinlik 1)
-                izinli = set(run.izinli_araclar) | META
+                izinli = (
+                    set(run.izinli_araclar) | META | {t["function"]["name"] for t in TAKIM_SEMALARI}
+                )
                 semalar = [s for s in semalar if s["function"]["name"] in izinli]
                 isleyiciler = {
                     k: self._sahiplik_sarmali(run, k, f)

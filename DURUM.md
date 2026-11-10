@@ -133,7 +133,11 @@ Python 3.12 + FastAPI + pywebview; arayuz vanilla JS. Paketleme: PORTABLE (kulla
 - [x] A8.6 dinamik is akislari (app/agent/akis.py, /api/akislar): tipli adimlar (ajan | komut; kod/eval YOK),
       bagimlilik + dongu tespiti, kosul (onceki adim basarili/basarisiz), sinirli tekrar (<=3), bagimlisi
       basarisizsa atlanir; komut izin motorundan gecer, onayda akis durur, devamda tamamlananlar yinelenmez.
-- [ ] A8 kalan: team lideri + ortak gorev listesi/claim/heartbeat/mesaj kutusu (A8.2); akis arayuzu  <- SIRADAKI
+- [x] A8.2 takim panosu (app/agent/takim.py): lider (ust gorev) + alt ajanlar ortak gorev listesi; bagimlilik,
+      claim = sureli kiralama (600 sn), panoyu kullanmak heartbeat, suresi dolan (coken) ajanin gorevi geri
+      acilir, yalniz sahibi tamamlar; mesaj kutusu (kisiye/hepsi), ayni mesaj_id tekrar teslim edilmez.
+      Araclar takim_* (alt ajanlara da acik). /api/gorevler/{id}/takim.
+- [ ] A8 kalan: is akisi + takim panosu arayuzu (su an API). Sonra A9  <- SIRADAKI
 - 2026-11-10 (16): A6 bitti (hooks + slash + hook UI; tarayicida dogrulandi). DIKKAT: ayni dalda paralel
   bir oturum A6.1/A6.2 commit'ledi (14da54a, 1c791d4); benim skill commit'im (81b748a) onlarla ust uste.
   399 test geciyor.
