@@ -367,6 +367,7 @@ def uygulama_olustur(
         yield
         if zd:
             zd.cancel()
+        uzak_sunucu.kapat()  # A12: uzak erisim uygulamayla birlikte kapanir
         await ajan.kapat()  # calisan gorevler guvenli sinirda duraklatilir
         mcp.kapat()  # MCP sunucu surecleri yetim kalmasin
         for kz in sohbet.kod_zekasi.values():  # dil sunuculari
@@ -1226,6 +1227,74 @@ def uygulama_olustur(
     async def webhook_sil(wid: str) -> dict:
         webhooklar.sil(wid)
         return {"silindi": wid}
+
+    # ---- Remote Control (A12): varsayilan kapali, ayri TLS sunucu, beyaz liste ----
+    from app import uzak as uzak_mod
+
+    uzak_depo = uzak_mod.UzakDeposu(veri_dizini)
+    uzak_sunucu = uzak_mod.UzakSunucu()
+    app.state.uzak_depo = uzak_depo
+
+    async def _ic_cagri(metod: str, yol: str, govde: Any) -> tuple[int, Any]:
+        import httpx
+
+        async with httpx.AsyncClient(
+            transport=httpx.ASGITransport(app=app), base_url="http://127.0.0.1",
+            headers={OTURUM_BASLIGI: oturum_anahtari}, timeout=60,
+        ) as c:  # fmt: skip
+            r = await c.request(metod, yol, json=govde)
+        try:
+            return r.status_code, r.json()
+        except ValueError:
+            return r.status_code, {"hata": "Gecersiz cevap."}
+
+    app.state.uzak_ic_cagri = _ic_cagri
+
+    def _uzak_durum() -> dict:
+        _, _, parmak = uzak_mod.sertifika(veri_dizini / "uzak-tls")
+        port = ayarlar.oku().uzak_port
+        return {
+            "acik": uzak_sunucu.acik_mi(), "port": port, "parmak_izi": parmak,
+            "adresler": [f"https://{i}:{port}/uzak/" for i in uzak_mod.yerel_ipler()
+                         if i != "127.0.0.1"],
+            "cihazlar": uzak_depo.liste(), "denetim": uzak_depo.denetim(20),
+        }  # fmt: skip
+
+    @app.get("/api/uzak")
+    async def uzak_durum() -> dict:
+        return await asyncio.to_thread(_uzak_durum)
+
+    @app.post("/api/uzak/ac")
+    async def uzak_ac() -> dict:
+        cert, key, _ = await asyncio.to_thread(uzak_mod.sertifika, veri_dizini / "uzak-tls")
+        uapp = uzak_mod.uzak_uygulamasi(uzak_depo, _ic_cagri, _uzak_durum()["parmak_izi"])
+        try:
+            await asyncio.to_thread(uzak_sunucu.ac, uapp, ayarlar.oku().uzak_port, cert, key)
+        except OSError as e:
+            raise UygulamaHatasi(f"Uzak erisim acilamadi: {e}") from e
+        if not uzak_sunucu.acik_mi():
+            raise UygulamaHatasi("Uzak erisim acilamadi (port kullanimda olabilir).")
+        return await asyncio.to_thread(_uzak_durum)
+
+    @app.post("/api/uzak/kapat")
+    async def uzak_kapat() -> dict:
+        uzak_sunucu.kapat()
+        return {"acik": False}
+
+    @app.post("/api/uzak/kod")
+    async def uzak_kod(veri: dict) -> dict:
+        try:
+            return uzak_depo.kod_olustur(veri.get("rol", "izleyici"))
+        except uzak_mod.UzakHata as e:
+            raise UygulamaHatasi(e.mesaj) from e
+
+    @app.delete("/api/uzak/cihaz/{cihaz_id}")
+    async def uzak_cihaz_iptal(cihaz_id: str) -> dict:
+        try:
+            uzak_depo.iptal(cihaz_id)
+        except uzak_mod.UzakHata as e:
+            raise UygulamaHatasi(e.mesaj) from e
+        return {"iptal": cihaz_id}
 
     # ---- dinamik is akislari (A8.6): tipli adimlar, kod calistirma yok ----
     akislar = AkisDeposu(veri_dizini)

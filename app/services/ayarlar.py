@@ -84,6 +84,9 @@ class KullaniciAyarlari(BaseModel):
     ag_acik: bool = False  # A9: model internete cikabilir (her istek yine onay ister)
     tarayici_acik: bool = False  # A9.2: izole profilli tarayici araclari (proje acikken)
     masaustu_izinli: list[str] = Field(default=[], max_length=20)  # A9.5: exe adlari; bos=kapali
+    uzak_port: int = Field(
+        default=8443, ge=1024, le=65535
+    )  # A12: Remote Control (varsayilan kapali)
     saat_dilimi: str = "Europe/Istanbul"  # A11: zamanlamalarin varsayilani
     lsp_sunuculari: dict[str, str] = {}  # A10.1: {".py": "pylsp"}; yalniz kullanici tanimlar
     otomatik_ogrenme: bool = False  # ajan kendi not ekleyebilir (A4.4: kullanici acar)

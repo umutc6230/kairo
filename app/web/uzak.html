@@ -1,0 +1,105 @@
+<!doctype html>
+<html lang="tr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Yerel AI Studio Uzak</title>
+<style>
+  :root { --bg:#f7f7f5; --kart:#fff; --yazi:#1d1d1b; --soluk:#6b6b66; --cizgi:#e4e4df; --vurgu:#c2410c; --iyi:#15803d; --kotu:#b91c1c; }
+  @media (prefers-color-scheme: dark) { :root { --bg:#191918; --kart:#232321; --yazi:#ecece8; --soluk:#9b9b94; --cizgi:#34342f; --vurgu:#fb923c; --iyi:#4ade80; --kotu:#f87171; } }
+  * { box-sizing: border-box; }
+  body { margin:0; background:var(--bg); color:var(--yazi); font:15px/1.45 system-ui, -apple-system, "Segoe UI", sans-serif; }
+  header { position:sticky; top:0; background:var(--bg); border-bottom:1px solid var(--cizgi); padding:12px 16px; display:flex; justify-content:space-between; align-items:center; gap:8px; }
+  h1 { font-size:16px; margin:0; } main { padding:12px 16px 40px; max-width:640px; margin:0 auto; }
+  .kart { background:var(--kart); border:1px solid var(--cizgi); border-radius:10px; padding:12px; margin-bottom:10px; }
+  .soluk { color:var(--soluk); font-size:13px; } .rozet { font-size:12px; padding:2px 8px; border-radius:99px; border:1px solid var(--cizgi); }
+  input, textarea { width:100%; font:inherit; padding:10px; border-radius:8px; border:1px solid var(--cizgi); background:var(--bg); color:var(--yazi); }
+  button { font:inherit; padding:9px 14px; border-radius:8px; border:1px solid var(--cizgi); background:var(--kart); color:var(--yazi); min-height:40px; }
+  button.ana { background:var(--vurgu); color:#fff; border-color:transparent; } button.kotu { color:var(--kotu); }
+  .satir { display:flex; gap:8px; flex-wrap:wrap; margin-top:8px; } .hata { color:var(--kotu); } .tamam { color:var(--iyi); }
+  .adim { border-top:1px solid var(--cizgi); padding:6px 0; font-size:13px; word-break:break-word; }
+</style>
+</head>
+<body>
+<header><h1>Yerel AI Studio</h1><span id="ben" class="soluk"></span></header>
+<main id="kok"></main>
+<script>
+const K = document.getElementById("kok");
+const DURUM = { calisiyor:"çalışıyor", onay_bekliyor:"onay bekliyor", karar_bekliyor:"karar bekliyor", duraklatildi:"duraklatıldı", basarili:"başarılı", basarisiz:"başarısız", iptal:"iptal", dogrulanmadi:"doğrulanmadı", bekliyor:"bekliyor" };
+let token = ""; try { token = localStorage.getItem("yas_uzak") || ""; } catch {}
+let rol = "", secili = "", zamanlayici = 0;
+const kaydet = (t) => { token = t; try { t ? localStorage.setItem("yas_uzak", t) : localStorage.removeItem("yas_uzak"); } catch {} };
+const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&":"&amp;", "<":"&lt;", ">":"&gt;", '"':"&quot;", "'":"&#39;" })[c]);
+
+async function api(yol, govde) {
+  let r;
+  try {
+    r = await fetch(yol, { method: govde === undefined ? "GET" : "POST", headers: { "Content-Type": "application/json", ...(token ? { Authorization: "Bearer " + token } : {}) }, body: govde === undefined ? undefined : JSON.stringify(govde) });
+  } catch { throw new Error("Bağlantı yok. Bilgisayar açık ve aynı ağda mı?"); }
+  const v = await r.json().catch(() => ({}));
+  if (r.status === 401) { kaydet(""); eslesmeEkrani(v.hata); throw new Error(v.hata || "Yetki yok"); }
+  if (!r.ok) throw new Error(v.hata || ("Hata " + r.status));
+  return v;
+}
+
+function eslesmeEkrani(hata = "") {
+  clearInterval(zamanlayici); document.getElementById("ben").textContent = "";
+  K.innerHTML = `<div class="kart"><b>Cihazı eşleştir</b><p class="soluk">Bilgisayarda sohbete <code>/uzak kod</code> yazın; çıkan 8 karakterlik kodu girin. Tarayıcının gösterdiği sertifika parmak izinin bilgisayardakiyle aynı olduğunu kontrol edin.</p>
+    <input id="kod" placeholder="Kod" autocomplete="one-time-code" autocapitalize="characters" maxlength="9">
+    <input id="ad" placeholder="Cihaz adı (ör. telefonum)" style="margin-top:8px" maxlength="40">
+    <div class="satir"><button class="ana" id="esles">Eşleştir</button></div><p id="mesaj" class="hata">${esc(hata)}</p></div>`;
+  document.getElementById("esles").onclick = async () => {
+    try {
+      const v = await api("/uzak/esles", { kod: document.getElementById("kod").value, cihaz: document.getElementById("ad").value });
+      kaydet(v.token); basla();
+    } catch (e) { document.getElementById("mesaj").textContent = e.message; }
+  };
+}
+
+async function basla() {
+  try {
+    const b = await api("/uzak/ben"); rol = b.rol;
+    document.getElementById("ben").textContent = `${b.ad} · ${b.rol}`;
+    // token suresi yaklasinca dondur (eskisi gecersiz olur)
+    if (b.son_kullanma * 1000 - Date.now() < 3 * 3600 * 1000) { const y = await api("/uzak/yenile", {}); kaydet(y.token); }
+  } catch { return; }
+  clearInterval(zamanlayici); zamanlayici = setInterval(ciz, 4000); ciz();
+}
+
+function uyari(m) { K.insertAdjacentHTML("afterbegin", `<p class="hata">${esc(m)}</p>`); }
+
+async function ciz() {
+  try { secili ? await gorevCiz(secili) : await listeCiz(); }
+  catch (e) { if (token) K.insertAdjacentHTML("afterbegin", `<p class="hata">${esc(e.message)}</p>`); }
+}
+
+async function listeCiz() {
+  const { gorevler } = await api("/uzak/api/gorevler");
+  K.innerHTML = gorevler.length ? gorevler.map((g) => `<div class="kart" data-id="${esc(g.id)}" role="button" tabindex="0">
+    <div style="display:flex;justify-content:space-between;gap:8px"><b>${esc(g.hedef).slice(0, 120)}</b><span class="rozet">${esc(DURUM[g.durum] || g.durum)}</span></div>
+    <div class="soluk">${esc(g.kullanim?.adim ?? 0)} adım</div></div>`).join("") : `<p class="soluk">Görev yok.</p>`;
+  K.querySelectorAll(".kart[data-id]").forEach((el) => (el.onclick = () => { secili = el.dataset.id; ciz(); }));
+}
+
+async function gorevCiz(id) {
+  const g = await api(`/uzak/api/gorevler/${encodeURIComponent(id)}`);
+  const op = rol === "operator" || rol === "onaylayici";
+  const bekleyen = (g.adimlar || []).filter((a) => a.durum === "onay_bekliyor" && a.onay_id);
+  K.innerHTML = `<button id="geri">← Görevler</button>
+  <div class="kart" style="margin-top:10px"><b>${esc(g.hedef)}</b><div class="soluk">${esc(DURUM[g.durum] || g.durum)}${g.sonuc?.ozet ? " · " + esc(g.sonuc.ozet) : ""}</div>
+  ${op ? `<div class="satir"><button data-i="duraklat">Duraklat</button><button data-i="devam">Devam</button><button class="kotu" data-i="iptal">İptal</button></div>` : ""}</div>
+  ${bekleyen.map((a) => `<div class="kart"><b>Onay bekliyor:</b> ${esc(a.arac)}<div class="soluk">${esc(a.ozet || "").slice(0, 400)}</div>
+    ${rol === "onaylayici" ? `<div class="satir"><button class="ana" data-o="${esc(a.onay_id)}" data-k="1">Onayla</button><button class="kotu" data-o="${esc(a.onay_id)}" data-k="0">Reddet</button></div>` : `<div class="soluk">Onay için 'onaylayici' rolü gerekir.</div>`}</div>`).join("")}
+  ${op ? `<div class="kart"><textarea id="metin" rows="2" placeholder="Ajana yönlendirme mesajı"></textarea><div class="satir"><button id="gonder">Gönder</button></div></div>` : ""}
+  <div class="kart">${(g.adimlar || []).slice(-15).reverse().map((a) => `<div class="adim"><b>${esc(a.arac)}</b> · ${esc(DURUM[a.durum] || a.durum)}</div>`).join("")}</div>`;
+  document.getElementById("geri").onclick = () => { secili = ""; ciz(); };
+  K.querySelectorAll("[data-i]").forEach((b) => (b.onclick = async () => { try { await api(`/uzak/api/gorevler/${encodeURIComponent(id)}/${b.dataset.i}`, {}); ciz(); } catch (e) { uyari(e.message); } }));
+  K.querySelectorAll("[data-o]").forEach((b) => (b.onclick = async () => { try { await api(`/uzak/api/onaylar/${encodeURIComponent(b.dataset.o)}`, { onayla: b.dataset.k === "1" }); ciz(); } catch (e) { uyari(e.message); } }));
+  const gonder = document.getElementById("gonder");
+  if (gonder) gonder.onclick = async () => { const m = document.getElementById("metin").value.trim(); if (m) { await api(`/uzak/api/gorevler/${encodeURIComponent(id)}/mesaj`, { metin: m }); ciz(); } };
+}
+
+token ? basla() : eslesmeEkrani();
+</script>
+</body>
+</html>
