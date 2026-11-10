@@ -43,6 +43,7 @@ export const KOMUTLAR = {
   "/diff": { aciklama: "Çalışma ağacı diff'i", calistir: () => diffGoster() },
   "/review": { aciklama: "Diff'i kod review'dan geçirir (/review derin: güvenlik + doğruluk geçişleri)", calistir: (arg) => reviewYap(arg === "derin") },
   "/agents": { aciklama: "Ajan görevleri sayfası", calistir: () => git("gorevler") },
+  "/akis": { aciklama: "İş akışları: listele, JSON ile başlat, onaydan sonra devam", calistir: () => akisPenceresi() },
   "/goal": {
     aciklama: "/goal <hedef>: ajan görevi başlatır",
     calistir: async (arg) => {
@@ -64,6 +65,39 @@ export const KOMUTLAR = {
 };
 
 const HENUZ_YOK = ["/cost", "/resume", "/rewind", "/browser", "/loop", "/schedule", "/doctor"];
+
+// Is akislari (A8.6): adimlar yalniz "ajan" ya da "komut"; kod calistirma yok.
+const AKIS_ORNEK = JSON.stringify({ ad: "duzelt ve test et", adimlar: [
+  { id: "duzelt", tur: "ajan", hedef: "testleri gecirecek duzeltmeyi yap" },
+  { id: "test", tur: "komut", komut: "python -m pytest -q", bagimli: ["duzelt"], tekrar: 1 },
+] }, null, 1);
+const AKIS_TR = { bekliyor: "bekliyor", calisiyor: "çalışıyor", onay_bekliyor: "onay bekliyor", basarili: "başarılı", basarisiz: "başarısız", atlandi: "atlandı" };
+
+function akisPenceresi() {
+  const kap = document.createElement("div");
+  kap.className = "diff-modal";
+  const ciz = async () => {
+    let liste = [];
+    try { liste = (await api("/api/akislar")).akislar; } catch (e) { bildir(e.message, "hata"); }
+    kap.innerHTML = `<div class="ayar-not">Adım türleri: <code>ajan</code> (hedef) ve <code>komut</code>. <code>bagimli</code>, <code>kosul</code> ({adim, durum}) ve <code>tekrar</code> (en fazla 3) kullanılabilir. Komutlar izin kurallarından geçer; onay isteyen komutta akış durur.</div>
+      <textarea class="alan" rows="9" aria-label="Akış tanımı (JSON)">${kacir(AKIS_ORNEK)}</textarea>
+      <div class="dugme-sira"><button class="btn ana" data-baslat>Başlat</button><button class="btn" data-yenile>Yenile</button></div>
+      ${liste.map((a) => `<div class="kart"><div class="kart-baslik"><b>${kacir(a.ad)}</b><span class="rozet">${kacir(AKIS_TR[a.durum] || a.durum)}</span></div>
+        <ul class="plan-liste">${a.adimlar.map((x) => `<li>${kacir(x.id)} <code>${kacir(x.tur)}</code> <span class="soluk kucuk">${kacir(AKIS_TR[x.durum] || x.durum)}${x.deneme > 1 ? ` · ${kacir(x.deneme)} deneme` : ""}${x.sonuc ? ` · ${kacir(x.sonuc.slice(0, 120))}` : ""}</span></li>`).join("")}</ul>
+        ${a.durum === "onay_bekliyor" ? `<button class="btn" data-devam="${kacir(a.id)}">Onayladım, devam et</button>` : ""}</div>`).join("") || '<div class="soluk">Henüz akış yok.</div>'}`;
+    kap.querySelector("[data-baslat]").onclick = async () => {
+      let veri;
+      try { veri = JSON.parse(kap.querySelector("textarea").value); } catch { bildir("Geçersiz JSON.", "hata"); return; }
+      try { await api("/api/akislar", { method: "POST", govde: veri }); bildir("Akış başladı.", "basari", 1500); setTimeout(ciz, 800); } catch (e) { bildir(e.message, "hata"); }
+    };
+    kap.querySelector("[data-yenile]").onclick = ciz;
+    kap.querySelectorAll("[data-devam]").forEach((b) => {
+      b.onclick = async () => { try { await api(`/api/akislar/${b.dataset.devam}/devam`, { method: "POST" }); setTimeout(ciz, 800); } catch (e) { bildir(e.message, "hata"); } };
+    });
+  };
+  modal({ baslik: "İş akışları", icerik: kap, genis: true, dugmeler: [{ metin: "Kapat" }] });
+  ciz();
+}
 
 function yardim() {
   const satirlar = Object.entries(KOMUTLAR).map(([k, v]) => [k, v.aciklama]);

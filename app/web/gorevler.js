@@ -183,6 +183,19 @@ function sagPanelCiz(r) {
   ikonlariYerlestir(p);
   $$("[data-diff]", p).forEach((x) => { x.onclick = () => diffAc(x.dataset.diff); });
   if ((r.cocuklar || []).length) altAjanlariCiz(r.cocuklar);
+  takimCiz(p, r.id);
+}
+
+// Takim panosu (A8.2): ortak gorev listesi ve mesajlar; bos ise hic gosterilmez
+async function takimCiz(panel, runId) {
+  let t;
+  try { t = await api(`/api/gorevler/${runId}/takim`); } catch { return; }
+  if (!panel.isConnected || (!t.gorevler.length && !t.mesajlar.length)) return;
+  const durumTr = { acik: "açık", alindi: "alındı", tamam: "tamam" };
+  const kutu = el(`<div><div class="sp-baslik">Takım panosu</div>
+    <ul class="plan-liste">${t.gorevler.map((g) => `<li class="plan-${g.durum === "tamam" ? "tamam" : "bekliyor"}">${kacir(g.baslik)} <span class="soluk kucuk">${kacir(durumTr[g.durum] || g.durum)}${g.sahip ? ` · ${kacir(g.sahip)}` : ""}${g.bagimli.length ? ` · bekler: ${kacir(g.bagimli.join(", "))}` : ""}</span></li>`).join("")}</ul>
+    ${t.mesajlar.length ? `<div class="sp-baslik">Mesajlar</div>${t.mesajlar.slice(-8).map((m) => `<div class="kucuk"><b>${kacir(m.kimden)}</b> → ${kacir(m.kime)}: ${kacir(m.metin.slice(0, 160))}</div>`).join("")}` : ""}</div>`);
+  panel.append(kutu);
 }
 
 // Agent View: hangi alt ajan, hangi dosyaya ve hangi araclara yetkili, durumu ne

@@ -100,3 +100,10 @@ def test_dogrula_veri_turkce_hata() -> None:
 
     with pytest.raises(UygulamaHatasi, match="Akis gecersiz"):
         dogrula_veri({"ad": "x", "adimlar": []})
+
+
+async def test_akis_ve_takim_arayuzu_sunulur(istemci) -> None:
+    komut = (await istemci.get("/web/komutlar.js")).text
+    assert '"/akis"' in komut and "/api/akislar" in komut and "/devam" in komut
+    gorev = (await istemci.get("/web/gorevler.js")).text
+    assert "takimCiz" in gorev and "/takim" in gorev
