@@ -2,7 +2,8 @@
 import { ikon, ikonlariYerlestir } from "./ikonlar.js";
 import { kacir } from "./md.js";
 import { aramaAc, ayarKaydet, ayarlarAc, ayarlarKur, modelYukle, sunucuDurdur } from "./ayarlar.js";
-import { $, $$, api, bildir, durum, el, menuAc, modelAdi, modelProfil, onayla, sayi, sor, turkcelestir } from "./ortak.js";
+import { $, $$, api, bildir, durum, el, menuAc, modal, modelAdi, modelProfil, onayla, sayi, sor, turkcelestir } from "./ortak.js";
+import { artifactListesiCiz } from "./inceleme.js";
 import { sayfaModelleriniYenile, sayfalarKur } from "./sayfalar.js";
 import { modelSayfasiYukle, modellerKur } from "./modeller.js";
 import { projeKur } from "./proje.js";
@@ -19,7 +20,7 @@ let gecmisKonum = -1;
 function gorunumGoster(ad) {
   durum.gorunum = ad;
   $$(".gorunum").forEach((g) => { g.hidden = g.id !== `g-${ad}`; });
-  $$(".nav-oge").forEach((n) => n.classList.toggle("aktif", n.dataset.git === ad));
+  $$(".nav-oge").forEach((n) => n.classList.toggle("aktif", n.dataset.git === ad || (n.dataset.git === "ozellestir" && ["skiller", "modeller"].includes(ad))));
   $$(".oturum").forEach((o) => o.classList.toggle("aktif", ad === "sohbet" && o.dataset.id === durum.oturumId));
   if (BASLIKLAR[ad]) baslikAyarla(BASLIKLAR[ad]);
 }
@@ -82,6 +83,27 @@ async function oturumlariYenile() {
     durum.oturumlar = await api("/api/oturumlar");
   } catch { /* sessiz */ }
   oturumListesiCiz();
+}
+
+// Claude Code Desktop gibi: ayri ozellik sayfasi yok. Ozellestir = skill/talimat + modeller
+// (ayni gorunumde sekme), hafiza/hook/AI ayarlari Ayarlar penceresinde.
+function ozellestirSekmeleri() {
+  const sekmeler = [["skiller", "Skill'ler ve talimatlar"], ["modeller", "Modeller"], ["hafiza", "Hafıza"], ["hooks", "Hook'lar"]];
+  for (const ad of ["skiller", "modeller"]) {
+    const ic = document.querySelector(`#g-${ad} .sayfa-ic`);
+    if (!ic || ic.querySelector(".ozellestir-sekmeler")) continue;
+    const bar = el(`<div class="sekmeler ozellestir-sekmeler" role="tablist">${sekmeler.map(([k, m]) => `<button class="sekme ${k === ad ? "aktif" : ""}" role="tab" aria-selected="${k === ad}" data-oz="${k}">${kacir(m)}</button>`).join("")}</div>`);
+    bar.querySelectorAll("[data-oz]").forEach((b) => {
+      b.onclick = () => (["hafiza", "hooks"].includes(b.dataset.oz) ? ayarlarAc(b.dataset.oz) : git({ tur: b.dataset.oz }));
+    });
+    ic.prepend(bar);
+  }
+}
+
+function artifactPenceresi() {
+  const kap = el('<ul class="artifact-liste"></ul>');
+  modal({ baslik: "Artifact'ler", icerik: kap, genis: true, dugmeler: [{ metin: "Kapat" }] });
+  artifactListesiCiz(kap);
 }
 
 function oturumListesiCiz() {
@@ -277,11 +299,17 @@ async function baslat() {
   projeKur();
   skillerKur(hepsiniYenile);
   gorevlerKur();
+  ozellestirSekmeleri();
   dikteKur();
   modellerKur(hepsiniYenile);
 
   $$(".nav-oge").forEach((n) => {
-    n.onclick = () => (n.dataset.git === "ara" ? aramaAc(oturumAc) : git({ tur: n.dataset.git }));
+    n.onclick = () => {
+      const h = n.dataset.git;
+      if (h === "ara") aramaAc(oturumAc);
+      else if (h === "artifactler") artifactPenceresi();
+      else git({ tur: h === "ozellestir" ? "skiller" : h });
+    };
   });
   $("#btn-kenar").onclick = () => $("#kok").classList.toggle("kenar-kapali");
   $("#btn-geri").onclick = () => { if (gecmisKonum > 0) git(gecmis[--gecmisKonum], { kaydetme: true }); };
