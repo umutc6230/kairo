@@ -1,7 +1,7 @@
 // Proje (calisma alani) ve izin kapsami arayuzu. Native dialog YOK: in-app modal.
 import { ikonlariYerlestir } from "./ikonlar.js";
 import { kacir } from "./md.js";
-import { $, api, bildir, durum, el, modal, onayla } from "./ortak.js";
+import { $, api, bildir, durum, el, menuAc, modal, onayla } from "./ortak.js";
 
 const MOD_TR = {
   sohbet: { ad: "Sohbet", aciklama: "Dosya yazma ve komut yok; yalnız okuma ve sohbet." },
@@ -28,6 +28,8 @@ export async function projeYenile() {
     return;
   }
   hapiCiz();
+  modHapiCiz();
+  document.dispatchEvent(new Event("oturumlar-degisti")); // sag panel ortam bilgisi
 }
 
 function hapiCiz() {
@@ -179,4 +181,20 @@ export function projeKur() {
   if (hap) hap.onclick = projeAc;
   projeYenile();
   durum.proje = projeDurumu;
+}
+
+// Claude Code'daki mod secici gibi: composer altinda; proje yoksa gizli (sohbet modu).
+function modHapiCiz() {
+  const b = $("#hap-mod");
+  if (!b) return;
+  const aktif = projeDurumu.aktif;
+  b.hidden = !aktif;
+  if (!aktif) return;
+  $("#hap-mod-metni").textContent = MOD_TR[projeDurumu.izin?.mod]?.ad || aktif.mod;
+  b.onclick = () => menuAc(b, Object.entries(MOD_TR).map(([k, v]) => ({
+    metin: `${v.ad}${k === aktif.mod ? " ✓" : ""}`,
+    eylem: async () => {
+      try { await api(`/api/projeler/${aktif.id}/mod`, { method: "PUT", govde: { mod: k } }); await projeYenile(); } catch (e) { bildir(e.message, "hata"); }
+    },
+  })), { yukari: true });
 }

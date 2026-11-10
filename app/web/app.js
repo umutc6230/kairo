@@ -6,7 +6,7 @@ import { $, $$, api, bildir, durum, el, menuAc, modal, modelAdi, modelProfil, on
 import { artifactListesiCiz } from "./inceleme.js";
 import { sayfaModelleriniYenile, sayfalarKur } from "./sayfalar.js";
 import { modelSayfasiYukle, modellerKur } from "./modeller.js";
-import { projeKur } from "./proje.js";
+import { projeAc, projeDurumu, projeKur } from "./proje.js";
 import { skillSayfasiYukle, skillerKur } from "./skiller.js";
 import { gorevSayfasiYukle, gorevlerKur } from "./gorevler.js";
 import { dikteDurumuYenile, dikteKur } from "./dikte.js";
@@ -78,6 +78,16 @@ function grupAdi(iso) {
   if (gun < 30) return "Bu ay";
   return "Daha eski";
 }
+
+function sagPanelOrtam() {
+  const a = durum.ayarlar || {};
+  const model = a.saglayici === "openrouter" && a.or_model ? a.or_model : modelAdi(a.model);
+  const m = $("#sp-model");
+  if (m) m.textContent = `Model: ${model || "-"}`;
+  const p = $("#sp-proje-metni");
+  if (p) p.textContent = projeDurumu.aktif?.ad || "Proje seç (açınca sohbet ajan olur)";
+}
+document.addEventListener("oturumlar-degisti", () => { oturumlariYenile(); sagPanelOrtam(); });
 
 async function oturumlariYenile() {
   try {
@@ -285,6 +295,7 @@ async function hepsiniYenile() {
   await durumYenile();
   sayfaModelleriniYenile();
   dikteDurumuYenile(); // model degisince dikte dugmesi durumu
+  sagPanelOrtam();
 }
 
 // ---------------- acilis ----------------
@@ -301,6 +312,7 @@ async function baslat() {
   skillerKur(hepsiniYenile);
   gorevlerKur();
   ozellestirSekmeleri();
+  $("#sp-proje").onclick = () => projeAc();
   dikteKur();
   modellerKur(hepsiniYenile);
 

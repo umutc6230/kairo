@@ -78,6 +78,7 @@
                 <span class="hap duz" id="hap-klasor"><span data-ikon="klasor"></span><span id="hap-klasor-metni">llm</span></span>
               </div>
               <div class="alt-sag">
+                <button class="hap duz" id="hap-mod" title="Mod: ajanın neye izinli olduğu" hidden><span id="hap-mod-metni">Mod</span><span data-ikon="asagi" class="kucuk-ikon"></span></button>
                 <button class="hap duz" id="hap-model"><span id="hap-model-metni">Model</span><span class="soluk" id="hap-dusunme-metni">Kapalı</span></button>
                 <span class="nokta buyuk" id="hap-nokta" title="Sunucu durumu"></span>
               </div>
@@ -245,6 +246,13 @@
           </div>
         </section>
       </main>
+      <aside id="sag-panel" class="sag-panel" aria-label="Oturum paneli">
+        <div class="sp-baslik">Ortam</div>
+        <div class="sp-satir"><span data-ikon="ekran"></span>Bu bilgisayar</div>
+        <button class="sp-satir bag" id="sp-proje"><span data-ikon="klasor"></span><span id="sp-proje-metni">Proje seç</span></button>
+        <div class="sp-satir" id="sp-model"></div>
+        <div id="sag-panel-gorev"></div>
+      </aside>
     </div>
     <div id="modal-kok"></div>
     <div id="bildirimler"></div>

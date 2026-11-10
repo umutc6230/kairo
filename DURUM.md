@@ -1,5 +1,5 @@
 # DURUM - yerel-ai-studio
-guncel: 2026-11-09 | son arac: Claude Code (Opus 5.5) | dal: feature/ajan-katmani
+guncel: 2026-11-10 | son arac: Claude Code (Opus 5.5) | dal: feature/ajan-katmani
 
 ## Ne
 Yerel sansursuz modelleri (DeepSeek-V4-Pro Qwen3.5 9B, Gemma 4 12B, Gemma 4 E4B heretic) sohbet,
@@ -98,6 +98,10 @@ Python 3.12 + FastAPI + pywebview; arayuz vanilla JS. Paketleme: PORTABLE (kulla
 - [x] A6.4-5 hooks (app/agent/hooks.py): run_baslangic/run_bitis/prompt/pre_tool/post_tool/compact; stdin
       JSON (degerler maskeli), cikis 2 = engel; guvenlik hook'u hata/timeout'ta engeller, bilgi durdurmaz.
 - [x] A6.6 Ayarlar > Hook'lar sekmesi (ekle, test, ac/kapat, sil). Skill duzenleme UI'i yok (API var).
+- [x] ARAYUZ Claude Code Desktop duzeni: sol kenar Yeni/Ara/Artifact'ler/Ozellestir + tarihli sohbetler;
+      ayri ozellik sayfalari kalkti (test sayfalari menude yok, kodu duruyor). Proje acikken SOHBET = AJAN:
+      adimlar/onay/diff/sonuc mesaj akisinda; plan, baglam %, degisen dosyalar, butce SAG PANELDE;
+      composer'da mod secici. Tarayicida uctan uca dogrulandi. Sohbet-gorev bagi localStorage'da (sunucuya tasinacak).
 - [ ] A7 MCP, plugin, marketplace  <- SIRADAKI
 - 2026-11-10 (16): A6 bitti (hooks + slash + hook UI; tarayicida dogrulandi). DIKKAT: ayni dalda paralel
   bir oturum A6.1/A6.2 commit'ledi (14da54a, 1c791d4); benim skill commit'im (81b748a) onlarla ust uste.

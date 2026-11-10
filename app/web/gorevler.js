@@ -125,7 +125,47 @@ function bekleyenKartlari(r) {
   return parcalar.join("");
 }
 
+// Claude Code Desktop gibi: sohbette sade akis (adim satirlari, onay kartlari, sonuc);
+// plan, baglam, butce ve degisen dosyalar SAG PANELDE.
+function sohbetCiz(r) {
+  const kap = detayKabi();
+  const basari = r.durum === "basarili" && r.sonuc?.dogrulandi;
+  const notlar = (r.guncellemeler || []).filter((g) => !g.startsWith("Kullanici:") && !g.startsWith("Onay bekleniyor")).slice(-3);
+  const calisiyor = !BITMIS.has(r.durum);
+  kap.innerHTML = `
+    ${notlar.map((g) => `<p class="ajan-not">${kacir(g)}</p>`).join("")}
+    <ol class="adim-liste sade">${r.adimlar.filter((a) => a.arac !== "plan_guncelle").map(adimSatiri).join("")}</ol>
+    ${calisiyor && r.durum === "calisiyor" ? '<div class="parilti kucuk">Çalışıyor…</div>' : ""}
+    ${bekleyenKartlari(r)}
+    ${r.hata ? `<div class="uyari-kutu kucuk">${kacir(r.hata)}</div>` : ""}
+    ${r.sonuc?.ozet ? `<div class="ajan-sonuc">${basari ? '<span data-ikon="tik" class="yesil-ikon" aria-label="doğrulandı"></span>' : ""}${kacir(r.sonuc.ozet)}${r.sonuc.kanit?.length ? ` <span class="soluk kucuk">(kanıt: adım ${kacir(r.sonuc.kanit.join(", "))})</span>` : ' <span class="rozet sari">doğrulanmadı</span>'}</div>` : ""}
+    <div class="ajan-kontrol">${rozet(r.durum)}${kontroller(r)}</div>`;
+  ikonlariYerlestir(kap);
+  baglantilar(r);
+  sagPanelCiz(r);
+}
+
+function sagPanelCiz(r) {
+  const p = document.getElementById("sag-panel-gorev");
+  if (!p) return;
+  const b = r.baglam || {};
+  const degisen = r.adimlar.filter((a) => a.checkpoint && YAZAN.has(a.arac));
+  p.innerHTML = `
+    ${b.baglam ? `<div class="sp-baslik">Bağlam <span class="soluk">%${kacir(b.dolu_yuzde)}</span></div>
+      <div class="butce-cubuk" role="progressbar" aria-label="Bağlam doluluğu" aria-valuenow="${kacir(b.dolu_yuzde)}"><span style="width:${Math.min(100, b.dolu_yuzde)}%"></span></div>` : ""}
+    <div class="sp-baslik">Plan</div>
+    <ul class="plan-liste">${(r.plan || []).map((x) => `<li class="plan-${kacir(x.durum)}">${kacir(x.baslik)}</li>`).join("") || '<li class="soluk">-</li>'}</ul>
+    <div class="sp-baslik">Değişen dosyalar</div>
+    <ul class="sp-dosyalar">${degisen.map((a) => `<li><button class="bag" data-diff="${kacir(a.checkpoint)}"><span data-ikon="dosya"></span>${kacir(a.dosya || a.argumanlar?.yol || a.arac)}</button></li>`).join("") || '<li class="soluk">-</li>'}</ul>
+    <div class="sp-baslik">Bütçe</div>
+    ${cubuk("Adım", r.kullanim.adim, r.butce.max_adim)}
+    ${cubuk("Süre", r.kullanim.sure_sn, r.butce.max_sure_sn, " sn")}`;
+  ikonlariYerlestir(p);
+  $$("[data-diff]", p).forEach((x) => { x.onclick = () => diffAc(x.dataset.diff); });
+}
+
 function detayCiz(r) {
+  if (kapOverride) { sohbetCiz(r); return; }
   const kap = detayKabi();
   const basari = r.durum === "basarili" && r.sonuc?.dogrulandi; // ikon yalniz gercek kanittan
   const b = r.baglam || {};

@@ -476,6 +476,7 @@ async function ajanaGonder(oturumId, metin) {
     const r = await api("/api/gorevler", { method: "POST", govde: { hedef: metin } });
     ajanKaydet(oturumId, { run: r.id, metin });
     if (!kayitlar.length) await api(`/api/oturumlar/${oturumId}`, { method: "PATCH", govde: { baslik: metin.slice(0, 60) } }).catch(() => {});
+    document.dispatchEvent(new Event("oturumlar-degisti")); // baslik kaydedildikten SONRA
     const b = ajanBlogu({ run: r.id, metin });
     s.append(b.kap);
     sohbetteGorevGoster(b.detay, r.id);
