@@ -230,6 +230,7 @@ def uygulama_olustur(
     magaza: Magaza | None = None,
     kapat: Callable[[], None] | None = None,
     or_transport: Any = None,
+    gecit: bool = True,
 ) -> FastAPI:
     kayit = ModelKaydi(veri_dizini)
     kayit.yukle()  # magazadan indirilen modeller MODELLER'e (ayar dogrulamasindan once)
@@ -357,7 +358,7 @@ def uygulama_olustur(
     @asynccontextmanager
     async def omur(_: FastAPI):
         a = ayarlar.oku()
-        if a.sunucu_acik:
+        if gecit and a.sunucu_acik:
             await agecidi.baslat(a.sunucu_port)
         yield
         await ajan.kapat()  # calisan gorevler guvenli sinirda duraklatilir
@@ -401,7 +402,7 @@ def uygulama_olustur(
             if not yerel_host_mu(kaynak_konak):
                 return JSONResponse({"hata": "Dis kaynakli istek reddedildi."}, status_code=403)
         yol = istek.url.path
-        korunan = yol.startswith("/api") and not yol.startswith("/api/bilgi")
+        korunan = yol.startswith("/api") and yol != "/api/bilgi"  # yalniz urun bilgisi acik
         if korunan and istek.headers.get(OTURUM_BASLIGI) != oturum_anahtari:
             return JSONResponse(
                 {"hata": "Oturum anahtari gecersiz; uygulamayi yeniden acin."}, status_code=403
@@ -692,6 +693,17 @@ def uygulama_olustur(
     @app.post("/api/masaustu/devam")
     async def masaustu_devam() -> dict:
         return sohbet.masaustu.devam()
+
+    # ---- /doctor (A10.7): sir degerleri gosterilmez ----
+    @app.get("/api/doctor")
+    async def doktor_tani() -> dict:
+        from app.doktor import tani
+
+        a = ayarlar.oku()
+        sonuc = await asyncio.to_thread(
+            tani, veri_dizini, Path(a.llm_dizin), openrouter.anahtar_durumu()["var"]
+        )
+        return {"kontroller": sonuc}
 
     # ---- MCP (A7): sunucular yalniz oturumlu arayuzden; sirlar maskeli doner ----
     @app.get("/api/mcp")

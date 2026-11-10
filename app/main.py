@@ -80,6 +80,13 @@ def arg_ayristir(argv: list[str] | None = None) -> argparse.Namespace:
 
 
 def main(argv: list[str] | None = None) -> int:
+    ham = sys.argv[1:] if argv is None else argv
+    if ham[:1] == ["agent"]:  # A10.3 headless CLI: ayni ajan motoru
+        from app import cli
+
+        logger.remove()
+        logger.add(sys.stderr, level="WARNING")
+        return cli.main(ham[1:])
     args = arg_ayristir(argv)
     ortam = OrtamAyarlari()
     dizin = veri_dizini(ortam)

@@ -59,6 +59,14 @@ export const KOMUTLAR = {
       bildir(islem === "durdur" ? "Masaüstü kontrolü durduruldu." : "Masaüstü kontrolü açıldı.", "basari", 2000);
     },
   },
+  "/doctor": {
+    aciklama: "Kurulum tanısı (llama.cpp, modeller, git, rg, Playwright...)",
+    calistir: async () => {
+      const { kontroller } = await api("/api/doctor");
+      const isaret = { tamam: "✓", uyari: "!", hata: "✗", bilgi: "·" };
+      bilgiPenceresi("Tanı", kontroller.map((c) => [`${isaret[c.durum] || ""} ${c.ad}`, `${c.ayrinti}${c.oneri ? ` - ${c.oneri}` : ""}`]));
+    },
+  },
   "/akis": { aciklama: "İş akışları: listele, JSON ile başlat, onaydan sonra devam", calistir: () => akisPenceresi() },
   "/goal": {
     aciklama: "/goal <hedef>: ajan görevi başlatır",
@@ -80,7 +88,7 @@ export const KOMUTLAR = {
   "/compact": { aciklama: "Ajan görevlerinde bağlam dolunca otomatik özetlenir", calistir: () => bildir("Özetleme ajan görevlerinde otomatik; sohbet için henüz elle özet yok.", "bilgi") },
 };
 
-const HENUZ_YOK = ["/cost", "/resume", "/rewind", "/loop", "/schedule", "/doctor"];
+const HENUZ_YOK = ["/cost", "/resume", "/rewind", "/loop", "/schedule"];
 
 // Is akislari (A8.6): adimlar yalniz "ajan" ya da "komut"; kod calistirma yok.
 const AKIS_ORNEK = JSON.stringify({ ad: "duzelt ve test et", adimlar: [
