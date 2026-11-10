@@ -93,7 +93,15 @@ Python 3.12 + FastAPI + pywebview; arayuz vanilla JS. Paketleme: PORTABLE (kulla
 - [x] A6.2 skill scriptleri: yalniz manifestte scripts: ile ilan edilen, skill klasoru icindeki
       py/ps1/sh/js; arguman cmd metakarakteri reddi; ajan komutuyla ayni PolitikaMotoru yolu
       (arac skill_scripti), onay script sha256'sina bagli; arac yalniz komut araci acikken sunulur.
-- [ ] A6.3 slash komut registry  <- SIRADAKI | A6.4-5 hooks | A6.6 skill/hook UI
+- [x] A6.3 slash komut kaydi (app/web/komutlar.js): /help /status /context /model /config /effort /memory
+      /hooks /permissions /diff /review /agents /goal /clear /compact; servisi olmayanlar 'henuz yok' der.
+- [x] A6.4-5 hooks (app/agent/hooks.py): run_baslangic/run_bitis/prompt/pre_tool/post_tool/compact; stdin
+      JSON (degerler maskeli), cikis 2 = engel; guvenlik hook'u hata/timeout'ta engeller, bilgi durdurmaz.
+- [x] A6.6 Ayarlar > Hook'lar sekmesi (ekle, test, ac/kapat, sil). Skill duzenleme UI'i yok (API var).
+- [ ] A7 MCP, plugin, marketplace  <- SIRADAKI
+- 2026-11-10 (16): A6 bitti (hooks + slash + hook UI; tarayicida dogrulandi). DIKKAT: ayni dalda paralel
+  bir oturum A6.1/A6.2 commit'ledi (14da54a, 1c791d4); benim skill commit'im (81b748a) onlarla ust uste.
+  399 test geciyor.
 - [ ] A5 ajan ekrani
 - [ ] A7 MCP/plugin/mods | A8 alt ajanlar | A9-A12 | A13 kalite kapisi
 
