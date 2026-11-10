@@ -8,6 +8,7 @@ import secrets
 import time
 from collections.abc import AsyncIterator, Callable
 from contextlib import asynccontextmanager
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 from urllib.parse import urlsplit
@@ -36,6 +37,7 @@ from app.agent.tarayici import Tarayici, playwright_var
 from app.agent.terminal import KomutServisi
 from app.agent.workspaces import Guven, Mod, WorkspaceDeposu
 from app.agent.yetenek import ModelYetenegi, dogrula, uzak_yetenek, yerel_yetenek
+from app.agent.zamanlayici import Tetik, Zamanlayici
 from app.config import web_dizini
 from app.exceptions import GecersizEk, OnayGerekli, UygulamaHatasi, YerelLLMHatasi
 from app.services import ekler as ekler_modulu
@@ -360,7 +362,10 @@ def uygulama_olustur(
         a = ayarlar.oku()
         if gecit and a.sunucu_acik:
             await agecidi.baslat(a.sunucu_port)
+        zd = asyncio.create_task(_zamanlayici_dongusu()) if gecit else None
         yield
+        if zd:
+            zd.cancel()
         await ajan.kapat()  # calisan gorevler guvenli sinirda duraklatilir
         mcp.kapat()  # MCP sunucu surecleri yetim kalmasin
         for kz in sohbet.kod_zekasi.values():  # dil sunuculari
@@ -1066,6 +1071,85 @@ def uygulama_olustur(
             izole_kur=izole_kur,
         )  # fmt: skip
         return run.ozet()
+
+    # ---- zamanlamalar (A11): YALNIZ uygulama acikken; gozetimsiz onay yok ----
+    zamanlayici = Zamanlayici(veri_dizini)
+
+    def _run_durumu(run_id: str) -> str:
+        try:
+            return str(run_deposu.getir(run_id).durum.value)
+        except Exception:  # noqa: BLE001 - silinmis run bitmis sayilir
+            return "basarisiz"
+
+    async def _tetikle(t: Tetik) -> None:
+        z = next((x for x in zamanlayici.liste() if x.id == t.zamanlama), None)
+        alan = sohbet.projeler.aktif() if sohbet.projeler else None
+        if (
+            z is None
+            or alan is None
+            or not alan.kokler
+            or Path(alan.kokler[0]) != Path(z.proje_kok)
+        ):
+            # kullanicinin acik projesi sessizce degistirilmez
+            zamanlayici.baslatildi(t, "", "zamanlamanin projesi acik degil")
+            return
+        try:
+            run = await ajan.baslat(
+                f"[zamanlanmis: {z.ad}] {z.hedef}", [], Butce(max_adim=z.max_adim),
+                model=ayarlar.oku().aktif_model,
+            )  # fmt: skip
+            zamanlayici.baslatildi(t, run.id)
+        except Exception as e:  # noqa: BLE001 - kaydedilir, dongu durmaz
+            zamanlayici.baslatildi(t, "", str(e))
+
+    async def zamanlayici_tick(simdi: datetime | None = None) -> list[Tetik]:
+        tetikler = await asyncio.to_thread(
+            zamanlayici.tick, simdi or datetime.now(UTC), _run_durumu
+        )
+        for t in tetikler:
+            await _tetikle(t)
+        return tetikler
+
+    app.state.zamanlayici_tick = zamanlayici_tick
+
+    async def _zamanlayici_dongusu() -> None:
+        while True:
+            try:
+                await zamanlayici_tick()
+            except Exception as e:  # noqa: BLE001
+                logger.warning(f"Zamanlayici: {e}")
+            await asyncio.sleep(30)
+
+    @app.get("/api/zamanlamalar")
+    async def zamanlama_listesi() -> dict:
+        return {"zamanlamalar": [z.model_dump() for z in zamanlayici.liste()],
+                "gecmis": zamanlayici.gecmis()[-50:],
+                "not": "Zamanlamalar yalniz uygulama acikken calisir."}  # fmt: skip
+
+    @app.post("/api/zamanlamalar")
+    async def zamanlama_ekle(veri: dict) -> dict:
+        veri = {"saat_dilimi": ayarlar.oku().saat_dilimi, **veri}
+        if not veri.get("proje_kok"):
+            alan = sohbet.projeler.aktif() if sohbet.projeler else None
+            if alan is None or not alan.kokler:
+                raise UygulamaHatasi("Zamanlama icin once bir proje acin.")
+            veri["proje_kok"] = alan.kokler[0]
+        try:
+            return zamanlayici.ekle(veri).model_dump()
+        except ValidationError as e:
+            raise UygulamaHatasi(f"Gecersiz zamanlama: {e.errors()[0].get('msg')}") from e
+
+    @app.patch("/api/zamanlamalar/{zid}")
+    async def zamanlama_guncelle(zid: str, veri: dict) -> dict:
+        try:
+            return zamanlayici.guncelle(zid, veri).model_dump()
+        except ValidationError as e:
+            raise UygulamaHatasi(f"Gecersiz zamanlama: {e.errors()[0].get('msg')}") from e
+
+    @app.delete("/api/zamanlamalar/{zid}")
+    async def zamanlama_sil(zid: str) -> dict:
+        zamanlayici.sil(zid)
+        return {"silindi": zid}
 
     # ---- dinamik is akislari (A8.6): tipli adimlar, kod calistirma yok ----
     akislar = AkisDeposu(veri_dizini)

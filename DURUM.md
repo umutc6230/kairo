@@ -170,8 +170,14 @@ Python 3.12 + FastAPI + pywebview; arayuz vanilla JS. Paketleme: PORTABLE (kulla
       takilirsa metin aramasi YEDEGI ('yedek': true + neden). Sunucular yalniz Ayarlar'dan (lsp_sunuculari).
       Makinede dil sunucusu kurulu degil: sozlesme kendi test sunucusuyla. Bulgu: Windows'ta tirnakli komut yolu
       tirnaklariyla calistiriliyordu -> komut_parcala.
-- [ ] A10 kalan: VS Code/JetBrains (A10.2), TS SDK, GitHub/GitLab (A10.5), deep link (A10.6),
-      guncelleme/rollback  <- SIRADAKI
+- [~] A10 kalan ATLANDI (kullanici karari 2026-11-10): VS Code/JetBrains, TS SDK, GitHub/GitLab, deep link,
+      guncelleme/rollback.
+- [x] A11.1-2,5 zamanlayici (app/agent/zamanlayici.py): YALNIZ uygulama acikken (30 sn dongu); aralik/gunluk,
+      saat dilimi (varsayilan ayar saat_dilimi), DST (yok olan saat ileri kayar, iki kez yasanan BIR kez),
+      kacirilan = atla|bir_kez, idempotent anahtar (restart dahil), overlap atlanir, sinirli retry,
+      gozetimsiz onay YOK (onay_bekliyor = overlap). Projesi acik degilse calismaz, acik proje degistirilmez.
+      /api/zamanlamalar + sohbette /schedule. Kabul: sahte saatle 9 test.
+- [ ] A11.3 webhook/channels (imza, replay), A11.4 CI entegrasyonu  <- SIRADAKI
 - 2026-11-10 (16): A6 bitti (hooks + slash + hook UI; tarayicida dogrulandi). DIKKAT: ayni dalda paralel
   bir oturum A6.1/A6.2 commit'ledi (14da54a, 1c791d4); benim skill commit'im (81b748a) onlarla ust uste.
   399 test geciyor.

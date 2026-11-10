@@ -67,6 +67,31 @@ export const KOMUTLAR = {
       bilgiPenceresi("Tanı", kontroller.map((c) => [`${isaret[c.durum] || ""} ${c.ad}`, `${c.ayrinti}${c.oneri ? ` - ${c.oneri}` : ""}`]));
     },
   },
+  "/schedule": {
+    aciklama: "Zamanlanmış görev: /schedule 60 <hedef> | /schedule 09:00 <hedef> | /schedule sil <id> (yalnız uygulama açıkken çalışır)",
+    calistir: async (arg = "") => {
+      const [ilk, ...kalan] = arg.trim().split(/\s+/);
+      if (ilk === "sil" && kalan[0]) {
+        await api(`/api/zamanlamalar/${encodeURIComponent(kalan[0])}`, { method: "DELETE" });
+        return bildir("Zamanlama silindi.", "basari");
+      }
+      if (ilk && kalan.length) {
+        const gunluk = /^\d{1,2}:\d{2}$/.test(ilk);
+        if (!gunluk && !/^\d+$/.test(ilk)) return bildir("Biçim: /schedule <dakika|SS:DD> <hedef>", "hata");
+        const hedef = kalan.join(" ");
+        const veri = gunluk
+          ? { ad: hedef.slice(0, 60), hedef, tur: "gunluk", saat: ilk.padStart(5, "0") }
+          : { ad: hedef.slice(0, 60), hedef, tur: "aralik", aralik_dk: Number(ilk) };
+        const z = await api("/api/zamanlamalar", { method: "POST", govde: veri });
+        return bildir(`Zamanlandı (${z.id}). Uygulama kapalıyken çalışmaz.`, "basari");
+      }
+      const { zamanlamalar, gecmis } = await api("/api/zamanlamalar");
+      const satirlar = zamanlamalar.map((z) => [`${z.id} ${z.aktif ? "" : "(kapalı) "}${z.ad}`,
+        z.tur === "gunluk" ? `her gün ${z.saat} ${z.saat_dilimi}` : `her ${z.aralik_dk} dk`]);
+      gecmis.slice(-8).reverse().forEach((t) => satirlar.push([`  ${t.plan.slice(0, 16).replace("T", " ")} UTC`, t.durum]));
+      bilgiPenceresi("Zamanlamalar (yalnız uygulama açıkken)", satirlar.length ? satirlar : [["Yok", "/schedule 60 testleri çalıştır"]]);
+    },
+  },
   "/akis": { aciklama: "İş akışları: listele, JSON ile başlat, onaydan sonra devam", calistir: () => akisPenceresi() },
   "/goal": {
     aciklama: "/goal <hedef>: ajan görevi başlatır",
@@ -88,7 +113,7 @@ export const KOMUTLAR = {
   "/compact": { aciklama: "Ajan görevlerinde bağlam dolunca otomatik özetlenir", calistir: () => bildir("Özetleme ajan görevlerinde otomatik; sohbet için henüz elle özet yok.", "bilgi") },
 };
 
-const HENUZ_YOK = ["/cost", "/resume", "/rewind", "/loop", "/schedule"];
+const HENUZ_YOK = ["/cost", "/resume", "/rewind", "/loop"];
 
 // Is akislari (A8.6): adimlar yalniz "ajan" ya da "komut"; kod calistirma yok.
 const AKIS_ORNEK = JSON.stringify({ ad: "duzelt ve test et", adimlar: [
