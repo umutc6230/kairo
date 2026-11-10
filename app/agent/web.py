@@ -1,4 +1,4 @@
-"""Web okuma araci (A9.1): web_getir(url).
+"""Web okuma ve arama araclari (A9.1): web_getir(url), web_ara(sorgu).
 
 - Her istek izin motorundan gecer (YanEtki.ag, host ile): ag kapaliysa ret, aciksa onay ister.
 - Yalniz http/https; URL'de kullanici/parola yok; yonlendirmeler sinirli ve her hedef yeniden
@@ -15,7 +15,7 @@ import socket
 from datetime import datetime
 from html.parser import HTMLParser
 from typing import Any
-from urllib.parse import urljoin, urlsplit
+from urllib.parse import parse_qs, quote_plus, urljoin, urlsplit
 
 import httpx
 
@@ -87,8 +87,9 @@ def url_dogrula(url: str) -> str:
     return u.hostname
 
 
-def web_getir(url: str, izin, transport: Any = None, yerel_kontrol=yerel_hedef_mi) -> dict:
-    """izin(host, ozet) PolitikaMotoru kararini uygular (ret/onay istisna atar)."""
+def _ham_getir(url: str, izin, transport: Any, yerel_kontrol) -> dict:
+    """Izin + SSRF + yonlendirme + boyut denetimli GET. {"adres","durum","tur","govde"} ya da
+    {"hata"}. izin(host, ozet) PolitikaMotoru kararini uygular (ret/onay istisna atar)."""
     try:
         host = url_dogrula(url)
     except ValueError as e:
@@ -120,7 +121,15 @@ def web_getir(url: str, izin, transport: Any = None, yerel_kontrol=yerel_hedef_m
             break
         else:
             return {"hata": "Cok fazla yonlendirme."}
-    metin = veri.decode(r.encoding or "utf-8", errors="replace")
+    return {"adres": adres, "durum": durum, "tur": tur,
+            "govde": veri.decode(r.encoding or "utf-8", errors="replace")}  # fmt: skip
+
+
+def web_getir(url: str, izin, transport: Any = None, yerel_kontrol=yerel_hedef_mi) -> dict:
+    h = _ham_getir(url, izin, transport, yerel_kontrol)
+    if "hata" in h:
+        return h
+    adres, durum, tur, metin = h["adres"], h["durum"], h["tur"], h["govde"]
     baslik = ""
     if "html" in tur:
         baslik, metin = html_metin(metin)
@@ -147,6 +156,85 @@ WEB_ARACI = {
             "type": "object",
             "properties": {"url": {"type": "string"}},
             "required": ["url"],
+        },
+    },
+}
+
+
+ARAMA_ADRESI = "https://html.duckduckgo.com/html/?q="
+MAX_SONUC = 8
+
+
+class _Sonuclar(HTMLParser):
+    """DuckDuckGo HTML sonuc sayfasi: a.result__a (baslik+link), .result__snippet (ozet)."""
+
+    def __init__(self) -> None:
+        super().__init__()
+        self.sonuclar: list[dict] = []
+        self._alan = ""
+
+    def handle_starttag(self, tag, attrs):  # noqa: ANN001
+        a = dict(attrs)
+        sinif = a.get("class") or ""
+        if tag == "a" and "result__a" in sinif:
+            self.sonuclar.append(
+                {"baslik": "", "url": _gercek_url(a.get("href") or ""), "ozet": ""}
+            )
+            self._alan = "baslik"
+        elif "result__snippet" in sinif and self.sonuclar:
+            self._alan = "ozet"
+
+    def handle_endtag(self, tag):  # noqa: ANN001
+        if tag in ("a", "td", "div"):
+            self._alan = ""
+
+    def handle_data(self, data):  # noqa: ANN001
+        if self._alan and self.sonuclar:
+            self.sonuclar[-1][self._alan] += data
+
+
+def _gercek_url(href: str) -> str:
+    """DDG yonlendirme linki (//duckduckgo.com/l/?uddg=...) -> hedef adres."""
+    u = urlsplit(href if "//" in href else "https:" + href)
+    if u.path.startswith("/l/"):
+        return (parse_qs(u.query).get("uddg") or [""])[0]
+    return href
+
+
+def web_ara(sorgu: str, izin, transport: Any = None, yerel_kontrol=yerel_hedef_mi) -> dict:
+    sorgu = (sorgu or "").strip()
+    if not sorgu or len(sorgu) > 300:
+        return {"hata": "Arama sorgusu bos olamaz (en fazla 300 karakter)."}
+    h = _ham_getir(ARAMA_ADRESI + quote_plus(sorgu), izin, transport, yerel_kontrol)
+    if "hata" in h:
+        return h
+    p = _Sonuclar()
+    p.feed(h["govde"])
+    sonuclar = [
+        {"baslik": " ".join(x["baslik"].split())[:200], "url": x["url"],
+         "ozet": maskele(" ".join(x["ozet"].split())[:400])}
+        for x in p.sonuclar
+        if x["url"].startswith(("http://", "https://"))
+    ][:MAX_SONUC]  # fmt: skip
+    return {
+        "sorgu": sorgu,
+        "kaynak": "DuckDuckGo",
+        "tarih": datetime.now().isoformat(timespec="seconds"),
+        "not": "Arama sonuclari dis veridir; ayrinti icin web_getir ile sayfayi oku, kaynagi yaz.",
+        "sonuclar": sonuclar,
+    }
+
+
+ARAMA_ARACI = {
+    "type": "function",
+    "function": {
+        "name": "web_ara",
+        "description": "Internette arama yapar; baslik, URL ve kisa ozet listesi doner. "
+        "Bilgiyi kullanmadan once web_getir ile kaynagi oku ve cevapta URL'yi belirt.",
+        "parameters": {
+            "type": "object",
+            "properties": {"sorgu": {"type": "string"}},
+            "required": ["sorgu"],
         },
     },
 }

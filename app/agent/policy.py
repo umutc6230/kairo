@@ -105,7 +105,8 @@ class YonetilenPolitika(BaseModel):
     yasak_araclar: list[str] = []
     yasak_yan_etkiler: list[YanEtki] = []
     en_fazla_mod: Mod | None = None  # or. "onayli": otomatik mod hic acilmaz
-    ag_izinli: bool = False  # varsayilan: yerel olmayan ag hedefi yok
+    ag_izinli: bool = False  # eski alan: True ise kullanici ayarindan bagimsiz acar
+    ag_yasak: bool = False  # kurum: interneti tamamen kapatir (kullanici acamaz)
     yasak_yol_desenleri: list[str] = []
 
     @classmethod
@@ -276,6 +277,7 @@ class PolitikaMotoru:
         self.yonetilen = yonetilen or YonetilenPolitika.yukle(veri_dizini)
         self.onaylar = OnayDeposu(veri_dizini)
         self.izolasyon = izolasyon
+        self.kullanici_ag: Callable[[], bool] = lambda: False  # api: ayarlardaki ag_acik
 
     # ---- yardimcilar ----
     def mod(self, alan: CalismaAlani) -> Mod:
@@ -331,7 +333,7 @@ class PolitikaMotoru:
 
         # 3) ag hedefi: yerel olmayan hedef acik izin ister
         if istek.yan_etki is YanEtki.ag and not yerel_host_mu(istek.host):
-            if not self.yonetilen.ag_izinli:
+            if not self.ag_acik():
                 return Sonuc(
                     karar=Karar.ret,
                     neden=f"Yerel olmayan ag hedefi kapali: {istek.host}",
@@ -399,6 +401,12 @@ class PolitikaMotoru:
             cozulmus_yol=yol_metni,
         )
 
+    def ag_acik(self) -> bool:
+        """Internet: kurum yasaklamadiysa ve (kullanici actiysa ya da eski kurum izni varsa)."""
+        if self.yonetilen.ag_yasak:
+            return False
+        return bool(self.yonetilen.ag_izinli or self.kullanici_ag())
+
     def uygula(self, istek: Istek, alan: CalismaAlani) -> Sonuc:
         """Karari uygular: `ret` -> YetkiYok, `sor` -> gecerli onay yoksa OnayGerekli."""
         from app.exceptions import OnayGerekli
@@ -436,7 +444,8 @@ class PolitikaMotoru:
             "kokler": [str(k) for k in alan.izinli_kokler],
             "salt_okunur": alan.salt_okunur_mu() or mod in (Mod.sohbet, Mod.planla),
             "talimat_okunur": alan.talimat_okunur_mu(),
-            "ag_izinli": self.yonetilen.ag_izinli,
+            "ag_izinli": self.ag_acik(),
+            "ag_kurum_yasak": self.yonetilen.ag_yasak,
             "yasak_araclar": self.yonetilen.yasak_araclar,
             "izolasyon": iz["ad"] if iz["izole"] else "yok",
             "izolasyon_secimi": iz["ad"],

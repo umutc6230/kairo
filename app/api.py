@@ -249,6 +249,7 @@ def uygulama_olustur(
         return _adaptorler[k]
 
     politika = PolitikaMotoru(veri_dizini, izolasyon=izolasyon)
+    politika.kullanici_ag = lambda: ayarlar.oku().ag_acik
     checkpointler = CheckpointDeposu(veri_dizini)
     komutlar = KomutServisi(izolasyon=izolasyon)
     sohbet = SohbetServisi(

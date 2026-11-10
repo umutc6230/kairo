@@ -74,3 +74,52 @@ def test_ag_kapaliyken_kapali_aciksa_sunulur(app) -> None:
     s.politika.yonetilen.ag_izinli = True
     s.web_transport = T
     assert "web_getir" in adlar()
+
+
+# ---------------- A9 web arama + kullanici internet ayari
+ARAMA_HTML = (
+    '<div><a class="result__a" href="//duckduckgo.com/l/?uddg=https%3A%2F%2Fpython.org%2F">'
+    'Python <b>Resmi</b></a>'
+    '<a class="result__snippet">Dil sitesi token=gizli1234567890abcdef</a></div>'
+    '<div><a class="result__a" href="javascript:alert(1)">Kotu</a></div>'
+)
+
+
+def test_web_ara_sonuclari_ayristirir_ve_izin_ister() -> None:
+    from app.agent.web import web_ara
+
+    izinler: list[str] = []
+    baslik = {"content-type": "text/html"}
+    t = httpx.MockTransport(lambda r: httpx.Response(200, text=ARAMA_HTML, headers=baslik))
+    s = web_ara("python dili", lambda h, o: izinler.append(h), t, HICBIRI)
+    assert izinler == ["html.duckduckgo.com"]
+    assert s["sonuclar"] == [
+        {"baslik": "Python Resmi", "url": "https://python.org/", "ozet": s["sonuclar"][0]["ozet"]}
+    ]  # javascript: linki elendi
+    assert "gizli1234567890" not in s["sonuclar"][0]["ozet"]
+    assert "hata" in web_ara("", lambda h, o: None, t, HICBIRI)
+
+
+def test_kullanici_ag_ayari_ve_kurum_yasagi(tmp_path) -> None:
+    import json
+
+    from app.agent.policy import Istek, Karar, PolitikaMotoru, YanEtki
+    from app.agent.workspaces import CalismaAlani
+
+    alan = CalismaAlani(id="a" * 12, kokler=[str(tmp_path)])
+    istek = Istek(arac="web_getir", yan_etki=YanEtki.ag, host="ornek.com")
+    m = PolitikaMotoru(tmp_path)
+    assert m.degerlendir(istek, alan).karar is Karar.ret  # varsayilan kapali
+    m.kullanici_ag = lambda: True
+    assert m.degerlendir(istek, alan).karar is Karar.sor  # acik: her istek yine onay
+    (tmp_path / "yonetilen-politika.json").write_text(json.dumps({"ag_yasak": True}), "utf-8")
+    m2 = PolitikaMotoru(tmp_path)
+    m2.kullanici_ag = lambda: True
+    assert m2.degerlendir(istek, alan).karar is Karar.ret  # kurum yasagi kullaniciyi ezer
+    assert m2.bilgi(alan)["ag_kurum_yasak"] is True
+
+
+async def test_api_ag_ayari(istemci) -> None:
+    assert (await istemci.get("/api/izinler")).json()["ag_izinli"] is False
+    await istemci.put("/api/ayarlar", json={"ag_acik": True})
+    assert (await istemci.get("/api/izinler")).json()["ag_izinli"] is True
