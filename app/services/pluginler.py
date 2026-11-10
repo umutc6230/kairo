@@ -64,6 +64,14 @@ def _manifest_oku(kok: Path) -> Manifest:
         raise UygulamaHatasi(f"plugin.json gecersiz: {str(e)[:300]}") from e
 
 
+def klasor_hashi(kok: Path) -> str:
+    """Goreli yol + icerik hash'lerinden tek ozet (katalog kilidi icin)."""
+    h = hashlib.sha256()
+    for p in sorted(x for x in kok.rglob("*") if x.is_file()):
+        h.update(str(p.relative_to(kok)).replace("\\", "/").encode() + b"\0" + _sha(p).encode())
+    return h.hexdigest()
+
+
 def inceleme_raporu(kok: Path) -> dict:
     dosyalar, riskler, scriptler, toplam = [], [], [], 0
     for p in sorted(kok.rglob("*")):
@@ -91,6 +99,7 @@ def inceleme_raporu(kok: Path) -> dict:
         "dosya_sayisi": len(dosyalar),
         "toplam_bayt": toplam,
         "dosyalar": dosyalar[:200],
+        "klasor_hashi": klasor_hashi(kok),
         "riskler": riskler[:100],
         "kurulum_scriptleri": scriptler,
         "not": "Scriptler calistirilmaz. Hash/imza guvenlik kaniti degildir; dosyalari incele.",
@@ -137,6 +146,26 @@ class PluginDeposu:
             "rapor": inceleme_raporu(hedef),
             "karantina": hedef.name,
         }
+
+    # ---- katalog (A7.5): data/plugin-katalog.json [{name, version, yol, sha256}] ----
+    def katalog(self) -> list[dict]:
+        k = json_oku(self.kok.parent / "plugin-katalog.json", []) or []
+        return [
+            x for x in k if isinstance(x, dict) and {"name", "version", "yol", "sha256"} <= set(x)
+        ]
+
+    def katalogdan_karantina(self, ad: str) -> dict:
+        oge = next((x for x in self.katalog() if x["name"] == ad), None)
+        if oge is None:
+            raise Bulunamadi("Katalogda boyle bir plugin yok.")
+        k = self.karantinaya_al(str(oge["yol"]))
+        m = k["manifest"]
+        if m["version"] != oge["version"] or k["rapor"]["klasor_hashi"] != oge["sha256"]:
+            shutil.rmtree(self.karantina / k["karantina"], ignore_errors=True)
+            raise UygulamaHatasi(
+                "Katalog kilidi uyusmuyor (surum ya da icerik hash'i farkli); kurulmadi."
+            )
+        return k
 
     def kur(self, karantina_adi: str) -> dict:
         kaynak = self.karantina / karantina_adi

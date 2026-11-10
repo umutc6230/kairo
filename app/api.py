@@ -617,6 +617,14 @@ def uygulama_olustur(
     async def plugin_karantina(veri: dict) -> dict:
         return await asyncio.to_thread(pluginler.karantinaya_al, str(veri.get("yol", "")))
 
+    @app.get("/api/pluginler/katalog")
+    async def plugin_katalog() -> dict:
+        return {"katalog": pluginler.katalog()}
+
+    @app.post("/api/pluginler/katalog/{ad}")
+    async def plugin_katalogdan(ad: str) -> dict:
+        return await asyncio.to_thread(pluginler.katalogdan_karantina, ad)
+
     @app.post("/api/pluginler/kur")
     async def plugin_kur(veri: dict) -> dict:
         return await asyncio.to_thread(pluginler.kur, str(veri.get("karantina", "")))

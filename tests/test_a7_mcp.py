@@ -86,3 +86,96 @@ async def test_api_crud_ve_sir_sizmaz(istemci) -> None:
     assert "selam" in t["araclar"] and "bozuk ad!" not in t["araclar"]
     assert (await istemci.post("/api/mcp", json={"ad": "Kotu Ad", "komut": "x"})).status_code == 422
     assert (await istemci.delete("/api/mcp/t")).status_code == 200
+
+
+# ------------------------------------------------------------ streamable HTTP (sahte uzak sunucu)
+import json as _json  # noqa: E402
+
+import httpx  # noqa: E402
+
+
+class SahteUzak:
+    def __init__(self, token: str = "tok-1", sse: bool = False) -> None:
+        self.token, self.sse, self.oturumlar, self.istekler = token, sse, {"s1"}, []
+
+    def __call__(self, r: httpx.Request) -> httpx.Response:
+        m = _json.loads(r.content)
+        self.istekler.append((m.get("method"), r.headers.get("mcp-session-id")))
+        if r.headers.get("authorization") != f"Bearer {self.token}":
+            return httpx.Response(401)
+        if (
+            m.get("method") != "initialize"
+            and r.headers.get("mcp-session-id") not in self.oturumlar
+        ):
+            return httpx.Response(404)
+        if "id" not in m:
+            return httpx.Response(202)
+        sonuc = {
+            "initialize": {"protocolVersion": "2025-06-18", "capabilities": {"resources": {}}},
+            "tools/list": {"tools": [{"name": "ara", "inputSchema": {"type": "object"}}]},
+            "tools/call": {"content": [{"type": "text", "text": "uzak sonuc"}]},
+            "resources/list": {"resources": [{"uri": "file:///rapor.md"}]},
+        }[m["method"]]
+        govde = {"jsonrpc": "2.0", "id": m["id"], "result": sonuc}
+        h = {"mcp-session-id": "s1"} if m["method"] == "initialize" else {}
+        if self.sse:
+            return httpx.Response(200, text=f"event: message\ndata: {_json.dumps(govde)}\n\n",
+                                  headers={**h, "content-type": "text/event-stream"})  # fmt: skip
+        return httpx.Response(200, json=govde, headers=h)
+
+
+def _uzak(tmp_path, sahte, token="tok-1"):
+    y = McpYoneticisi(tmp_path, transport=httpx.MockTransport(sahte))
+    y.ekle({"ad": "uzak", "url": "https://mcp.ornek.invalid/mcp",
+            "basliklar": {"Authorization": f"Bearer {token}"},
+            "izinli_araclar": ["ara"]})  # fmt: skip
+    return y
+
+
+@pytest.mark.parametrize("sse", [False, True])
+def test_http_json_ve_sse_oturum_resources(tmp_path, sse) -> None:
+    sahte = SahteUzak(sse=sse)
+    y = _uzak(tmp_path, sahte)
+    t = y.test("uzak")
+    assert t == {"ad": "uzak", "araclar": ["ara"], "kaynaklar": ["file:///rapor.md"], "uzak": True}
+    assert ("tools/list", "s1") in sahte.istekler  # oturum kimligi tasindi
+
+
+def test_http_uzak_arac_izinli_olsa_da_onay_ister(tmp_path) -> None:
+    y = _uzak(tmp_path, SahteUzak())
+
+    def onay(ad, salt_okunur, ozet, kw):
+        if not salt_okunur:
+            raise OnayGerekli("veri disari gidecek", {"id": "x"})
+
+    _, isl = y.semalar_ve_isleyiciler(onay)
+    assert isl["mcp__uzak__ara"]()["karar"] == "onay_bekliyor"  # izinli listesi uzakta gecmez
+    _, isl = y.semalar_ve_isleyiciler(_izinsiz)
+    assert isl["mcp__uzak__ara"]()["metin"] == "uzak sonuc"
+
+
+def test_http_401_token_yenileme_ve_oturum_dusmesi(tmp_path) -> None:
+    sahte = SahteUzak(token="yeni")
+    y = _uzak(tmp_path, sahte, token="eski")
+    with pytest.raises(Exception, match="401"):
+        y.test("uzak")
+    y.guncelle("uzak", {"basliklar": {"Authorization": "Bearer yeni"}})  # kullanici yeniledi
+    assert y.test("uzak")["araclar"] == ["ara"]
+    y.guncelle("uzak", {"basliklar": {"Authorization": "****"}})  # maskeli geri yazim korur
+    assert y.liste()[0].basliklar["Authorization"] == "Bearer yeni"
+    _, isl = y.semalar_ve_isleyiciler(_izinsiz)
+    sahte.oturumlar.clear()  # sunucu oturumu dusurdu
+    assert "sona erdi" in isl["mcp__uzak__ara"]()["hata"]
+    sahte.oturumlar.add("s1")
+    assert isl["mcp__uzak__ara"]()["metin"] == "uzak sonuc"  # yeniden initialize
+
+
+def test_http_adres_dogrulama() -> None:
+    from app.agent.mcp import McpSunucu
+
+    for kotu in ("http://uzak.ornek/mcp", "https://u:p@ornek/mcp", "ftp://x"):
+        with pytest.raises(ValueError):
+            McpSunucu(ad="x", url=kotu)
+    with pytest.raises(ValueError):
+        McpSunucu(ad="x", url="https://a/mcp", komut="python")
+    assert McpSunucu(ad="x", url="http://127.0.0.1:9000/mcp").disari()["uzak"]

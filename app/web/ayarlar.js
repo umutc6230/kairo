@@ -102,6 +102,8 @@ export function ayarlarAc(sekme = "ai") {
       <div class="satir"><input class="alan" id="mc-ad" placeholder="ad (ör. dosyalar)" style="max-width:150px" maxlength="32">
         <input class="alan" id="mc-komut" placeholder="Komut (ör. npx)" style="max-width:160px" maxlength="500">
         <input class="alan" id="mc-arg" placeholder="Argümanlar (boşlukla)" style="flex:1"></div>
+      <div class="satir"><input class="alan" id="mc-url" placeholder="ya da uzak sunucu adresi: https://..." style="flex:1">
+        <input class="alan" id="mc-baslik" type="password" placeholder="Authorization (ör. Bearer ...)" style="max-width:220px" autocomplete="off"></div>
       <div class="satir"><input class="alan" id="mc-ortam" placeholder="Ortam: ANAHTAR=deger, ANAHTAR2=deger" style="flex:1" autocomplete="off">
         <button class="btn" id="mc-ekle">Ekle</button></div>
       <div id="mc-liste" class="ayar-grup"></div>
@@ -252,7 +254,7 @@ export function ayarlarAc(sekme = "ai") {
     try {
       const { sunucular } = await api("/api/mcp");
       kap.innerHTML = sunucular.map((s) => `<div class="secenek-kart ${s.aktif ? "" : "pasif"}" data-mc="${kacir(s.ad)}">
-        <div style="flex:1"><div class="ust"><b>${kacir(s.ad)}</b> <code class="soluk">${kacir([s.komut, ...s.argumanlar].join(" "))}</code></div>
+        <div style="flex:1"><div class="ust"><b>${kacir(s.ad)}</b> ${s.uzak ? `<span class="rozet sari" title="Araç çağrılarında veri bu bilgisayardan çıkar">uzak</span> <code class="soluk">${kacir(s.url)}</code>` : `<code class="soluk">${kacir([s.komut, ...s.argumanlar].join(" "))}</code>`}</div>
           <div class="alt mc-araclar">${Object.keys(s.ortam).length ? `ortam: ${kacir(Object.keys(s.ortam).join(", "))} (gizli) · ` : ""}Araçları görmek için Bağlan.</div></div>
         <button class="btn" data-is="test">Bağlan</button><button class="btn" data-is="ac">${s.aktif ? "Kapat" : "Aç"}</button><button class="btn tehlike" data-is="sil">Sil</button></div>`).join("")
         || '<div class="ayar-not">Henüz bağlayıcı yok.</div>';
@@ -267,7 +269,7 @@ export function ayarlarAc(sekme = "ai") {
                 const t = await api(`/api/mcp/${ad}/test`, { method: "POST" });
                 const alan = $(".mc-araclar", kart);
                 alan.innerHTML = t.araclar.map((a) => `<label class="onay"><input type="checkbox" data-arac="${kacir(a)}" ${s.izinli_araclar.includes(a) ? "checked" : ""}> ${kacir(a)}</label>`).join(" ")
-                  + '<div class="soluk kucuk">İşaretli araçlar onaysız çalışır (yalnız okuma yapan araçları işaretle).</div>';
+                  + (s.uzak ? '<div class="soluk kucuk">Uzak sunucu: her araç çağrısı onay ister (veri dışarı gider).</div>' : '<div class="soluk kucuk">İşaretli araçlar onaysız çalışır (yalnız okuma yapan araçları işaretle).</div>') + (t.kaynaklar?.length ? `<div class="soluk kucuk">Kaynaklar: ${kacir(t.kaynaklar.join(", "))}</div>` : "");
                 $$("[data-arac]", alan).forEach((c) => {
                   c.onchange = async () => {
                     const izinli = $$("[data-arac]:checked", alan).map((x) => x.dataset.arac);
@@ -294,8 +296,8 @@ export function ayarlarAc(sekme = "ai") {
     const d = (id) => $(id, govde).value.trim();
     const ortam = Object.fromEntries(d("#mc-ortam").split(",").map((x) => x.trim()).filter((x) => x.includes("=")).map((x) => [x.slice(0, x.indexOf("=")).trim(), x.slice(x.indexOf("=") + 1).trim()]));
     try {
-      await api("/api/mcp", { method: "POST", govde: { ad: d("#mc-ad"), komut: d("#mc-komut"), argumanlar: d("#mc-arg").split(/\s+/).filter(Boolean), ortam } });
-      ["#mc-ad", "#mc-komut", "#mc-arg", "#mc-ortam"].forEach((x) => { $(x, govde).value = ""; });
+      await api("/api/mcp", { method: "POST", govde: { ad: d("#mc-ad"), komut: d("#mc-komut"), argumanlar: d("#mc-arg").split(/\s+/).filter(Boolean), url: d("#mc-url"), basliklar: d("#mc-baslik") ? { Authorization: d("#mc-baslik") } : {}, ortam } });
+      ["#mc-ad", "#mc-komut", "#mc-arg", "#mc-ortam", "#mc-url", "#mc-baslik"].forEach((x) => { $(x, govde).value = ""; });
       mcpCiz();
     } catch (err) { bildir(err.message, "hata"); }
   };
@@ -330,10 +332,10 @@ export function ayarlarAc(sekme = "ai") {
       });
     } catch (err) { kap.innerHTML = `<span class="rozet kirmizi">hata</span> ${kacir(err.message)}`; }
   };
-  $("#pl-incele", govde).onclick = async () => {
+  const plIncele = async (istek) => {
     const rapor = $("#pl-rapor", govde);
     try {
-      const k = await api("/api/pluginler/karantina", { method: "POST", govde: { yol: $("#pl-yol", govde).value.trim() } });
+      const k = await istek();
       const r = k.rapor;
       rapor.innerHTML = `<div class="kart"><div class="kart-baslik"><b>${kacir(k.manifest.name)} v${kacir(k.manifest.version)}</b><span class="soluk kucuk">${kacir(r.dosya_sayisi)} dosya · ${kacir(Math.round(r.toplam_bayt / 1024))} KB</span></div>
         <div>${kacir(k.manifest.description)}</div>
@@ -346,6 +348,13 @@ export function ayarlarAc(sekme = "ai") {
       };
     } catch (err) { rapor.innerHTML = `<div class="uyari-kutu kucuk">${kacir(err.message)}</div>`; }
   };
+  $("#pl-incele", govde).onclick = () => plIncele(() => api("/api/pluginler/karantina", { method: "POST", govde: { yol: $("#pl-yol", govde).value.trim() } }));
+  api("/api/pluginler/katalog").then(({ katalog }) => {
+    if (!katalog.length) return;
+    const kat = el(`<div class="ayar-grup"><b class="kucuk">Katalog (kilitli sürüm ve hash)</b>${katalog.map((x) => `<div class="satir"><span>${kacir(x.name)} v${kacir(x.version)}</span><button class="btn" data-kat="${kacir(x.name)}">İncele</button></div>`).join("")}</div>`);
+    $$("[data-kat]", kat).forEach((b) => { b.onclick = () => plIncele(() => api(`/api/pluginler/katalog/${b.dataset.kat}`, { method: "POST" })); });
+    $("#pl-liste", govde).before(kat);
+  }).catch(() => {});
   pluginCiz();
 
   const modelleriCiz = () => {

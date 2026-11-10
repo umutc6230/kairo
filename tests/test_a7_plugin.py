@@ -81,3 +81,21 @@ def test_bom_li_manifest_kabul_edilir(tmp_path) -> None:
     m = p / "plugin.json"
     m.write_bytes(b"\xef\xbb\xbf" + m.read_bytes())  # Windows'ta kaydedilmis gibi
     assert PluginDeposu(tmp_path / "v").karantinaya_al(str(p))["manifest"]["version"] == "1.0.0"
+
+
+def test_katalog_kilidi(tmp_path) -> None:
+    import json as js
+
+    from app.services.pluginler import klasor_hashi
+
+    veri = tmp_path / "veri"
+    d = PluginDeposu(veri)
+    p = plugin(tmp_path, "1.0.0")
+    kat = veri / "plugin-katalog.json"
+    kat.write_text(js.dumps([{"name": "rapor-paketi", "version": "1.0.0", "yol": str(p),
+                              "sha256": klasor_hashi(p)}]), encoding="utf-8")  # fmt: skip
+    assert d.katalog()[0]["name"] == "rapor-paketi"
+    assert d.kur(d.katalogdan_karantina("rapor-paketi")["karantina"])["aktif"] == "1.0.0"
+    (p / "skills" / "rapor" / "SKILL.md").write_text("degistirildi", encoding="utf-8")  # kurcalama
+    with pytest.raises(UygulamaHatasi, match="kilidi"):
+        d.katalogdan_karantina("rapor-paketi")

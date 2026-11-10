@@ -8,7 +8,9 @@ Guvenlik:
   YanEtki.dis (her zaman onay). Cikti VERIDIR: kisaltilir, sirlar maskelenir, talimat sayilmaz.
 - Bozuk sema/cevap, kopma ve zaman asimi Turkce hata olur; kopan sunucu bir sonraki cagrida
   yeniden baslatilir.
-shortcut: yalniz stdio + tools; streamable HTTP, resources/prompts ve OAuth sonraki adim.
+Tasima: stdio ya da streamable HTTP. Uzak (HTTP) sunucunun araclari HER ZAMAN onay ister:
+veri disari gider.
+shortcut: OAuth akisi yok; kimlik basligi (Bearer/API key) elle girilir, 401'de kullanici yeniler.
 """
 
 from __future__ import annotations
@@ -20,8 +22,10 @@ import sys
 import threading
 from pathlib import Path
 from typing import Any
+from urllib.parse import urlsplit
 
-from pydantic import BaseModel, Field
+import httpx
+from pydantic import BaseModel, Field, model_validator
 
 from app.agent.dosyalar import ortam_allowlist
 from app.agent.policy import maskele
@@ -36,20 +40,138 @@ ZAMAN_ASIMI = 30
 
 class McpSunucu(BaseModel):
     ad: str = Field(pattern=AD.pattern)
-    komut: str = Field(min_length=1, max_length=500)
+    komut: str = Field(default="", max_length=500)  # stdio
     argumanlar: list[str] = Field(default=[], max_length=40)
+    url: str = Field(default="", max_length=500)  # streamable HTTP
     ortam: dict[str, str] = {}  # sirlar burada: disari maskeli gider
+    basliklar: dict[str, str] = {}  # HTTP kimlik (or. Authorization): sir, disari maskeli
     izinli_araclar: list[str] = []  # onaysiz (okuma gibi) calisacak araclar
     aktif: bool = True
+
+    @model_validator(mode="after")
+    def _tasima(self) -> McpSunucu:
+        if bool(self.komut) == bool(self.url):
+            raise ValueError("Ya komut (stdio) ya da url (HTTP) verin, ikisi birden degil.")
+        if self.url:
+            u = urlsplit(self.url)
+            yerel = u.hostname in ("127.0.0.1", "localhost", "::1")
+            if u.scheme != "https" and not (u.scheme == "http" and yerel):
+                raise ValueError("Uzak MCP adresi https olmali (http yalniz bu bilgisayar icin).")
+            if u.username or u.password:
+                raise ValueError("Adreste kullanici adi/parola olamaz; basliklari kullanin.")
+        return self
 
     def disari(self) -> dict:
         d = self.model_dump()
         d["ortam"] = {k: "****" for k in self.ortam}
+        d["basliklar"] = {k: "****" for k in self.basliklar}
+        d["uzak"] = bool(self.url)  # arayuz: veri bu bilgisayardan disari gider
         return d
 
 
 class McpHatasi(UygulamaHatasi):
     pass
+
+
+class _HttpBaglanti:
+    """Streamable HTTP: her mesaj POST; cevap JSON ya da SSE (text/event-stream).
+    Mcp-Session-Id basligi saklanir; 404'te oturum dusmus sayilir, yeniden initialize edilir.
+    401'de kimlik hatasi Turkce doner (token yenileme kullanicinin basligi guncellemesiyle)."""
+
+    def __init__(self, s: McpSunucu, transport: Any = None) -> None:
+        self.s = s
+        self.kilit = threading.Lock()
+        self.sayac = 0
+        self.oturum = ""
+        self.hazir = False
+        self.araclar: list[dict] = []
+        self.istemci = httpx.Client(timeout=ZAMAN_ASIMI, transport=transport)
+
+    def _post(self, mesaj: dict) -> Any:
+        h = {"Accept": "application/json, text/event-stream", "MCP-Protocol-Version": PROTOKOL,
+             **self.s.basliklar}  # fmt: skip
+        if self.oturum:
+            h["Mcp-Session-Id"] = self.oturum
+        try:
+            r = self.istemci.post(self.s.url, json=mesaj, headers=h)
+        except httpx.HTTPError as e:
+            self.hazir = False
+            raise McpHatasi(f"'{self.s.ad}' sunucusuna ulasilamadi: {type(e).__name__}") from e
+        if r.status_code == 401:
+            raise McpHatasi(
+                f"'{self.s.ad}' kimlik dogrulamasi basarisiz (401); anahtari yenileyin."
+            )
+        if r.status_code == 404 and self.oturum:
+            self.oturum, self.hazir = "", False
+            raise McpHatasi(f"'{self.s.ad}' oturumu sona erdi; tekrar deneyin.")
+        if r.status_code >= 400:
+            raise McpHatasi(f"'{self.s.ad}' HTTP {r.status_code} dondurdu.")
+        if sid := r.headers.get("mcp-session-id"):
+            self.oturum = sid
+        if "id" not in mesaj:
+            return None
+        if r.headers.get("content-type", "").startswith("text/event-stream"):
+            for satir in r.text.splitlines():
+                if satir.startswith("data:"):
+                    try:
+                        m = json.loads(satir[5:].strip())
+                    except json.JSONDecodeError:
+                        continue
+                    if isinstance(m, dict) and m.get("id") == mesaj["id"]:
+                        return self._sonuc(m)
+            raise McpHatasi(f"'{self.s.ad}' SSE cevabinda sonuc yok.")
+        try:
+            return self._sonuc(r.json())
+        except ValueError as e:
+            raise McpHatasi(f"'{self.s.ad}' gecersiz JSON dondurdu.") from e
+
+    @staticmethod
+    def _sonuc(m: Any) -> Any:
+        if not isinstance(m, dict):
+            raise McpHatasi("MCP gecersiz cevap.")
+        if "error" in m:
+            hata = m["error"] if isinstance(m["error"], dict) else {}
+            raise McpHatasi(f"MCP hatasi: {str(hata.get('message', 'bilinmiyor'))[:300]}")
+        return m.get("result")
+
+    def _istek(self, metod: str, params: dict) -> Any:
+        self.sayac += 1
+        return self._post({"jsonrpc": "2.0", "id": self.sayac, "method": metod, "params": params})
+
+    def hazirla(self) -> None:
+        with self.kilit:
+            if self.hazir:
+                return
+            istemci = {"name": "yerel-ai-studio", "version": "0.1"}
+            ilk = {"protocolVersion": PROTOKOL, "capabilities": {}, "clientInfo": istemci}
+            sonuc = self._istek("initialize", ilk)
+            if not isinstance(sonuc, dict) or "capabilities" not in sonuc:
+                raise McpHatasi(f"'{self.s.ad}' gecersiz initialize cevabi verdi.")
+            self.yetenekler = sonuc.get("capabilities") or {}
+            self._post({"jsonrpc": "2.0", "method": "notifications/initialized"})
+            liste = self._istek("tools/list", {})
+            araclar = liste.get("tools") if isinstance(liste, dict) else None
+            if not isinstance(araclar, list):
+                raise McpHatasi(f"'{self.s.ad}' gecersiz tools/list cevabi verdi.")
+            self.araclar = [a for a in araclar if _gecerli_arac(a)]
+            self.hazir = True
+
+    def cagir(self, arac: str, argumanlar: dict) -> Any:
+        self.hazirla()
+        with self.kilit:
+            return self._istek("tools/call", {"name": arac, "arguments": argumanlar})
+
+    def kaynaklar(self) -> list[dict]:
+        self.hazirla()
+        if "resources" not in getattr(self, "yetenekler", {}):
+            return []  # ilan etmeyen sunucuya sorma (cevapsiz kalip zaman asimina dusuyordu)
+        with self.kilit:
+            r = self._istek("resources/list", {})
+        return [x for x in (r or {}).get("resources", []) if isinstance(x, dict)][:200]
+
+    def kapat(self) -> None:
+        self.hazir = False
+        self.istemci.close()
 
 
 class _Baglanti:
@@ -82,6 +204,7 @@ class _Baglanti:
         })  # fmt: skip
         if not isinstance(sonuc, dict) or "capabilities" not in sonuc:
             raise McpHatasi(f"'{self.s.ad}' gecersiz initialize cevabi verdi.")
+        self.yetenekler = sonuc.get("capabilities") or {}  # resources vb. yalniz ilan edildiyse
         self._bildir("notifications/initialized")
         liste = self._istek("tools/list", {})
         araclar = liste.get("tools") if isinstance(liste, dict) else None
@@ -148,6 +271,14 @@ class _Baglanti:
         with self.kilit:
             return self._istek("tools/call", {"name": arac, "arguments": argumanlar})
 
+    def kaynaklar(self) -> list[dict]:
+        self.hazirla()
+        if "resources" not in getattr(self, "yetenekler", {}):
+            return []  # ilan etmeyen sunucuya sorma (cevapsiz kalip zaman asimina dusuyordu)
+        with self.kilit:
+            r = self._istek("resources/list", {})
+        return [x for x in (r or {}).get("resources", []) if isinstance(x, dict)][:200]
+
     def kapat(self) -> None:
         if self.surec and self.surec.poll() is None:
             self.surec.kill()
@@ -187,8 +318,9 @@ def cikti_metni(sonuc: Any) -> dict:
 
 
 class McpYoneticisi:
-    def __init__(self, veri_dizini: Path) -> None:
+    def __init__(self, veri_dizini: Path, transport: Any = None) -> None:
         self.yol = veri_dizini / "mcp.json"
+        self.transport = transport  # testlerde sahte uzak sunucu
         self._baglantilar: dict[str, _Baglanti] = {}
 
     def liste(self) -> list[McpSunucu]:
@@ -215,8 +347,10 @@ class McpYoneticisi:
         for i, s in enumerate(sunucular):
             if s.ad == ad:
                 yeni = s.model_dump() | {k: v for k, v in veri.items() if k != "ad"}
-                if veri.get("ortam") and all(v == "****" for v in veri["ortam"].values()):
-                    yeni["ortam"] = s.ortam  # maskeli deger geri gelirse sir korunur
+                for alan in ("ortam", "basliklar"):  # maskeli deger geri gelirse sir korunur
+                    gelen = veri.get(alan)
+                    if gelen and all(v == "****" for v in gelen.values()):
+                        yeni[alan] = getattr(s, alan)
                 sunucular[i] = McpSunucu(**yeni)
                 self._yaz(sunucular)
                 self._kapat(ad)  # komut/ortam degisti: yeniden baglanir
@@ -244,7 +378,9 @@ class McpYoneticisi:
         if b is None or b.s != s:
             if b:
                 b.kapat()
-            b = self._baglantilar[s.ad] = _Baglanti(s)
+            b = self._baglantilar[s.ad] = (
+                _HttpBaglanti(s, self.transport) if s.url else _Baglanti(s)
+            )
         return b
 
     def test(self, ad: str) -> dict:
@@ -253,7 +389,12 @@ class McpYoneticisi:
             raise Bulunamadi("MCP sunucusu bulunamadi.")
         b = self._baglanti(s)
         b.hazirla()
-        return {"ad": ad, "araclar": [a["name"] for a in b.araclar]}
+        try:  # resources istege bagli: desteklemeyen sunucu hata verebilir
+            kaynaklar = [str(x.get("uri", ""))[:200] for x in b.kaynaklar()]
+        except McpHatasi:
+            kaynaklar = []
+        return {"ad": ad, "araclar": [a["name"] for a in b.araclar], "kaynaklar": kaynaklar,
+                "uzak": bool(s.url)}  # fmt: skip
 
     def semalar_ve_isleyiciler(self, izin_uygula) -> tuple[list[dict], dict]:
         """Aktif sunucularin araclari. Baglanamayan sunucu atlanir (sohbeti dusurmez).
@@ -279,7 +420,13 @@ class McpYoneticisi:
                     },
                 })  # fmt: skip
 
-                def isle(_b=b, _a=a["name"], _ad=ad, _oku=a["name"] in s.izinli_araclar, **kw):
+                def isle(
+                    _b=b,
+                    _a=a["name"],
+                    _ad=ad,
+                    _oku=a["name"] in s.izinli_araclar and not s.url,
+                    **kw,
+                ):
                     from app.agent.yazma import sonuc_veya_hata  # onay/ret modele anlasilir doner
 
                     def _is() -> dict:
