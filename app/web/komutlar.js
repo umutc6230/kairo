@@ -51,6 +51,14 @@ export const KOMUTLAR = {
       bilgiPenceresi("Tarayıcı", [["Durum", d.acik ? "açık" : "kapalı"], ["Playwright", d.playwright ? "kurulu" : "yok (pip install playwright)"], ["Ayar", durum.ayarlar?.tarayici_acik ? "açık" : "kapalı (Ayarlar > AI Ayarları)"]]);
     },
   },
+  "/masaustu": {
+    aciklama: "/masaustu durdur | devam: masaüstü kontrolünü acil durdurur ya da açar",
+    calistir: async (arg) => {
+      const islem = arg === "devam" ? "devam" : "durdur";
+      await api(`/api/masaustu/${islem}`, { method: "POST" });
+      bildir(islem === "durdur" ? "Masaüstü kontrolü durduruldu." : "Masaüstü kontrolü açıldı.", "basari", 2000);
+    },
+  },
   "/akis": { aciklama: "İş akışları: listele, JSON ile başlat, onaydan sonra devam", calistir: () => akisPenceresi() },
   "/goal": {
     aciklama: "/goal <hedef>: ajan görevi başlatır",

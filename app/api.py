@@ -27,6 +27,7 @@ from app.agent.checkpoints import CheckpointDeposu
 from app.agent.hooks import OLAYLAR as HOOK_OLAYLARI
 from app.agent.hooks import HookDeposu
 from app.agent.izolasyon import adaptor_olustur
+from app.agent.masaustu import Masaustu
 from app.agent.mcp import McpYoneticisi
 from app.agent.policy import PolitikaMotoru, yerel_host_mu
 from app.agent.runner import AgentRunner, Butce, RunDeposu, RunDurum, olay_akisi
@@ -278,6 +279,9 @@ def uygulama_olustur(
     hooklar = HookDeposu(veri_dizini)
     mcp = McpYoneticisi(veri_dizini)
     sohbet.tarayici = Tarayici(veri_dizini)
+    sohbet.masaustu = Masaustu(
+        lambda: ayarlar.oku().masaustu_izinli, veri_dizini / "ekran-goruntuleri"
+    )
     sohbet.mcp = mcp
     artifactler = ArtifactDeposu(veri_dizini)
     sohbet.hafiza = hafiza
@@ -679,6 +683,15 @@ def uygulama_olustur(
     @app.get("/api/tarayici")
     async def tarayici_durum() -> dict:
         return {"acik": sohbet.tarayici.acik_mi(), "playwright": playwright_var()}
+
+    # ---- masaustu acil durdurma (A9.6) ----
+    @app.post("/api/masaustu/durdur")
+    async def masaustu_durdur() -> dict:
+        return sohbet.masaustu.durdur()
+
+    @app.post("/api/masaustu/devam")
+    async def masaustu_devam() -> dict:
+        return sohbet.masaustu.devam()
 
     # ---- MCP (A7): sunucular yalniz oturumlu arayuzden; sirlar maskeli doner ----
     @app.get("/api/mcp")

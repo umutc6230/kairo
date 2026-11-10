@@ -610,6 +610,7 @@ class SohbetServisi:
         self.hafiza = None  # HafizaDeposu (api baglar)
         self.mcp = None  # McpYoneticisi (api baglar)
         self.tarayici = None  # Tarayici (api baglar)
+        self.masaustu = None  # Masaustu (api baglar)
         self.web_transport = None  # testlerde sahte web
         self._kilitler: dict[str, asyncio.Lock] = {}
 
@@ -695,6 +696,20 @@ class SohbetServisi:
                 self.tarayici, self.politika, alan, ajan_kaydi.kapsam,
                 self.tarayici.profil.parent / "ekran-goruntuleri",
             )  # fmt: skip
+        if (
+            self.masaustu is not None
+            and self.politika is not None
+            and getattr(ayar, "masaustu_izinli", [])
+        ):  # A9.5: yalniz izinli programlar; tiklama/yazma her zaman onay
+            from app.agent import masaustu as ms
+
+            pol = self.politika
+
+            def ms_izin(arac: str, ozet: str, komut: str) -> None:
+                pol.uygula(Istek(arac=arac, yan_etki=YanEtki.dis, komut=komut, ozet=ozet), alan)
+
+            araclar += ms.SEMALAR
+            isleyiciler |= ms.isleyiciler(self.masaustu, ms_izin, self.masaustu.ekran_dizini)
         skill_metni = ""
         skill_listesi = ""
         otomatik: str | None = None

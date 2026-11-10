@@ -83,6 +83,7 @@ class KullaniciAyarlari(BaseModel):
     hafiza_acik: bool = True  # kayitli notlar sisteme eklenir
     ag_acik: bool = False  # A9: model internete cikabilir (her istek yine onay ister)
     tarayici_acik: bool = False  # A9.2: izole profilli tarayici araclari (proje acikken)
+    masaustu_izinli: list[str] = Field(default=[], max_length=20)  # A9.5: exe adlari; bos=kapali
     otomatik_ogrenme: bool = False  # ajan kendi not ekleyebilir (A4.4: kullanici acar)
     konteyner_imaj: str = Field(
         default="python:3.12-slim", pattern=r"^[a-z0-9][a-z0-9._/:@-]{0,199}$"

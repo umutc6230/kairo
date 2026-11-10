@@ -154,7 +154,11 @@ Python 3.12 + FastAPI + pywebview; arayuz vanilla JS. Paketleme: PORTABLE (kulla
       bagli, dis sitede etkilesim HER ZAMAN onay (eleman+deger onizlemeli), yukleme yalniz proje kokunden.
       Ayarlar'da 'Tarayici kontrolu' (varsayilan kapali), /browser + /browser kapat (acil durdurma).
       Kabul: yerel fixture sitede GERCEK gorunmez Chrome ile form/select/yukleme/konsol hatasi/404/ekran.
-- [ ] A9.5-6 Windows UIA masaustu kontrolu  <- SIRADAKI
+- [x] A9.5-6 masaustu (app/agent/masaustu.py, comtypes UIA, ek paket yok): yalniz izinli programlar (Ayarlar:
+      'Masaustu kontrolu: izinli programlar', varsayilan bos=kapali); her eylemde pencere YENIDEN dogrulanir
+      (yanlis/izinsiz pencereye islem yok); tiklama/yazma YanEtki.dis = her zaman onay; /masaustu durdur|devam;
+      UAC/kilit ekrani desteklenmez. Kabul: sentetik WinForms penceresinde yaz+tikla+sonuc okundu.
+- [ ] A10 IDE/SDK/CLI entegrasyonlari  <- SIRADAKI
 - 2026-11-10 (16): A6 bitti (hooks + slash + hook UI; tarayicida dogrulandi). DIKKAT: ayni dalda paralel
   bir oturum A6.1/A6.2 commit'ledi (14da54a, 1c791d4); benim skill commit'im (81b748a) onlarla ust uste.
   399 test geciyor.
