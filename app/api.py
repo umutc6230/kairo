@@ -572,7 +572,7 @@ def uygulama_olustur(
         return await asyncio.to_thread(kayit.git.git_diff, "", staged)
 
     @app.post("/api/review")
-    async def review_yap(staged: bool = False) -> dict:
+    async def review_yap(staged: bool = False, derin: bool = False) -> dict:
         alan, kayit = _proje_git()
         d = await asyncio.to_thread(kayit.git.git_diff, "", staged)
         if d.get("hata"):
@@ -582,15 +582,19 @@ def uygulama_olustur(
             return {"ozet": "Incelenecek degisiklik yok (git diff bos).", "bulgular": [],
                     "dosyalar": [], "diff_kesildi": False}  # fmt: skip
         kural = rv.review_md_oku(alan.izinli_kokler) if alan.talimat_okunur_mu() else ""
+        odaklar = list(rv.ODAKLAR) if derin else [None]  # derin: ayri baglamli odakli gecisler
+        gecisler: dict[str, dict] = {}
         async with yonetici.kullan() as llm:
-            try:
-                cevap = await llm.json_cikti(
-                    rv.istem(diff, kural), rv.SEMA, ad="review", max_tokens=3000,
-                    dusunme="kapali",
-                )  # fmt: skip
-            except YerelLLMHatasi as e:
-                raise UygulamaHatasi(f"Review yapilamadi: {e}") from e
-        sonuc = rv.sonuclandir(cevap if isinstance(cevap, dict) else {}, diff)
+            for odak in odaklar:
+                istem_ = rv.odakli_istem(diff, kural, odak) if odak else rv.istem(diff, kural)
+                try:
+                    cevap = await llm.json_cikti(
+                        istem_, rv.SEMA, ad="review", max_tokens=3000, dusunme="kapali"
+                    )
+                except YerelLLMHatasi as e:
+                    raise UygulamaHatasi(f"Review yapilamadi: {e}") from e
+                gecisler[odak or "genel"] = cevap if isinstance(cevap, dict) else {}
+        sonuc = rv.birlestir(gecisler, diff) if derin else rv.sonuclandir(gecisler["genel"], diff)
         sonuc["review_md"] = bool(kural)
         return sonuc
 

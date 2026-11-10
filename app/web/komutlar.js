@@ -41,7 +41,7 @@ export const KOMUTLAR = {
   "/plugin": { aciklama: "Plugin'ler", calistir: () => ayarlarAc("plugin") },
   "/permissions": { aciklama: "Proje, mod ve izin kapsamı", calistir: () => projeAc() },
   "/diff": { aciklama: "Çalışma ağacı diff'i", calistir: () => diffGoster() },
-  "/review": { aciklama: "Diff'i kod review'dan geçirir", calistir: () => reviewYap() },
+  "/review": { aciklama: "Diff'i kod review'dan geçirir (/review derin: güvenlik + doğruluk geçişleri)", calistir: (arg) => reviewYap(arg === "derin") },
   "/agents": { aciklama: "Ajan görevleri sayfası", calistir: () => git("gorevler") },
   "/goal": {
     aciklama: "/goal <hedef>: ajan görevi başlatır",

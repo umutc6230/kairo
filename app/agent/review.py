@@ -130,3 +130,45 @@ def review_md_oku(kokler: list[Path]) -> str:
         if p.is_file() and p.stat().st_size <= 64 * 1024:
             return p.read_text(encoding="utf-8", errors="replace")
     return ""
+
+
+# ---- derin review (A8.7): farkli odaklarla bagimsiz gecisler + birlestirme ----
+ODAKLAR = {
+    "guvenlik": "ODAK: guvenlik (enjeksiyon, yetki, sir sizintisi, guvenilmeyen girdi).",
+    "dogruluk": "ODAK: dogruluk (mantik hatasi, kenar durum, hata yonetimi, kirilan cagiran).",
+}
+
+
+def odakli_istem(diff: str, review_md: str, odak: str) -> list[dict]:
+    m = istem(diff, review_md)
+    m[0]["content"] += "\n\n" + ODAKLAR[odak]
+    return m
+
+
+def birlestir(gecisler: dict[str, dict], diff: str) -> dict:
+    """Ayni dosya/satir(+-3) bulgularini tek bulguda toplar. AYNI MODELIN birden cok gecisi
+    bagimsiz dogrulama DEGILDIR: yalniz 'gorus_sayisi' artar, dogrulama model_varsayimi kalir."""
+    birlesik: list[dict] = []
+    for odak, cevap in gecisler.items():
+        for b in sonuclandir(cevap, diff)["bulgular"]:
+            esi = next(
+                (x for x in birlesik if _norm(x["dosya"]) == _norm(b["dosya"])
+                 and abs(int(x["satir"]) - int(b["satir"])) <= YAKINLIK),
+                None,
+            )  # fmt: skip
+            if esi is None:
+                birlesik.append({**b, "odaklar": [odak], "gorus_sayisi": 1})
+                continue
+            esi["gorus_sayisi"] += 1
+            esi["odaklar"].append(odak)
+            if ONEMLER.index(b["onem"]) < ONEMLER.index(esi["onem"]):
+                esi["onem"] = b["onem"]  # en ciddi degerlendirme kalir
+    birlesik.sort(key=lambda b: (ONEMLER.index(b["onem"]), -b["gorus_sayisi"]))
+    ozetler = [str(c.get("ozet", ""))[:300] for c in gecisler.values()]
+    return {
+        "ozet": " | ".join(o for o in ozetler if o),
+        "bulgular": birlesik,
+        "dosyalar": sorted(degisen_satirlar(diff)),
+        "diff_kesildi": len(diff) > MAX_DIFF_KARAKTER,
+        "not": "Ayni modelin birden cok gecisi bagimsiz kanit degildir; test ile dogrulayin.",
+    }

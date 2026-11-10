@@ -123,8 +123,11 @@ Python 3.12 + FastAPI + pywebview; arayuz vanilla JS. Paketleme: PORTABLE (kulla
       dosyalara, butce ebeveynin kalanindan KESILIR (cogalmaz, harcama ebeveyne yazilir), derinlik 1,
       ayni dosyaya iki calisan alt ajan olamaz, ebeveyn iptali cocugu da iptal eder, cokmede adim belirsiz.
       Model tek: cocuk sirali calisir. tests/test_a8_alt_ajan.py
+- [x] A8.7 derin review (/review derin, ?derin=true): guvenlik + dogruluk odakli ayri gecisler, dosya/satir
+      bazli birlestirme, en ciddi onem kalir; ayni modelin tekrari BAGIMSIZ KANIT SAYILMAZ (model_varsayimi).
+- [x] Agent View: sag panelde alt ajanlar (durum, yazabildigi dosyalar, araclari, adim/butce, sonuc).
 - [ ] A8 kalan: team lideri + ortak gorev listesi/claim/mesaj kutusu (A8.2), worktree entegrasyonu (A8.3),
-      dinamik is akislari (A8.6), bagimsiz derin review (A8.7), Agent View arayuzu  <- SIRADAKI
+      dinamik is akislari (A8.6)  <- SIRADAKI
 - 2026-11-10 (16): A6 bitti (hooks + slash + hook UI; tarayicida dogrulandi). DIKKAT: ayni dalda paralel
   bir oturum A6.1/A6.2 commit'ledi (14da54a, 1c791d4); benim skill commit'im (81b748a) onlarla ust uste.
   399 test geciyor.

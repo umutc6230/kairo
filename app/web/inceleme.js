@@ -40,18 +40,18 @@ function bulguHtml(b) {
       <span class="rozet ${ONEM_RENK[b.onem] || ""}">${kacir(b.onem)}</span></div>
     <div class="kucuk"><code>${kacir(b.dosya)}:${kacir(b.satir)}</code>
       <span class="rozet ${renk}">${kacir(konum)}</span>
-      <span class="rozet sari" title="Model bulgusu; test/komut ile doğrulanmadı">model varsayımı</span></div>
+      <span class="rozet sari" title="Model bulgusu; test/komut ile doğrulanmadı">model varsayımı</span>${b.gorus_sayisi > 1 ? ` <span class="rozet" title="Aynı modelin farklı odaklı geçişleri; bağımsız kanıt değildir">${kacir(b.gorus_sayisi)} geçişte (${kacir(b.odaklar.join(", "))})</span>` : ""}</div>
     <div><b class="kucuk">Neden:</b> ${kacir(b.neden)}</div>
     ${b.yeniden_uretme ? `<div><b class="kucuk">Yeniden üretme:</b> ${kacir(b.yeniden_uretme)}</div>` : ""}
     ${b.dogrulama_onerisi ? `<div><b class="kucuk">Doğrulama:</b> <code>${kacir(b.dogrulama_onerisi)}</code></div>` : ""}
   </div>`;
 }
 
-export async function reviewYap() {
+export async function reviewYap(derin = false) {
   const govde = el('<div class="diff-modal"><div class="parilti">Diff inceleniyor… (yerel modelde birkaç dakika sürebilir)</div></div>');
   const m = modal({ baslik: "Kod review", icerik: govde, genis: true, dugmeler: [{ metin: "Kapat" }] });
   try {
-    const r = await api("/api/review", { method: "POST" });
+    const r = await api(`/api/review${derin ? "?derin=true" : ""}`, { method: "POST" });
     govde.innerHTML = `
       <div>${kacir(r.ozet)}</div>
       <div class="soluk kucuk">${kacir(r.dosyalar.length)} dosya · ${kacir(r.bulgular.length)} bulgu${r.review_md ? " · REVIEW.md kuralları uygulandı" : ""}${r.diff_kesildi ? " · diff kesildi" : ""}</div>

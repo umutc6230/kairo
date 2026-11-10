@@ -439,3 +439,5 @@ pre.duz { white-space: pre-wrap; font-family: var(--mono); font-size: 13px; marg
 .ajan-kontrol { display: flex; gap: 8px; align-items: center; }
 .ajan-kontrol .dugme-sira .btn[disabled] { display: none; }
 @media (max-width: 1100px) { .sag-panel { display: none; } }
+
+.alt-ajan { border-left: 2px solid var(--cizgi2); padding: 4px 8px; margin: 4px 0; font-size: 13px; }

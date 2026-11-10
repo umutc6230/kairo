@@ -159,3 +159,41 @@ async def test_git_olmayan_projede_anlasilir_mesaj(istemci, tmp_path) -> None:
     assert d["hata"].startswith("Bu klasor bir git deposu degil") and d["repo"] is False
     r = await istemci.post("/api/review")
     assert r.status_code >= 400 and "git deposu degil" in r.json()["hata"]
+
+
+def test_derin_review_birlestirme_bagimsiz_kanit_saymaz() -> None:
+    def b(baslik, onem, satir, dosya="src/a.py"):
+        return {"baslik": baslik, "onem": onem, "dosya": dosya, "satir": satir, "neden": "n",
+                "yeniden_uretme": "", "dogrulama_onerisi": ""}  # fmt: skip
+
+    s = rv.birlestir({
+        "guvenlik": {"ozet": "g", "bulgular": [b("enjeksiyon", "yuksek", 11)]},
+        "dogruluk": {"ozet": "d", "bulgular": [b("ayni yer", "kritik", 12),
+                                              b("baska", "dusuk", 1, "yeni.py")]},
+    }, DIFF)  # fmt: skip
+    ilk = s["bulgular"][0]
+    assert ilk["gorus_sayisi"] == 2 and ilk["onem"] == "kritik"  # en ciddi kalir
+    assert set(ilk["odaklar"]) == {"guvenlik", "dogruluk"}
+    assert all(x["dogrulama"] == "model_varsayimi" for x in s["bulgular"])
+    assert len(s["bulgular"]) == 2 and "bagimsiz kanit degildir" in s["not"]
+
+
+async def test_derin_review_api_iki_odakli_gecis(istemci, app, git_proje) -> None:
+    await istemci.post("/api/projeler", json={"yol": str(git_proje), "guven": "guvenilir"})
+    gorulen: list = []
+
+    class Sahte:
+        async def json_cikti(self, mesajlar, sema, **kw):
+            gorulen.append(mesajlar[0]["content"])
+            return {"ozet": "x", "bulgular": [{"baslik": "eval", "onem": "kritik",
+                    "dosya": "src/a.py", "satir": 2, "neden": "n", "yeniden_uretme": "",
+                    "dogrulama_onerisi": ""}]}  # fmt: skip
+
+    @asynccontextmanager
+    async def kullan(*_a, **_k):
+        yield Sahte()
+
+    app.state.yonetici.kullan = kullan
+    s = (await istemci.post("/api/review?derin=true")).json()
+    assert len(gorulen) == 2 and "ODAK: guvenlik" in gorulen[0] and "ODAK: dogruluk" in gorulen[1]
+    assert s["bulgular"][0]["gorus_sayisi"] == 2

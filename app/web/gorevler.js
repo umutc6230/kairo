@@ -159,9 +159,24 @@ function sagPanelCiz(r) {
     <ul class="sp-dosyalar">${degisen.map((a) => `<li><button class="bag" data-diff="${kacir(a.checkpoint)}"><span data-ikon="dosya"></span>${kacir(a.dosya || a.argumanlar?.yol || a.arac)}</button></li>`).join("") || '<li class="soluk">-</li>'}</ul>
     <div class="sp-baslik">Bütçe</div>
     ${cubuk("Adım", r.kullanim.adim, r.butce.max_adim)}
-    ${cubuk("Süre", r.kullanim.sure_sn, r.butce.max_sure_sn, " sn")}`;
+    ${cubuk("Süre", r.kullanim.sure_sn, r.butce.max_sure_sn, " sn")}
+    ${(r.cocuklar || []).length ? '<div class="sp-baslik">Alt ajanlar</div><div id="sp-cocuklar" class="soluk kucuk">yükleniyor…</div>' : ""}`;
   ikonlariYerlestir(p);
   $$("[data-diff]", p).forEach((x) => { x.onclick = () => diffAc(x.dataset.diff); });
+  if ((r.cocuklar || []).length) altAjanlariCiz(r.cocuklar);
+}
+
+// Agent View: hangi alt ajan, hangi dosyaya ve hangi araclara yetkili, durumu ne
+async function altAjanlariCiz(idler) {
+  const kap = document.getElementById("sp-cocuklar");
+  const cocuklar = await Promise.all(idler.map((id) => api(`/api/gorevler/${id}`).catch(() => null)));
+  if (!kap?.isConnected) return;
+  kap.classList.remove("soluk", "kucuk");
+  kap.innerHTML = cocuklar.filter(Boolean).map((c) => `<div class="alt-ajan">
+    <div>${rozet(c.durum)} ${kacir(c.hedef.slice(0, 70))}</div>
+    <div class="soluk kucuk">Yazabilir: ${kacir(c.sahip_dosyalar.join(", ") || "hiçbir dosya")}</div>
+    <div class="soluk kucuk">Araçlar: ${kacir(c.izinli_araclar.join(", "))}</div>
+    <div class="soluk kucuk">Adım ${kacir(c.kullanim.adim)}/${kacir(c.butce.max_adim)}${c.sonuc?.ozet ? ` · ${kacir(c.sonuc.ozet.slice(0, 80))}` : ""}</div></div>`).join("");
 }
 
 function detayCiz(r) {
