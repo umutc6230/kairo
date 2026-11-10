@@ -114,7 +114,8 @@ class OpenRouterDeposu:
         # CI (A11.4): kisa omurlu sir ortamdan okunur, diske YAZILMAZ; alt sureclere gecmez
         # (ortam_allowlist). Kayitli anahtar varsa o oncelikli.
         kayitli = (json_oku(self.anahtar_yolu, {}) or {}).get("anahtar", "")
-        return kayitli or os.environ.get("YAS_OPENROUTER_ANAHTARI", "").strip()
+        # Windows setx/.env ile tirnakli kaydedilmis olabilir: "sk-or-..."
+        return kayitli or os.environ.get("YAS_OPENROUTER_ANAHTARI", "").strip().strip("\"'")
 
     def anahtar_kaydet(self, anahtar: str) -> dict:
         anahtar = anahtar.strip()

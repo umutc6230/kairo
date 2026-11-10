@@ -56,6 +56,10 @@ class Studio:
         return veri
 
     # ---- proje / ayar ----
+    def openrouter_listesi_yenile(self) -> dict:
+        """Yeni veri klasorunde (CI/degerlendirme) model yetenekleri icin liste gerekir."""
+        return self._istek("GET", "/openrouter/modeller", params={"yenile": "true"})
+
     def bilgi(self) -> dict:
         return self._istek("GET", "/bilgi")
 

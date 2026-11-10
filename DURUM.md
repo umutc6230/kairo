@@ -211,7 +211,16 @@ Python 3.12 + FastAPI + pywebview; arayuz vanilla JS. Paketleme: PORTABLE (kulla
             sayfada yok, yatay tasma yok, kenar cubugu ac/kapa, /status uzaktan. Ekranlar gorsel kontrol edildi.
             BULGU+DUZELTME: telefonda model kartlari/uyari bandi 440px sabit -> ekrandan tasiyordu.
             Kucuk bulgu (acik): acilisin ilk ~1 sn'sinde yazilan girdi, hazirlik bitince temizleniyor.
-      - [ ] Gercek model degerlendirmesi (30 gorev x 3 kosu)  <- SIRADAKI
+      - [x] Degerlendirme altyapisi: degerlendirme/gorevler.py (v1, 30 gorev: 6 hata, 5 ozellik/refactor,
+            4 test/build, 4 kesif/review, 4 uzun/devam, 4 toparlanma, 3 web/entegrasyon; Python/TS/JS/C#).
+            Gizli kontroller kosudan sonra kopyalanir; korunan test dosyasi degisirse kosu BASARISIZ;
+            test yazma gorevi mutasyonla denetlenir. `python -m app degerlendir [--openrouter-model M]
+            [--tekrar 3]` -> rapor JSON + MD (basari, yanlis basari beyani, mudahale, arac hatasi, sure,
+            ilk adim, token, surumler/donanim). Gorev seti testi: 30/30 baslangicta kalir, cozumle gecer.
+            BULGULAR: yeni veri klasorunde OpenRouter listesi bos -> her model 'aracsiz' sayiliyordu (CLI de);
+            tirnakli ortam degiskeni anahtari gecersiz sayiliyordu. Ikisi duzeltildi.
+            Duman testi (nemotron-3.5-super-vl:free): median GECTI; slug KALDI + yanlis basari beyani.
+      - [ ] Tam kosu 30x3 (arka planda)  <- SIRADAKI; sonra portable paketleme
 - 2026-11-10 (16): A6 bitti (hooks + slash + hook UI; tarayicida dogrulandi). DIKKAT: ayni dalda paralel
   bir oturum A6.1/A6.2 commit'ledi (14da54a, 1c791d4); benim skill commit'im (81b748a) onlarla ust uste.
   399 test geciyor.

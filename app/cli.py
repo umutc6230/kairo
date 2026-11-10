@@ -121,6 +121,8 @@ def main(argv: list[str]) -> int:
     sunucu, adres, anahtar = _sunucu_baslat()
     try:
         with Studio(adres, anahtar) as s:
+            if args.openrouter_model:  # bos onbellekte model 'aracsiz' sayilmasin
+                s.openrouter_listesi_yenile()
             return calistir(args, s)
     except StudioHatasi as e:
         print(f"Hata: {e}", file=sys.stderr)

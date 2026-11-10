@@ -109,3 +109,10 @@ def test_cli_openrouter_model_secimi(tmp_path, monkeypatch) -> None:
         cli.main(["x", "--openrouter-model", "openai/gpt-oss-20b:free"])
     a = AyarDeposu(tmp_path).oku()
     assert a.saglayici == "openrouter" and a.aktif_model == "openai/gpt-oss-20b:free"
+
+
+def test_ci_anahtari_tirnakli_ortam_degiskeni(tmp_path, monkeypatch) -> None:
+    from app.services.openrouter import OpenRouterDeposu
+
+    monkeypatch.setenv("YAS_OPENROUTER_ANAHTARI", '"sk-or-v1-' + "d" * 40 + '"')
+    assert OpenRouterDeposu(tmp_path).anahtar() == "sk-or-v1-" + "d" * 40

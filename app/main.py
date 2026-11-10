@@ -81,6 +81,12 @@ def arg_ayristir(argv: list[str] | None = None) -> argparse.Namespace:
 
 def main(argv: list[str] | None = None) -> int:
     ham = sys.argv[1:] if argv is None else argv
+    if ham[:1] == ["degerlendir"]:  # A13 gercek model degerlendirmesi
+        from app import degerlendir
+
+        logger.remove()
+        logger.add(sys.stderr, level="WARNING")
+        return degerlendir.main(ham[1:])
     if ham[:1] == ["agent"]:  # A10.3 headless CLI: ayni ajan motoru
         from app import cli
 
