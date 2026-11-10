@@ -226,17 +226,53 @@ class AjanAracKaydi:
     def komut_calistir(
         self, komut: str, klasor: str = "", timeout: int = 120, arka_plan: bool = False
     ) -> dict:
+        return self._komut(komut, klasor, timeout, arka_plan)
+
+    def skill_scripti(
+        self, plan_uret: Callable[[], Any], timeout: int = 120, arka_plan: bool = False
+    ) -> dict:
+        """A6.2: skill scripti, ajan komutuyla AYNI izin yolundan gecer (arac adi ayri).
+
+        Onay script ICERIGININ sha256'sina baglidir: onaydan sonra dosya degisirse eski onay
+        gecersiz kalir. Skill manifesti izin vermez; karar PolitikaMotoru'nundur.
+        """
+
+        def _is() -> dict:
+            plan = plan_uret()  # bildirilmemis/bozuk/yasak tur -> UygulamaHatasi
+            return self._komut(
+                plan.komut,
+                "",
+                timeout,
+                arka_plan,
+                arac="skill_scripti",
+                imza=f"{plan.komut}  [sha256:{plan.sha256}]",
+                ozet=plan.ozet,
+            )
+
+        return sonuc_veya_hata(_is)
+
+    def _komut(
+        self,
+        komut: str,
+        klasor: str = "",
+        timeout: int = 120,
+        arka_plan: bool = False,
+        *,
+        arac: str = "komut_calistir",
+        imza: str | None = None,
+        ozet: str | None = None,
+    ) -> dict:
         def _is() -> dict:
             cwd = self.kapsam.coz(klasor, varsayilan=".")
             if not cwd.is_dir():
                 cwd = cwd.parent
             self.politika.uygula(
                 Istek(
-                    arac="komut_calistir",
+                    arac=arac,
                     yan_etki=YanEtki.komut,
                     yol=str(cwd),
-                    komut=komut,
-                    ozet=f"Komut: {komut}",
+                    komut=imza or komut,
+                    ozet=ozet or f"Komut: {komut}",
                 ),
                 self.alan,
             )

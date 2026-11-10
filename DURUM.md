@@ -90,11 +90,16 @@ Python 3.12 + FastAPI + pywebview; arayuz vanilla JS. Paketleme: PORTABLE (kulla
       (kullanici/proje), bozuk frontmatter satirli hata -> listelenir ama YUKLENMEZ (otomatik dahil);
       proje skill'i yalniz guvenilir projede (.claude/skills); PUT /api/skiller/{ad} duzenle,
       GET /api/skiller/{ad}/test (modelin gorecegi + eksik araclar). Manifest araci izin degildir.
-- [ ] A6.2-6 skill script kapsami, slash registry, hooks, UI  <- SIRADAKI
+- [x] A6.2 skill scriptleri: yalniz manifestte scripts: ile ilan edilen, skill klasoru icindeki
+      py/ps1/sh/js; arguman cmd metakarakteri reddi; ajan komutuyla ayni PolitikaMotoru yolu
+      (arac skill_scripti), onay script sha256'sina bagli; arac yalniz komut araci acikken sunulur.
+- [ ] A6.3 slash komut registry  <- SIRADAKI | A6.4-5 hooks | A6.6 skill/hook UI
 - [ ] A5 ajan ekrani
 - [ ] A7 MCP/plugin/mods | A8 alt ajanlar | A9-A12 | A13 kalite kapisi
 
 ## Son oturum
+- 2026-11-10 (15): A6.2 tamamlandi; 16 yeni test (kapsam disi/yasak tur/zincir arguman/onay
+  icerige bagli/salt okunur ret). Skill sistem metni script araci varken guncellendi. 388 test.
 - 2026-11-09 (14): A6.1 tamamlandi. Bulgu: bozuk frontmatter'li skill otomatik yuklemede yine
   secilebiliyordu -> otomatik_skill bozuklari atlar. 372 test.
 - 2026-11-09 (13): A5.6 + A5.7. Tarayicida: adsiz dugme/alan 0; 120 mesajlik sohbette 40 cizildi, 'daha

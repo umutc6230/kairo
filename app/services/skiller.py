@@ -17,6 +17,8 @@ from __future__ import annotations
 import hashlib
 import re
 import shutil
+import subprocess
+import sys
 from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
@@ -66,6 +68,7 @@ class Skill:
     gereken_araclar: tuple[str, ...] = ()
     hash: str = ""  # SKILL.md icerik hash'i (degisiklik/kaynak takibi)
     hata: str = ""  # bozuk frontmatter vb.: skill listelenir ama YUKLENMEZ
+    scriptler: tuple[str, ...] = ()  # manifestte ILAN edilen calistirilabilir dosyalar (A6.2)
 
     def ozet(self) -> dict:
         return {
@@ -80,6 +83,7 @@ class Skill:
             "hash": self.hash,
             "guven": GUVEN.get(self.kaynak, "bilinmiyor"),
             "hata": self.hata,
+            "scriptler": list(self.scriptler),
         }
 
 
@@ -118,6 +122,84 @@ def _araclar(deger: object) -> tuple[str, ...]:
     return tuple(sorted({p.strip() for p in parcalar if p.strip()}))[:30]
 
 
+def _scriptler(deger: object) -> tuple[str, ...]:
+    if isinstance(deger, str):
+        deger = [deger]
+    if not isinstance(deger, list):
+        return ()
+    yollar = {str(x).strip().replace("\\", "/").lstrip("./") for x in deger if str(x).strip()}
+    return tuple(sorted(yollar))[:20]
+
+
+# ---- A6.2: skill scriptleri ----
+# Uzanti -> yorumlayici. Listede olmayan tur (exe, bat, cmd, vbs...) CALISTIRILMAZ.
+YORUMLAYICILAR: dict[str, list[str]] = {
+    ".py": ["python", "-I"],
+    ".ps1": ["powershell", "-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-File"],
+    ".sh": ["bash"],
+    ".js": ["node"],
+    ".mjs": ["node"],
+}
+# cmd.exe metakarakterleri: arguman komut zincirine donusemesin
+YASAK_ARG = re.compile(r'[&|<>^%!`"\r\n\x00]')
+MAX_ARG = 20
+
+
+@dataclass(frozen=True)
+class ScriptPlani:
+    komut: str
+    yol: Path
+    sha256: str
+    ozet: str
+
+
+def script_plani(s: Skill, yol: str, argumanlar: list[str] | None = None) -> ScriptPlani:
+    """Calistirmadan once dogrular. Calistirma kararini VERMEZ; yalniz neyin calisacagini
+    kesinlestirir (izin motoru bu planin hash'iyle karar verir)."""
+    if s.hata:
+        raise UygulamaHatasi(f"Skill '{s.ad}' bozuk; scripti calistirilmaz: {s.hata}")
+    if s.klasor is None:
+        raise UygulamaHatasi("Tek dosyalik skill'in scripti olmaz.")
+    temiz = yol.strip().replace("\\", "/").lstrip("./")
+    if temiz not in s.scriptler:
+        ilan = ", ".join(s.scriptler) or "yok"
+        raise UygulamaHatasi(
+            f"'{yol}' skill manifestinde (scripts:) ilan edilmemis; calistirilmaz. Ilan edilenler: "
+            f"{ilan}"
+        )
+    hedef = (s.klasor / temiz).resolve()
+    if not hedef.is_relative_to(s.klasor.resolve()) or not hedef.is_file():
+        raise UygulamaHatasi(f"Script skill klasorunde yok: {temiz}")
+    on = YORUMLAYICILAR.get(hedef.suffix.lower())
+    if on is None:
+        raise UygulamaHatasi(
+            f"'{hedef.suffix}' turu calistirilmaz; izinli: {', '.join(sorted(YORUMLAYICILAR))}"
+        )
+    yorumlayici = sys.executable if on[0] == "python" and _python_mu() else shutil.which(on[0])
+    if not yorumlayici:
+        raise UygulamaHatasi(f"'{on[0]}' bu bilgisayarda bulunamadi; script calistirilamaz.")
+    argumanlar = [str(a) for a in (argumanlar or [])]
+    if len(argumanlar) > MAX_ARG:
+        raise UygulamaHatasi(f"En fazla {MAX_ARG} arguman verilebilir.")
+    for a in argumanlar:
+        if len(a) > 500 or YASAK_ARG.search(a):
+            raise UygulamaHatasi(f"Arguman izinli degil (ozel karakter ya da cok uzun): {a[:60]}")
+    ozet_hash = hashlib.sha256(hedef.read_bytes()).hexdigest()
+    komut = subprocess.list2cmdline([yorumlayici, *on[1:], str(hedef), *argumanlar])
+    return ScriptPlani(
+        komut=komut,
+        yol=hedef,
+        sha256=ozet_hash,
+        ozet=f"Skill scripti: {s.ad}/{temiz} {' '.join(argumanlar)} (sha256 {ozet_hash[:12]}, "
+        f"kaynak {s.kaynak})".strip(),
+    )
+
+
+def _python_mu() -> bool:
+    """Paketli uygulamada sys.executable uygulamanin kendisidir; python degil."""
+    return Path(sys.executable).stem.lower().startswith("python")
+
+
 def _skill_oku(dosya: Path, kaynak: str, klasor: Path | None) -> Skill | None:
     try:
         ham = dosya.read_bytes()
@@ -141,6 +223,7 @@ def _skill_oku(dosya: Path, kaynak: str, klasor: Path | None) -> Skill | None:
         ),
         hash=hashlib.sha256(ham).hexdigest()[:16],
         hata=hata,
+        scriptler=_scriptler(meta.get("scripts")) if klasor else (),
     )
 
 
@@ -297,6 +380,13 @@ SINIR = (
 )
 
 
+SCRIPT_NOTU = (
+    "Guncelleme: bu projede skill'in manifestinde (scripts:) ILAN EDILEN scriptleri "
+    "skill_scripti_calistir ile calistirabilirsin; kullanici onayi gerekebilir. Ilan edilmemis "
+    "komutlari yine kullaniciya anlat."
+)
+
+
 def otomatik_metin(s: Skill, sinir: int = 4000) -> str:
     _, govde = frontmatter(s.dosya.read_text(encoding="utf-8", errors="replace"))
     not_ = "\n[... kisaltildi; tamami icin skill_kullan]" if len(govde) > sinir else ""
@@ -437,3 +527,41 @@ ARACLAR: list[dict] = [
         },
     },
 ]
+
+
+# ---- A6.2: script araci (yalniz ajan komut araci acikken sunulur) ----
+SCRIPT_ARACI: dict = {
+    "type": "function",
+    "function": {
+        "name": "skill_scripti_calistir",
+        "description": "Yuklenen skill'in manifestinde (scripts:) ILAN EDILMIS bir scriptini proje "
+        "klasorunde calistirir. Kullanici onayi isteyebilir; ilan edilmemis dosya calismaz.",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "ad": {"type": "string", "description": "Skill adi"},
+                "script": {"type": "string", "description": "Ornek: scripts/donustur.py"},
+                "argumanlar": {"type": "array", "items": {"type": "string"}},
+                "arka_plan": {"type": "boolean"},
+            },
+            "required": ["ad", "script"],
+        },
+    },
+}
+
+
+def script_isleyicisi(depo: SkillDeposu, kapali: set[str], ajan_kaydi) -> dict:
+    """`ajan_kaydi.skill_scripti` izin motorundan gecirir; burada yalniz plan kurulur."""
+
+    def skill_scripti_calistir(
+        ad: str, script: str, argumanlar: list[str] | None = None, arka_plan: bool = False
+    ) -> dict:
+        try:
+            s = depo.getir(ad.strip(), kapali)
+        except Bulunamadi as e:
+            return {"hata": e.mesaj, "karar": "hata"}
+        return ajan_kaydi.skill_scripti(
+            lambda: script_plani(s, script, argumanlar), arka_plan=arka_plan
+        )
+
+    return {"skill_scripti_calistir": skill_scripti_calistir}
