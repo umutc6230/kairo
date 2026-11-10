@@ -39,7 +39,7 @@ export function ayarlarAc(sekme = "ai") {
   const a = durum.ayarlar;
   const s = durum.sunucu || {};
   const govde = el(`<div>
-    <div class="sekmeler"><button class="sekme" data-sekme="ai">AI Ayarları</button><button class="sekme" data-sekme="hafiza">Hafıza</button><button class="sekme" data-sekme="mcp">Bağlayıcılar</button><button class="sekme" data-sekme="hooks">Hook'lar</button><button class="sekme" data-sekme="hakkinda">Hakkında</button></div>
+    <div class="sekmeler"><button class="sekme" data-sekme="ai">AI Ayarları</button><button class="sekme" data-sekme="hafiza">Hafıza</button><button class="sekme" data-sekme="mcp">Bağlayıcılar</button><button class="sekme" data-sekme="plugin">Plugin'ler</button><button class="sekme" data-sekme="hooks">Hook'lar</button><button class="sekme" data-sekme="hakkinda">Hakkında</button></div>
     <div class="modal-govde" data-panel="ai">
       <div class="ayar-grup"><label>Sağlayıcı</label>
         <label class="secenek-kart ${a.saglayici !== "openrouter" ? "secili" : ""}"><input type="radio" name="ay-sag" value="yerel" ${a.saglayici !== "openrouter" ? "checked" : ""}><div><div class="ust">Yerel (llama.cpp) <span class="rozet yesil">internetsiz</span></div>
@@ -105,6 +105,13 @@ export function ayarlarAc(sekme = "ai") {
       <div class="satir"><input class="alan" id="mc-ortam" placeholder="Ortam: ANAHTAR=deger, ANAHTAR2=deger" style="flex:1" autocomplete="off">
         <button class="btn" id="mc-ekle">Ekle</button></div>
       <div id="mc-liste" class="ayar-grup"></div>
+    </div>
+    <div class="modal-govde" data-panel="plugin" hidden>
+      <div class="ayar-not">Plugin, skill paketi getirir. Önce <b>karantinaya</b> alınır ve dosyaları incelenir; içindeki kurulum scriptleri hiçbir zaman çalıştırılmaz. Raporu okuyup sen onaylarsan kurulur. Her sürüm saklanır, önceki sürüme geri dönülebilir.</div>
+      <div class="satir"><input class="alan" id="pl-yol" placeholder="Plugin klasörü (plugin.json içeren)" style="flex:1">
+        <button class="btn" id="pl-incele">Karantinaya al ve incele</button></div>
+      <div id="pl-rapor"></div>
+      <div id="pl-liste" class="ayar-grup"></div>
     </div>
     <div class="modal-govde" data-panel="hooks" hidden>
       <div class="ayar-not">Hook, bir olayda (ör. araç çalışmadan önce) bu bilgisayarda çalışan komuttur. Olay bilgisini JSON olarak stdin'den alır (sırlar maskeli). Çıkış kodu 2 işlemi <b>engeller</b>. <b>Güvenlik</b> hook'u hata verir ya da zaman aşımına uğrarsa da engeller; <b>bilgi</b> hook'u yalnız kaydedilir. Komut senin yetkilerinle çalışır.</div>
@@ -293,6 +300,53 @@ export function ayarlarAc(sekme = "ai") {
     } catch (err) { bildir(err.message, "hata"); }
   };
   mcpCiz();
+
+  // ---- Plugin'ler ----
+  const pluginCiz = async () => {
+    const kap = $("#pl-liste", govde);
+    try {
+      const { pluginler } = await api("/api/pluginler");
+      kap.innerHTML = pluginler.map((p) => `<div class="secenek-kart ${p.acik ? "" : "pasif"}" data-pl="${kacir(p.ad)}">
+        <div style="flex:1"><div class="ust"><b>${kacir(p.ad)}</b> <span class="rozet">v${kacir(p.aktif)}</span>${p.onceki ? ` <span class="soluk kucuk">önceki: v${kacir(p.onceki)}</span>` : ""}</div>
+        <div class="alt">${kacir(p.aciklama)}</div></div>
+        ${p.onceki ? '<button class="btn" data-is="geri">Geri al</button>' : ""}<button class="btn" data-is="ac">${p.acik ? "Kapat" : "Aç"}</button><button class="btn tehlike" data-is="sil">Kaldır</button></div>`).join("")
+        || '<div class="ayar-not">Kurulu plugin yok.</div>';
+      $$("[data-pl]", kap).forEach((kart) => {
+        const ad = kart.dataset.pl;
+        const p = pluginler.find((x) => x.ad === ad);
+        $$("[data-is]", kart).forEach((b) => {
+          b.onclick = async () => {
+            try {
+              if (b.dataset.is === "geri") await api(`/api/pluginler/${ad}/geri-al`, { method: "POST" });
+              else if (b.dataset.is === "ac") await api(`/api/pluginler/${ad}/durum`, { method: "PUT", govde: { acik: !p.acik } });
+              else {
+                if (!(await onayla("Plugin'i kaldır", `${ad} ve tüm sürümleri silinsin mi?`, { evet: "Kaldır", tehlike: true }))) return;
+                await api(`/api/pluginler/${ad}`, { method: "DELETE" });
+              }
+              pluginCiz();
+            } catch (err) { bildir(err.message, "hata"); }
+          };
+        });
+      });
+    } catch (err) { kap.innerHTML = `<span class="rozet kirmizi">hata</span> ${kacir(err.message)}`; }
+  };
+  $("#pl-incele", govde).onclick = async () => {
+    const rapor = $("#pl-rapor", govde);
+    try {
+      const k = await api("/api/pluginler/karantina", { method: "POST", govde: { yol: $("#pl-yol", govde).value.trim() } });
+      const r = k.rapor;
+      rapor.innerHTML = `<div class="kart"><div class="kart-baslik"><b>${kacir(k.manifest.name)} v${kacir(k.manifest.version)}</b><span class="soluk kucuk">${kacir(r.dosya_sayisi)} dosya · ${kacir(Math.round(r.toplam_bayt / 1024))} KB</span></div>
+        <div>${kacir(k.manifest.description)}</div>
+        ${r.kurulum_scriptleri.length ? `<div class="uyari-kutu kucuk">Kurulum scriptleri (ÇALIŞTIRILMAYACAK): ${kacir(r.kurulum_scriptleri.join(", "))}</div>` : ""}
+        ${r.riskler.length ? `<div class="uyari-kutu kucuk"><b>Dikkat:</b><ul>${r.riskler.map((x) => `<li><code>${kacir(x.dosya)}</code> ${kacir(x.neden)}</li>`).join("")}</ul></div>` : '<div class="soluk kucuk">Bilinen riskli desen bulunmadı (bu bir güvenlik garantisi değildir).</div>'}
+        <details><summary class="kucuk">Dosyalar</summary><ul class="kucuk">${r.dosyalar.map((f) => `<li><code>${kacir(f.dosya)}</code> <span class="soluk">${kacir(f.sha256)}</span></li>`).join("")}</ul></details>
+        <div class="dugme-sira"><button class="btn ana" id="pl-kur">İnceledim, kur</button></div></div>`;
+      $("#pl-kur", rapor).onclick = async () => {
+        try { await api("/api/pluginler/kur", { method: "POST", govde: { karantina: k.karantina } }); rapor.innerHTML = ""; bildir("Plugin kuruldu.", "basari", 1500); pluginCiz(); } catch (err) { bildir(err.message, "hata"); }
+      };
+    } catch (err) { rapor.innerHTML = `<div class="uyari-kutu kucuk">${kacir(err.message)}</div>`; }
+  };
+  pluginCiz();
 
   const modelleriCiz = () => {
     $("#ay-modeller", govde).innerHTML = modelKartlari($("#ay-ara", govde).value, $("#ay-indirilen", govde).checked);

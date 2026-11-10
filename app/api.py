@@ -45,6 +45,7 @@ from app.services.model_magaza import Indirici, Magaza, ModelKaydi, uyumluluk
 from app.services.model_yonetici import LLMFabrikasi, ModelYonetici
 from app.services.openrouter import OpenRouterDeposu
 from app.services.oturumlar import OturumDeposu
+from app.services.pluginler import PluginDeposu
 from app.services.skiller import SkillDeposu
 from app.services.sohbet import VARSAYILAN_ALAN_ID, MesajIstegi, SohbetServisi
 from app.services.talimatlar import TalimatDeposu
@@ -260,7 +261,8 @@ def uygulama_olustur(
             return []
         return [("proje", Path(k) / ".claude" / "skills") for k in alan.kokler]
 
-    skiller.proje_kaynaklari = proje_skill_kaynaklari
+    pluginler = PluginDeposu(veri_dizini)
+    skiller.proje_kaynaklari = lambda: [*proje_skill_kaynaklari(), *pluginler.skill_kaynaklari()]
     hafiza = HafizaDeposu(veri_dizini)
     hooklar = HookDeposu(veri_dizini)
     mcp = McpYoneticisi(veri_dizini)
@@ -605,6 +607,32 @@ def uygulama_olustur(
     @app.delete("/api/artifactler/{artifact_id}")
     async def artifact_sil(artifact_id: str) -> dict:
         return artifactler.sil(artifact_id)
+
+    # ---- plugin'ler (A7.4): karantina -> inceleme -> kur; scriptler calistirilmaz ----
+    @app.get("/api/pluginler")
+    async def plugin_listesi() -> dict:
+        return {"pluginler": pluginler.liste()}
+
+    @app.post("/api/pluginler/karantina")
+    async def plugin_karantina(veri: dict) -> dict:
+        return await asyncio.to_thread(pluginler.karantinaya_al, str(veri.get("yol", "")))
+
+    @app.post("/api/pluginler/kur")
+    async def plugin_kur(veri: dict) -> dict:
+        return await asyncio.to_thread(pluginler.kur, str(veri.get("karantina", "")))
+
+    @app.post("/api/pluginler/{ad}/geri-al")
+    async def plugin_geri_al(ad: str) -> dict:
+        return pluginler.geri_al(ad)
+
+    @app.put("/api/pluginler/{ad}/durum")
+    async def plugin_durum(ad: str, veri: dict) -> dict:
+        return pluginler.ac_kapat(ad, bool(veri.get("acik")))
+
+    @app.delete("/api/pluginler/{ad}")
+    async def plugin_kaldir(ad: str) -> dict:
+        pluginler.kaldir(ad)
+        return {"silindi": ad}
 
     # ---- MCP (A7): sunucular yalniz oturumlu arayuzden; sirlar maskeli doner ----
     @app.get("/api/mcp")

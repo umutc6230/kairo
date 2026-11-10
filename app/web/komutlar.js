@@ -38,6 +38,7 @@ export const KOMUTLAR = {
   "/memory": { aciklama: "Hafıza notları", calistir: () => ayarlarAc("hafiza") },
   "/hooks": { aciklama: "Hook'lar", calistir: () => ayarlarAc("hooks") },
   "/mcp": { aciklama: "MCP bağlayıcıları", calistir: () => ayarlarAc("mcp") },
+  "/plugin": { aciklama: "Plugin'ler", calistir: () => ayarlarAc("plugin") },
   "/permissions": { aciklama: "Proje, mod ve izin kapsamı", calistir: () => projeAc() },
   "/diff": { aciklama: "Çalışma ağacı diff'i", calistir: () => diffGoster() },
   "/review": { aciklama: "Diff'i kod review'dan geçirir", calistir: () => reviewYap() },
@@ -62,7 +63,7 @@ export const KOMUTLAR = {
   "/compact": { aciklama: "Ajan görevlerinde bağlam dolunca otomatik özetlenir", calistir: () => bildir("Özetleme ajan görevlerinde otomatik; sohbet için henüz elle özet yok.", "bilgi") },
 };
 
-const HENUZ_YOK = ["/cost", "/resume", "/rewind", "/plugin", "/browser", "/loop", "/schedule", "/doctor"];
+const HENUZ_YOK = ["/cost", "/resume", "/rewind", "/browser", "/loop", "/schedule", "/doctor"];
 
 function yardim() {
   const satirlar = Object.entries(KOMUTLAR).map(([k, v]) => [k, v.aciklama]);

@@ -108,6 +108,10 @@ Python 3.12 + FastAPI + pywebview; arayuz vanilla JS. Paketleme: PORTABLE (kulla
       digerleri dis=her zaman onay). /api/mcp CRUD+test. tests/test_a7_mcp.py (gercek stdio test sunucusu).
 - [x] MCP arayuzu: Ayarlar > Baglayicilar (Ozellestir'de sekme, /mcp): ekle, baglan, araclari gor, onaysiz
       calisacak araclari isaretle, ac/kapat, sil; ortam sirlari arayuzde gorunmez (tarayicida dogrulandi).
+- [x] A7.4/7 plugin (app/services/pluginler.py): plugin.json manifest, KARANTINA -> inceleme raporu (dosya/sha256,
+      riskli desen, kurulum scripti; scriptler ASLA calismaz) -> onayla kur; surum sakla, geri al, ac/kapat, kaldir;
+      kurum politikasi (plugin-politika.json yasak/izinli; sonradan yasak hemen etkili). Plugin yalniz skill tasir.
+      Ayarlar > Plugin'ler + /plugin. Bulgu: Windows'ta kaydedilen plugin.json BOM'lu -> utf-8-sig.
 - [ ] A7 kalan: streamable HTTP + OAuth, resources/prompts, plugin manifest/
       karantina/surum/geri alma, katalog, uzanti API'si, kurumsal politika  <- SIRADAKI
 - 2026-11-10 (16): A6 bitti (hooks + slash + hook UI; tarayicida dogrulandi). DIKKAT: ayni dalda paralel
