@@ -141,6 +141,10 @@ class Run(BaseModel):
     ilerlemesiz: int = 0
     baglam: dict = {}  # son model cagrisinin butce dokumu (A4.1)
     ozet_sayisi: int = 0
+    parent: str = ""  # alt ajan ise ebeveyn run kimligi
+    izinli_araclar: list[str] = []  # alt ajanin dar arac seti
+    sahip_dosyalar: list[str] = []  # alt ajanin yazabilecegi dosyalar (goreli yol)
+    cocuklar: list[str] = []
     hata_sayaci: dict[str, int] = {}
     olusturma: str = Field(default_factory=lambda: datetime.now().isoformat(timespec="seconds"))
     guncelleme: str = ""
@@ -181,6 +185,23 @@ RUNNER_ARACLARI = [
 ]
 META = {"plan_guncelle", "gorevi_bitir"}
 
+# A8.1 alt ajan: ayri baglam, dar arac seti, sahip olunan dosyalar, ebeveynden KESILEN butce.
+ALT_AJAN_ARACI = _f(
+    "alt_ajan",
+    "Ayri baglamli bir alt ajana dar bir is ver (or. arastirma, tek dosyada degisiklik, test). "
+    "`araclar`: alt ajanin kullanabilecegi arac adlari (en az yetki). `dosyalar`: yazabilecegi "
+    "dosyalar (bos = yazamaz). Alt ajan bitince sonucunu (durum, ozet, kanit) doner. "
+    "Butcesi senin kalan butcenden duser.",
+    {
+        "gorev": {"type": "string"},
+        "araclar": {"type": "array", "items": {"type": "string"}},
+        "dosyalar": {"type": "array", "items": {"type": "string"}},
+        "max_adim": {"type": "integer"},
+    },
+    ["gorev", "araclar"],
+)
+YAZAN_ARACLAR = {"proje_dosya_yaz", "proje_dosya_yama", "proje_dosya_tasi", "proje_dosya_sil"}
+
 SISTEM = """Sen bir yazilim ajanisin. Gorevi ARACLARLA yap; tahmin etme, oku ve dogrula.
 Kurallar:
 - Ilk is plan_guncelle ile kisa bir plan yaz; ilerledikce guncelle.
@@ -189,6 +210,10 @@ Kurallar:
 - Bir cagri reddedilirse AYNISINI tekrarlama; farkli bir yol planla.
 - Bitince gorevi_bitir'i, hedefi kanitlayan basarili adim numaralariyla cagir.
 - Kullaniciya kisa yaz: ne yaptin, siradaki adim, varsa engel. Uzun aciklama yapma."""
+
+
+def _norm_yol(yol: str) -> str:
+    return str(yol).replace("\\", "/").strip().lstrip("./").lower()
 
 
 def _json_onar(ham: str) -> dict | None:
@@ -466,6 +491,16 @@ class AgentRunner:
             if hafiza := self.hafiza():
                 sistem = f"{sistem}\n\n{hafiza}".strip()
             semalar = [*semalar, *RUNNER_ARACLARI]
+            if run.parent:  # alt ajan: yalniz verilen araclar; alt ajan acamaz (derinlik 1)
+                izinli = set(run.izinli_araclar) | META
+                semalar = [s for s in semalar if s["function"]["name"] in izinli]
+                isleyiciler = {
+                    k: self._sahiplik_sarmali(run, k, f)
+                    for k, f in isleyiciler.items()
+                    if k in izinli
+                }
+            else:
+                semalar = [*semalar, ALT_AJAN_ARACI]
             run.durum = RunDurum.calisiyor
             self.depo.kaydet(run)
             while True:
@@ -682,6 +717,9 @@ class AgentRunner:
         if a.arac == "plan_guncelle":
             self._plan(run, a)
             return
+        if a.arac == "alt_ajan" and not run.parent:
+            await self._alt_ajan(run, a)
+            return
         if a.arac == "gorevi_bitir":
             self._bitir(run, a)
             return
@@ -736,6 +774,99 @@ class AgentRunner:
                 {"run": run.id, "arac": a.arac, "durum": str(a.durum), "sonuc": a.sonuc[:2000]},
                 arac=a.arac,
             )  # fmt: skip
+
+    # ---------------------------------------------------------------- alt ajan (A8.1, A8.4)
+    def _sahiplik_sarmali(self, run: Run, ad: str, fonk: Callable[..., Any]) -> Callable[..., Any]:
+        """Alt ajanin yazma araclari YALNIZ sahip oldugu dosyalarda calisir."""
+        if ad not in YAZAN_ARACLAR:
+            return fonk
+
+        def sarili(**kw: Any) -> Any:
+            hedefler = [kw.get("yol"), kw.get("kaynak"), kw.get("hedef")]
+            sahip = {_norm_yol(x) for x in run.sahip_dosyalar}
+            for h in filter(None, hedefler):
+                if _norm_yol(h) not in sahip:
+                    return {"hata": f"Bu alt ajan '{h}' dosyasina yazamaz (sahip oldugu: "
+                            f"{', '.join(run.sahip_dosyalar) or 'yok'}).",
+                            "karar": "ret"}  # fmt: skip
+            return fonk(**kw)
+
+        return sarili
+
+    def _sahiplik_cakisiyor(self, dosyalar: list[str], haric: str) -> str:
+        """Calisan baska bir alt ajan ayni dosyaya sahipse onun kimligi."""
+        istenen = {_norm_yol(d) for d in dosyalar}
+        for r in self.depo.liste():
+            if r.id == haric or not r.parent or r.durum in BITMIS:
+                continue
+            if istenen & {_norm_yol(d) for d in r.sahip_dosyalar}:
+                return r.id
+        return ""
+
+    async def _alt_ajan(self, run: Run, a: Adim) -> None:
+        g = a.argumanlar
+        gorev = str(g.get("gorev") or "").strip()
+        araclar = [str(x) for x in g.get("araclar") or []][:30]
+        dosyalar = [str(x) for x in g.get("dosyalar") or []][:50]
+        kalan_adim = run.butce.max_adim - run.kullanim.adim
+        kalan_token = run.butce.max_token - run.kullanim.token
+        hata = ""
+        if not gorev or not araclar:
+            hata = "alt_ajan icin gorev ve en az bir arac gerekli."
+        elif kalan_adim < 2:
+            hata = "Alt ajana verilecek butce kalmadi."
+        elif cakisan := self._sahiplik_cakisiyor(dosyalar, run.id):
+            hata = f"Bu dosyalar calisan baska bir alt ajanda ({cakisan}); once o bitsin."
+        if hata:
+            a.durum = AdimDurum.hata
+            self._arac_mesaji(run, a, {"hata": hata})
+            self.depo.kaydet(run)
+            return
+        istenen = int(g.get("max_adim") or 15)
+        cocuk = Run(
+            hedef=gorev,
+            model=run.model,
+            parent=run.id,
+            izinli_araclar=araclar,
+            sahip_dosyalar=dosyalar,
+            # butce KESILIR: cocuk ebeveynin kalanindan fazlasini alamaz, toplam cogalmaz
+            butce=Butce(
+                max_adim=max(1, min(istenen, kalan_adim - 1)),
+                max_sure_sn=run.butce.max_sure_sn,
+                max_token=max(1000, kalan_token),
+                max_ayni_hata=run.butce.max_ayni_hata,
+                max_ilerlemesiz=run.butce.max_ilerlemesiz,
+            ),
+        )
+        sahiplik = ", ".join(dosyalar) or "yok (salt okunur)"
+        cocuk.mesajlar = [{"role": "user", "content": (
+            f"GOREV (alt ajan, ebeveyn {run.id}): {gorev}\n\nKULLANABILECEGIN ARACLAR: "
+            f"{', '.join(araclar)}\nYAZABILECEGIN DOSYALAR: {sahiplik}\n"
+            "Bitince gorevi_bitir'i kanit adimlariyla cagir; sonucun ebeveyne doner."
+        )}]  # fmt: skip
+        self.depo.kaydet(cocuk)
+        run.cocuklar.append(cocuk.id)
+        run.guncellemeler.append(f"Alt ajan baslatildi: {gorev[:80]}")
+        a.durum = AdimDurum.niyet
+        self.depo.kaydet(run)
+        try:
+            await self._dongu(cocuk.id)  # tek yerel model: cocuk sirali calisir
+        finally:
+            c = self.depo.getir(cocuk.id)
+            run.kullanim.adim += c.kullanim.adim  # cocugun harcamasi ebeveynden duser
+            run.kullanim.token += c.kullanim.token
+        sonuc = {
+            "alt_ajan": c.id,
+            "durum": str(c.durum),
+            "ozet": c.sonuc.ozet or c.hata,
+            "dogrulandi": c.sonuc.dogrulandi,
+            "degisen_dosyalar": sorted(
+                {x.dosya for x in c.adimlar if x.dosya and x.arac in YAZAN_ARACLAR}
+            ),
+        }
+        a.durum = AdimDurum.tamam if c.durum is RunDurum.basarili else AdimDurum.hata
+        self._arac_mesaji(run, a, sonuc)
+        self.depo.kaydet(run)
 
     def _plan(self, run: Run, a: Adim) -> None:
         try:

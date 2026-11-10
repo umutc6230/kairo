@@ -118,7 +118,13 @@ Python 3.12 + FastAPI + pywebview; arayuz vanilla JS. Paketleme: PORTABLE (kulla
       Arayuz: Baglayicilar'da URL + Authorization, "uzak" rozeti. Sahte uzak sunucuyla 5 test.
 - [x] A7.5 katalog: data/plugin-katalog.json {name, version, yol, sha256}; klasor hash'i uyusmazsa kurulmaz.
 - [ ] A7 kalan: OAuth akisi (simdilik baslik elle), MCP prompts, uzanti/Mods API'si (A7.6: izole worker),
-      plugin eval + token/sure raporu. Sonra A8 alt ajanlar  <- SIRADAKI
+      plugin eval + token/sure raporu (ertelendi).
+- [x] A8.1/A8.4 alt ajan (runner alt_ajan araci): ayri baglam, dar arac seti, YAZMA yalniz sahip olunan
+      dosyalara, butce ebeveynin kalanindan KESILIR (cogalmaz, harcama ebeveyne yazilir), derinlik 1,
+      ayni dosyaya iki calisan alt ajan olamaz, ebeveyn iptali cocugu da iptal eder, cokmede adim belirsiz.
+      Model tek: cocuk sirali calisir. tests/test_a8_alt_ajan.py
+- [ ] A8 kalan: team lideri + ortak gorev listesi/claim/mesaj kutusu (A8.2), worktree entegrasyonu (A8.3),
+      dinamik is akislari (A8.6), bagimsiz derin review (A8.7), Agent View arayuzu  <- SIRADAKI
 - 2026-11-10 (16): A6 bitti (hooks + slash + hook UI; tarayicida dogrulandi). DIKKAT: ayni dalda paralel
   bir oturum A6.1/A6.2 commit'ledi (14da54a, 1c791d4); benim skill commit'im (81b748a) onlarla ust uste.
   399 test geciyor.
