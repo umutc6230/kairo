@@ -203,6 +203,7 @@ ALT_AJAN_ARACI = _f(
     },
     ["gorev", "araclar"],
 )
+ALT_AJAN_MIN_ADIM = 8
 YAZAN_ARACLAR = {"proje_dosya_yaz", "proje_dosya_yama", "proje_dosya_tasi", "proje_dosya_sil"}
 
 SISTEM = """Sen bir yazilim ajanisin. Gorevi ARACLARLA yap; tahmin etme, oku ve dogrula.
@@ -719,7 +720,8 @@ class AgentRunner:
         return False
 
     async def _adim_calistir(self, run: Run, a: Adim, isleyiciler: dict) -> None:
-        run.kullanim.adim += 1
+        if a.arac != "plan_guncelle":  # kayit isi butce yemez (canli: alt ajan planla bitiyordu)
+            run.kullanim.adim += 1
         anahtar = f"{a.arac}:{json.dumps(a.argumanlar, sort_keys=True, ensure_ascii=False)}"
         if run.hata_sayaci.get(anahtar, 0) >= run.butce.max_ayni_hata:
             a.durum = AdimDurum.hata
@@ -839,7 +841,8 @@ class AgentRunner:
             self._arac_mesaji(run, a, {"hata": hata})
             self.depo.kaydet(run)
             return
-        istenen = int(g.get("max_adim") or 15)
+        # model cok dusuk butce isteyebiliyor (canli: 5); alt sinir 8, ust sinir ebeveynin kalani
+        istenen = max(int(g.get("max_adim") or 15), ALT_AJAN_MIN_ADIM)
         cocuk = Run(
             hedef=gorev,
             model=run.model,

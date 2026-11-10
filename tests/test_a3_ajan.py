@@ -181,7 +181,7 @@ async def test_on_adimli_gorev_test_hatasi_duzeltme_ve_kanit(tmp_path, proje) ->
 
     assert run.durum is RunDurum.basarili, (run.hata, [a.sonuc[:80] for a in run.adimlar])
     assert run.sonuc.kanit == [10] and run.sonuc.dogrulandi  # 99 yok sayildi
-    assert len(run.adimlar) == 13 and run.kullanim.adim == 13
+    assert len(run.adimlar) == 13 and run.kullanim.adim == 11  # 2 plan_guncelle butce yemez
     assert run.adimlar[8].durum is AdimDurum.hata and "gecersiz" in run.adimlar[8].sonuc
     assert json.loads(run.adimlar[5].sonuc)["cikis_kodu"] != 0
     assert "a + b" in (proje / "src" / "hesap.py").read_text(encoding="utf-8")

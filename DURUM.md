@@ -137,6 +137,10 @@ Python 3.12 + FastAPI + pywebview; arayuz vanilla JS. Paketleme: PORTABLE (kulla
       claim = sureli kiralama (600 sn), panoyu kullanmak heartbeat, suresi dolan (coken) ajanin gorevi geri
       acilir, yalniz sahibi tamamlar; mesaj kutusu (kisiye/hepsi), ayni mesaj_id tekrar teslim edilmez.
       Araclar takim_* (alt ajanlara da acik). /api/gorevler/{id}/takim.
+- [x] A8 CANLI (OpenRouter nemotron-3-ultra:free): lider iki alt_ajan acti (her biri tek dosya + oku/yama);
+      ilk deneme: alt ajanlar isi yapti ama plan_guncelle 5 adimlik butceyi yedi -> "basarisiz". Duzeltme:
+      plan_guncelle butceden dusmez, alt ajan en az 8 adim. Ikinci deneme: iki alt ajan BASARILI, lider testi
+      kosup kanitla bitirdi (17 adim, 144 sn).
 - [ ] A8 kalan: is akisi + takim panosu arayuzu (su an API). Sonra A9  <- SIRADAKI
 - 2026-11-10 (16): A6 bitti (hooks + slash + hook UI; tarayicida dogrulandi). DIKKAT: ayni dalda paralel
   bir oturum A6.1/A6.2 commit'ledi (14da54a, 1c791d4); benim skill commit'im (81b748a) onlarla ust uste.
