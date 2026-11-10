@@ -363,6 +363,8 @@ def uygulama_olustur(
         yield
         await ajan.kapat()  # calisan gorevler guvenli sinirda duraklatilir
         mcp.kapat()  # MCP sunucu surecleri yetim kalmasin
+        for kz in sohbet.kod_zekasi.values():  # dil sunuculari
+            kz.kapat()
         if sohbet.tarayici.acik_mi():
             await asyncio.to_thread(sohbet.tarayici.kapat)
         await komutlar.hepsini_durdur()  # yetim test/dev-server surecleri kalmasin

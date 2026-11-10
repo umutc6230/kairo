@@ -611,6 +611,7 @@ class SohbetServisi:
         self.mcp = None  # McpYoneticisi (api baglar)
         self.tarayici = None  # Tarayici (api baglar)
         self.masaustu = None  # Masaustu (api baglar)
+        self.kod_zekasi: dict[str, Any] = {}  # alan id -> KodZekasi (dil sunuculari surer)
         self.web_transport = None  # testlerde sahte web
         self._kilitler: dict[str, asyncio.Lock] = {}
 
@@ -649,6 +650,17 @@ class SohbetServisi:
         if ajan_kaydi is not None:  # A2: proje aciksa zengin dosya/komut/git araclari
             araclar += ajan_kaydi.semalar()
             isleyiciler |= ajan_kaydi.isleyiciler()
+            from app.agent import lsp  # A10.1: sunucu yoksa metin aramasi yedegi
+
+            if alan.id not in self.kod_zekasi:
+                okuma = ajan_kaydi.okuma
+                self.kod_zekasi[alan.id] = lsp.KodZekasi(
+                    lambda: self.yonetici.ayarlar.oku().lsp_sunuculari,
+                    ajan_kaydi.kapsam,
+                    lambda desen, dd: okuma.icerik_ara(desen, "", dd),
+                )
+            araclar += lsp.SEMALAR
+            isleyiciler |= self.kod_zekasi[alan.id].isleyiciler()
         if self.mcp is not None and self.politika is not None:  # A7: ayni izin katmanindan gecer
             politika = self.politika
 

@@ -165,7 +165,12 @@ Python 3.12 + FastAPI + pywebview; arayuz vanilla JS. Paketleme: PORTABLE (kulla
       Kabul: ayni fixture gorevi CLI (gercek alt surec, sahte model) ve SDK ile ayni 'basarili' sonuc.
       Bulgu: oturum anahtari istisnasi startswith('/api/bilgi') idi -> tam esitlik.
 - [x] A10.7 /doctor (/api/doctor): llama.cpp, modeller, disk, git, rg, node, Playwright, anahtar var/yok.
-- [ ] A10 kalan: LSP (A10.1), VS Code/JetBrains (A10.2), TS SDK, GitHub/GitLab (A10.5), deep link (A10.6),
+- [x] A10.1 LSP (app/agent/lsp.py): genel stdio istemci (Content-Length JSON-RPC, sunucu isteklerine cevap,
+      publishDiagnostics); kod_tanim/referanslar/semboller/tanilar; proje disi sonuc elenir; sunucu yok/coker/
+      takilirsa metin aramasi YEDEGI ('yedek': true + neden). Sunucular yalniz Ayarlar'dan (lsp_sunuculari).
+      Makinede dil sunucusu kurulu degil: sozlesme kendi test sunucusuyla. Bulgu: Windows'ta tirnakli komut yolu
+      tirnaklariyla calistiriliyordu -> komut_parcala.
+- [ ] A10 kalan: VS Code/JetBrains (A10.2), TS SDK, GitHub/GitLab (A10.5), deep link (A10.6),
       guncelleme/rollback  <- SIRADAKI
 - 2026-11-10 (16): A6 bitti (hooks + slash + hook UI; tarayicida dogrulandi). DIKKAT: ayni dalda paralel
   bir oturum A6.1/A6.2 commit'ledi (14da54a, 1c791d4); benim skill commit'im (81b748a) onlarla ust uste.
