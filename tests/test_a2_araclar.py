@@ -372,6 +372,7 @@ async def test_cikti_siniri(py_proje: Path) -> None:
 def test_ortam_allowlist_sir_sizdirmaz(monkeypatch) -> None:
     monkeypatch.setenv("OPENROUTER_API_KEY", "sk-SAHTE")
     monkeypatch.setenv("GITHUB_TOKEN", "ghp_SAHTE")
+    monkeypatch.delenv("PYTHONIOENCODING", raising=False)  # kabuga bagli deger testi bozmasin
     ortam = ortam_allowlist()
     assert "OPENROUTER_API_KEY" not in ortam and "GITHUB_TOKEN" not in ortam
     assert "PATH" in ortam and ortam["PYTHONIOENCODING"] == "utf-8"
