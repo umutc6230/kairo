@@ -23,6 +23,8 @@ const BITMIS = new Set(["iptal", "basarili", "dogrulanmadi", "basarisiz"]);
 const YAZAN = new Set(["proje_dosya_yaz", "proje_dosya_yama", "proje_dosya_tasi", "proje_dosya_sil"]);
 
 let secili = null;
+let kapOverride = null; // sohbet icinde gosterimde gorev o mesajin kutusuna cizilir
+const detayKabi = () => kapOverride || $("#gr-detay");
 let sonCizilen = ""; // degismeyen gorevi yeniden cizme: tiklanan dugme DOM'dan kalkmasin
 let zamanlayici = null;
 const acikAdimlar = new Set();
@@ -124,7 +126,7 @@ function bekleyenKartlari(r) {
 }
 
 function detayCiz(r) {
-  const kap = $("#gr-detay");
+  const kap = detayKabi();
   const basari = r.durum === "basarili" && r.sonuc?.dogrulandi; // ikon yalniz gercek kanittan
   const b = r.baglam || {};
   kap.innerHTML = `
@@ -158,7 +160,7 @@ function detayCiz(r) {
 }
 
 function baglantilar(r) {
-  const kap = $("#gr-detay");
+  const kap = detayKabi();
   const sarmala = (is) => async () => {
     try { await is(); await gorevYenile(); } catch (e) { bildir(e.message, "hata"); }
   };
@@ -297,7 +299,7 @@ async function gorevYenile(zorla = true) {
       listeCiz();
     }
   } catch (e) {
-    $("#gr-detay").innerHTML = `<div class="uyari-kutu">${kacir(e.message)}</div>`;
+    detayKabi().innerHTML = `<div class="uyari-kutu">${kacir(e.message)}</div>`;
   }
 }
 
@@ -342,6 +344,7 @@ export async function gorevSayfasiYukle() {
   clearInterval(zamanlayici);
   zamanlayici = setInterval(() => {
     if (document.getElementById("g-gorevler")?.hidden) return; // sayfa gizliyken yoklama yok
+    if (kapOverride) return;
     gorevYenile(false);
   }, 1500);
 }
@@ -351,4 +354,18 @@ export function gorevlerKur() {
   $("#gr-diff").onclick = diffGoster;
   $("#gr-review").onclick = reviewYap;
   $("#gr-hedef").onkeydown = (e) => { if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) baslat(); };
+}
+
+/** Claude Code gibi: gorev SOHBETIN ICINDE canli cizilir (adimlar, onay, diff, kontroller). */
+export function sohbetteGorevGoster(kap, id) {
+  kapOverride = kap;
+  secili = id;
+  sonCizilen = "";
+  acikAdimlar.clear();
+  gorevYenile();
+  clearInterval(zamanlayici);
+  zamanlayici = setInterval(() => {
+    if (!kap.isConnected) { clearInterval(zamanlayici); kapOverride = null; return; }
+    gorevYenile(false);
+  }, 1500);
 }

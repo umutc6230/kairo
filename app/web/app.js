@@ -10,7 +10,7 @@ import { projeKur } from "./proje.js";
 import { skillSayfasiYukle, skillerKur } from "./skiller.js";
 import { gorevSayfasiYukle, gorevlerKur } from "./gorevler.js";
 import { dikteDurumuYenile, dikteKur } from "./dikte.js";
-import { akisVar, durdur, mesajlariCiz, sohbetKur, yeniSohbetEkrani } from "./sohbet.js";
+import { ajanBloklariniCiz, ajanliOturum, akisVar, durdur, mesajlariCiz, sohbetKur, yeniSohbetEkrani } from "./sohbet.js";
 
 const BASLIKLAR = { karsilastir: "Karşılaştır", ocr: "OCR testi", arac: "Araç testi", paket: "Test paketi", skiller: "Skill'ler ve talimatlar", modeller: "Modeller", gorevler: "Ajan görevleri" };
 const gecmis = [];
@@ -56,6 +56,7 @@ async function oturumAc(id, kaydetme = false) {
     durum.oturumId = o.id;
     gorunumGoster("sohbet");
     mesajlariCiz(o);
+    ajanBloklariniCiz(o.id);
     baslikAyarla(o.baslik);
     oturumListesiCiz();
   } catch (e) {
@@ -111,7 +112,7 @@ function oturumListesiCiz() {
   kap.innerHTML = "";
   const gruplar = new Map();
   for (const o of durum.oturumlar) {
-    if (!o.mesaj_sayisi && o.id !== durum.oturumId) continue;
+    if (!o.mesaj_sayisi && o.id !== durum.oturumId && !ajanliOturum(o.id)) continue;
     const g = grupAdi(o.guncelleme);
     if (!gruplar.has(g)) gruplar.set(g, []);
     gruplar.get(g).push(o);

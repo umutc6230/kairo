@@ -1,5 +1,7 @@
 // Sohbet gorunumu: mesajlar, dusunce blogu, yazma alani, ekler, akis ve durdurma.
+import { sohbetteGorevGoster } from "./gorevler.js";
 import { komutMu } from "./komutlar.js";
+import { projeDurumu } from "./proje.js";
 import { ikon, ikonlariYerlestir } from "./ikonlar.js";
 import { kacir, md } from "./md.js";
 import {
@@ -340,6 +342,9 @@ export async function gonder() {
     return;
   }
   const oturumId = durum.oturumId;
+  // Claude Code gibi: proje aciksa (ve mod sohbet degilse) mesaj AJAN olarak calisir; adimlar,
+  // onaylar ve diff bu sohbetin icinde gorunur. Ekli mesajlar normal sohbet yolundan gider.
+  if (ajanModu() && !ekler.length) { await ajanaGonder(oturumId, metin); return; }
   const s = sutun();
   const yanit = asistanMesaji();
   yanit.canliBaslat(durum.ayarlar?.model);
@@ -430,3 +435,71 @@ function kodKopyala(e) {
 }
 
 export { modelAdi };
+
+// ---- sohbet = ajan (Claude Code Desktop duzeni) ----
+// shortcut: gorev-sohbet baglantisi tarayicida (localStorage) tutulur; baska cihazda gorunmez,
+// sunucuda oturum kaydina tasimak sonraki adim.
+const AJAN_ANAHTAR = "ajanRunlari";
+function ajanKayitlari() {
+  try { return JSON.parse(localStorage.getItem(AJAN_ANAHTAR) || "{}"); } catch { return {}; }
+}
+function ajanKaydet(oturumId, kayit) {
+  const t = ajanKayitlari();
+  (t[oturumId] ||= []).push(kayit);
+  try { localStorage.setItem(AJAN_ANAHTAR, JSON.stringify(t)); } catch { /* depolama kapali */ }
+}
+function ajanModu() {
+  return Boolean(projeDurumu.aktif) && projeDurumu.izin?.mod !== "sohbet";
+}
+function ajanBlogu(kayit) {
+  const kap = el(`<div class="mesaj asistan ajan-mesaj"><div class="gr-detay" aria-live="polite"><div class="parilti">Ajan başlıyor…</div></div></div>`);
+  return { kap, detay: kap.querySelector(".gr-detay"), kayit };
+}
+const BITMIS_RUN = new Set(["iptal", "basarili", "dogrulanmadi", "basarisiz"]);
+
+async function ajanaGonder(oturumId, metin) {
+  const s = sutun();
+  s.append(kullaniciMesaji({ rol: "kullanici", metin, ekler: [] }));
+  bosDurum(false);
+  const kayitlar = ajanKayitlari()[oturumId] || [];
+  const son = kayitlar[kayitlar.length - 1];
+  try {
+    if (son) { // calisan gorev varsa yeni mesaj YONLENDIRME olur (Claude Code'da calisirken yazmak gibi)
+      const r = await api(`/api/gorevler/${son.run}`);
+      if (!BITMIS_RUN.has(r.durum)) {
+        await api(`/api/gorevler/${son.run}/mesaj`, { method: "POST", govde: { metin } });
+        bildir("Ajana iletildi; sonraki adımdan önce işlenir.", "basari", 1500);
+        sonaKaydir(true);
+        return;
+      }
+    }
+    const r = await api("/api/gorevler", { method: "POST", govde: { hedef: metin } });
+    ajanKaydet(oturumId, { run: r.id, metin });
+    if (!kayitlar.length) await api(`/api/oturumlar/${oturumId}`, { method: "PATCH", govde: { baslik: metin.slice(0, 60) } }).catch(() => {});
+    const b = ajanBlogu({ run: r.id, metin });
+    s.append(b.kap);
+    sohbetteGorevGoster(b.detay, r.id);
+    sonaKaydir(true);
+  } catch (e) {
+    s.append(el(`<div class="mesaj asistan"><div class="uyari-kutu">${kacir(e.message)}</div></div>`));
+  }
+}
+
+/** Oturum acilinca bu sohbete bagli ajan gorevlerini akisa ekler; sonuncusu canli izlenir. */
+export function ajanBloklariniCiz(oturumId) {
+  const kayitlar = ajanKayitlari()[oturumId] || [];
+  if (!kayitlar.length) return;
+  const s = $("#mesajlar .mesaj-sutun") || sutun();
+  bosDurum(false);
+  kayitlar.forEach((k, i) => {
+    s.append(kullaniciMesaji({ rol: "kullanici", metin: k.metin, ekler: [] }));
+    const b = ajanBlogu(k);
+    s.append(b.kap);
+    if (i === kayitlar.length - 1) sohbetteGorevGoster(b.detay, k.run);
+    else api(`/api/gorevler/${k.run}`).then((r) => { b.detay.innerHTML = `<div class="soluk kucuk">Görev: ${kacir(r.durum)} · ${kacir(r.sonuc?.ozet || r.hata || "")}</div>`; }).catch(() => {});
+  });
+  ikonlariYerlestir(s);
+  sonaKaydir(true);
+}
+
+export const ajanliOturum = (id) => Boolean(ajanKayitlari()[id]?.length);
