@@ -39,7 +39,7 @@ export function ayarlarAc(sekme = "ai") {
   const a = durum.ayarlar;
   const s = durum.sunucu || {};
   const govde = el(`<div>
-    <div class="sekmeler"><button class="sekme" data-sekme="ai">AI Ayarları</button><button class="sekme" data-sekme="hafiza">Hafıza</button><button class="sekme" data-sekme="hooks">Hook'lar</button><button class="sekme" data-sekme="hakkinda">Hakkında</button></div>
+    <div class="sekmeler"><button class="sekme" data-sekme="ai">AI Ayarları</button><button class="sekme" data-sekme="hafiza">Hafıza</button><button class="sekme" data-sekme="mcp">Bağlayıcılar</button><button class="sekme" data-sekme="hooks">Hook'lar</button><button class="sekme" data-sekme="hakkinda">Hakkında</button></div>
     <div class="modal-govde" data-panel="ai">
       <div class="ayar-grup"><label>Sağlayıcı</label>
         <label class="secenek-kart ${a.saglayici !== "openrouter" ? "secili" : ""}"><input type="radio" name="ay-sag" value="yerel" ${a.saglayici !== "openrouter" ? "checked" : ""}><div><div class="ust">Yerel (llama.cpp) <span class="rozet yesil">internetsiz</span></div>
@@ -96,6 +96,15 @@ export function ayarlarAc(sekme = "ai") {
       <div class="satir"><input class="alan" id="hf-yeni" placeholder="Yeni not: ör. Testler pytest -q ile çalışır" style="flex:1" maxlength="1000">
         <button class="btn" id="hf-ekle">Ekle</button><button class="btn" id="hf-disa">Dışa aktar</button></div>
       <div id="hf-liste" class="ayar-grup"></div>
+    </div>
+    <div class="modal-govde" data-panel="mcp" hidden>
+      <div class="ayar-not">MCP sunucusu, modele yeni araçlar verir (ör. veritabanı, takvim). Sunucu bu bilgisayarda bir komut olarak çalışır. Araçları <code>mcp__sunucu__arac</code> adıyla görünür. İşaretlemediğin her araç çağrısı onay ister; ortam değişkenlerindeki anahtarlar yalnız burada saklanır, modele gitmez.</div>
+      <div class="satir"><input class="alan" id="mc-ad" placeholder="ad (ör. dosyalar)" style="max-width:150px" maxlength="32">
+        <input class="alan" id="mc-komut" placeholder="Komut (ör. npx)" style="max-width:160px" maxlength="500">
+        <input class="alan" id="mc-arg" placeholder="Argümanlar (boşlukla)" style="flex:1"></div>
+      <div class="satir"><input class="alan" id="mc-ortam" placeholder="Ortam: ANAHTAR=deger, ANAHTAR2=deger" style="flex:1" autocomplete="off">
+        <button class="btn" id="mc-ekle">Ekle</button></div>
+      <div id="mc-liste" class="ayar-grup"></div>
     </div>
     <div class="modal-govde" data-panel="hooks" hidden>
       <div class="ayar-not">Hook, bir olayda (ör. araç çalışmadan önce) bu bilgisayarda çalışan komuttur. Olay bilgisini JSON olarak stdin'den alır (sırlar maskeli). Çıkış kodu 2 işlemi <b>engeller</b>. <b>Güvenlik</b> hook'u hata verir ya da zaman aşımına uğrarsa da engeller; <b>bilgi</b> hook'u yalnız kaydedilir. Komut senin yetkilerinle çalışır.</div>
@@ -229,6 +238,61 @@ export function ayarlarAc(sekme = "ai") {
     } catch (err) { bildir(err.message, "hata"); }
   };
   hookCiz();
+
+  // ---- MCP bağlayıcıları ----
+  const mcpCiz = async () => {
+    const kap = $("#mc-liste", govde);
+    try {
+      const { sunucular } = await api("/api/mcp");
+      kap.innerHTML = sunucular.map((s) => `<div class="secenek-kart ${s.aktif ? "" : "pasif"}" data-mc="${kacir(s.ad)}">
+        <div style="flex:1"><div class="ust"><b>${kacir(s.ad)}</b> <code class="soluk">${kacir([s.komut, ...s.argumanlar].join(" "))}</code></div>
+          <div class="alt mc-araclar">${Object.keys(s.ortam).length ? `ortam: ${kacir(Object.keys(s.ortam).join(", "))} (gizli) · ` : ""}Araçları görmek için Bağlan.</div></div>
+        <button class="btn" data-is="test">Bağlan</button><button class="btn" data-is="ac">${s.aktif ? "Kapat" : "Aç"}</button><button class="btn tehlike" data-is="sil">Sil</button></div>`).join("")
+        || '<div class="ayar-not">Henüz bağlayıcı yok.</div>';
+      $$("[data-mc]", kap).forEach((kart) => {
+        const ad = kart.dataset.mc;
+        const s = sunucular.find((x) => x.ad === ad);
+        $$("[data-is]", kart).forEach((b) => {
+          b.onclick = async () => {
+            try {
+              if (b.dataset.is === "test") {
+                b.disabled = true;
+                const t = await api(`/api/mcp/${ad}/test`, { method: "POST" });
+                const alan = $(".mc-araclar", kart);
+                alan.innerHTML = t.araclar.map((a) => `<label class="onay"><input type="checkbox" data-arac="${kacir(a)}" ${s.izinli_araclar.includes(a) ? "checked" : ""}> ${kacir(a)}</label>`).join(" ")
+                  + '<div class="soluk kucuk">İşaretli araçlar onaysız çalışır (yalnız okuma yapan araçları işaretle).</div>';
+                $$("[data-arac]", alan).forEach((c) => {
+                  c.onchange = async () => {
+                    const izinli = $$("[data-arac]:checked", alan).map((x) => x.dataset.arac);
+                    try { await api(`/api/mcp/${ad}`, { method: "PUT", govde: { izinli_araclar: izinli } }); s.izinli_araclar = izinli; } catch (err) { bildir(err.message, "hata"); }
+                  };
+                });
+                b.disabled = false;
+                return;
+              }
+              if (b.dataset.is === "sil") {
+                if (!(await onayla("Bağlayıcıyı sil", `${ad} silinsin mi?`, { evet: "Sil", tehlike: true }))) return;
+                await api(`/api/mcp/${ad}`, { method: "DELETE" });
+              } else {
+                await api(`/api/mcp/${ad}`, { method: "PUT", govde: { aktif: !s.aktif } });
+              }
+              mcpCiz();
+            } catch (err) { b.disabled = false; bildir(err.message, "hata"); }
+          };
+        });
+      });
+    } catch (err) { kap.innerHTML = `<span class="rozet kirmizi">hata</span> ${kacir(err.message)}`; }
+  };
+  $("#mc-ekle", govde).onclick = async () => {
+    const d = (id) => $(id, govde).value.trim();
+    const ortam = Object.fromEntries(d("#mc-ortam").split(",").map((x) => x.trim()).filter((x) => x.includes("=")).map((x) => [x.slice(0, x.indexOf("=")).trim(), x.slice(x.indexOf("=") + 1).trim()]));
+    try {
+      await api("/api/mcp", { method: "POST", govde: { ad: d("#mc-ad"), komut: d("#mc-komut"), argumanlar: d("#mc-arg").split(/\s+/).filter(Boolean), ortam } });
+      ["#mc-ad", "#mc-komut", "#mc-arg", "#mc-ortam"].forEach((x) => { $(x, govde).value = ""; });
+      mcpCiz();
+    } catch (err) { bildir(err.message, "hata"); }
+  };
+  mcpCiz();
 
   const modelleriCiz = () => {
     $("#ay-modeller", govde).innerHTML = modelKartlari($("#ay-ara", govde).value, $("#ay-indirilen", govde).checked);

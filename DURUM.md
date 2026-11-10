@@ -106,7 +106,9 @@ Python 3.12 + FastAPI + pywebview; arayuz vanilla JS. Paketleme: PORTABLE (kulla
       mcp__<sunucu>__<arac> ad ayirma, bozuk arac/sema elenir, kopmada yeniden baglanma, 30 sn zaman asimi;
       sirlar backend'de (disari ****), cikti veri olarak + maskeli; her cagri izin motorundan (izinli arac=oku,
       digerleri dis=her zaman onay). /api/mcp CRUD+test. tests/test_a7_mcp.py (gercek stdio test sunucusu).
-- [ ] A7 kalan: streamable HTTP + OAuth, resources/prompts, MCP arayuzu (Ozellestir), plugin manifest/
+- [x] MCP arayuzu: Ayarlar > Baglayicilar (Ozellestir'de sekme, /mcp): ekle, baglan, araclari gor, onaysiz
+      calisacak araclari isaretle, ac/kapat, sil; ortam sirlari arayuzde gorunmez (tarayicida dogrulandi).
+- [ ] A7 kalan: streamable HTTP + OAuth, resources/prompts, plugin manifest/
       karantina/surum/geri alma, katalog, uzanti API'si, kurumsal politika  <- SIRADAKI
 - 2026-11-10 (16): A6 bitti (hooks + slash + hook UI; tarayicida dogrulandi). DIKKAT: ayni dalda paralel
   bir oturum A6.1/A6.2 commit'ledi (14da54a, 1c791d4); benim skill commit'im (81b748a) onlarla ust uste.

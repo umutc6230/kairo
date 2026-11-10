@@ -99,13 +99,13 @@ async function oturumlariYenile() {
 // Claude Code Desktop gibi: ayri ozellik sayfasi yok. Ozellestir = skill/talimat + modeller
 // (ayni gorunumde sekme), hafiza/hook/AI ayarlari Ayarlar penceresinde.
 function ozellestirSekmeleri() {
-  const sekmeler = [["skiller", "Skill'ler ve talimatlar"], ["modeller", "Modeller"], ["hafiza", "Hafıza"], ["hooks", "Hook'lar"]];
+  const sekmeler = [["skiller", "Skill'ler ve talimatlar"], ["modeller", "Modeller"], ["mcp", "Bağlayıcılar"], ["hafiza", "Hafıza"], ["hooks", "Hook'lar"]];
   for (const ad of ["skiller", "modeller"]) {
     const ic = document.querySelector(`#g-${ad} .sayfa-ic`);
     if (!ic || ic.querySelector(".ozellestir-sekmeler")) continue;
     const bar = el(`<div class="sekmeler ozellestir-sekmeler" role="tablist">${sekmeler.map(([k, m]) => `<button class="sekme ${k === ad ? "aktif" : ""}" role="tab" aria-selected="${k === ad}" data-oz="${k}">${kacir(m)}</button>`).join("")}</div>`);
     bar.querySelectorAll("[data-oz]").forEach((b) => {
-      b.onclick = () => (["hafiza", "hooks"].includes(b.dataset.oz) ? ayarlarAc(b.dataset.oz) : git({ tur: b.dataset.oz }));
+      b.onclick = () => (["mcp", "hafiza", "hooks"].includes(b.dataset.oz) ? ayarlarAc(b.dataset.oz) : git({ tur: b.dataset.oz }));
     });
     ic.prepend(bar);
   }
