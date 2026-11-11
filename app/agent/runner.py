@@ -87,6 +87,7 @@ class Butce(BaseModel):
     max_token: int = Field(default=2_000_000, ge=1000, le=20_000_000)
     max_ayni_hata: int = Field(default=2, ge=1, le=10)
     max_ilerlemesiz: int = Field(default=3, ge=1, le=10)
+    max_ardisik_ret: int = Field(default=6, ge=2, le=50)  # A13: ret dongusu butceyi yemesin
 
 
 class Kullanim(BaseModel):
@@ -213,6 +214,13 @@ Kurallar:
 - Dosyayi degistirmeden once oku; yama icin beklenen_hash kullan.
 - Degisiklikten sonra testi/komutu calistirip sonucu kontrol et.
 - Bir cagri reddedilirse AYNISINI tekrarlama; farkli bir yol planla.
+- Soru/inceleme gorevinde cevabi yalniz OKUDUGUN koddan cikar; istenen her bilgiyi (dosya yolu,
+  fonksiyon adi, deger) tek tek karsila. Yalniz istenenleri yaz; istenmeyen/eslesmeyen ogeleri
+  listeye katma.
+- Bir dosya yazdiysan bitirmeden once onu tekrar oku ve hedefteki her maddeyi karsiladigini kontrol
+  et; bu okuma kanitindir. Kod degistirdiysen testi/komutu tekrar calistir.
+- Projede test yoksa degisikligi yine de CALISTIRARAK dogrula (or. kucuk bir betikle import edip
+  ornek girdilerle sonucu yazdir); hedefteki ornek degerleri birebir kontrol et.
 - Bitince gorevi_bitir'i, hedefi kanitlayan basarili adim numaralariyla cagir.
 - Kullaniciya kisa yaz: ne yaptin, siradaki adim, varsa engel. Uzun aciklama yapma."""
 
@@ -494,6 +502,12 @@ class AgentRunner:
             return f"Sure butcesi doldu ({b.max_sure_sn} sn)."
         if k.token >= b.max_token:
             return f"Token butcesi doldu ({b.max_token})."
+        biten = [a for a in run.adimlar if a.arac not in META
+                 and a.durum not in (AdimDurum.sirada, AdimDurum.onay_bekliyor)]  # fmt: skip
+        son = biten[-b.max_ardisik_ret :]
+        if len(son) == b.max_ardisik_ret and all(a.durum is AdimDurum.reddedildi for a in son):
+            return (f"Ardisik {b.max_ardisik_ret} arac cagrisi izin nedeniyle reddedildi; gorev bu "
+                    "izinlerle yapilamiyor. Izinleri/proje kapsamini kontrol edin.")  # fmt: skip
         return ""
 
     async def _dongu(self, run_id: str) -> None:

@@ -139,8 +139,11 @@ class DosyaAraclari:
 
     def __init__(self, kokler: Sequence[Path] | None = None) -> None:
         self.kokler = [Path(k) for k in (kokler if kokler is not None else varsayilan_kokler())]
+        self.projeli = kokler is not None  # proje acik: varsayilan hedef proje koku
 
     def _coz(self, ham: str | None, *, varsayilan: str = "masaustu") -> Path:
+        if not (ham or "").strip() and self.projeli and self.kokler:
+            varsayilan = str(self.kokler[0])  # A13: bos klasor Masaustu'ne degil projeye gider
         temiz = ham_dogrula(ham or varsayilan)
         hedef = takma_ad(temiz)
         if hedef is None:

@@ -38,9 +38,52 @@ ONAY_SURESI_SN = 300  # onay 5 dakika gecerli; islem degisirse zaten gecersiz
 
 GIZLI_KLASORLER = {".ssh", ".gnupg", ".aws", ".azure", ".kube", ".docker", ".password-store"}
 GIZLI_AD = re.compile(
-    r"^\.env|\.pem$|\.key$|\.pfx$|\.p12$|^id_(rsa|ed25519|ecdsa|dsa)|credential|password|parola|"
+    r"^\.env|\.pem$|\.key$|\.pfx$|\.p12$|^id_(rsa|ed25519|ecdsa|dsa)|"
     r"^login data$|^cookies$|^web data$|\.kdbx$",
     re.I,
+)
+# Ad kelimesiyle sir supheli DOSYALAR (credentials.json, passwords.txt). Kaynak kod dosyalari ve
+# KLASORLER bu kurala girmez: `parola.py`, `password_reset/` ya da adi 'parola' gecen bir proje
+# kokunun okunamamasi ajani kor birakiyordu (A13 bulgusu). Icerikteki sirlar ayrica maskelenir.
+GIZLI_KELIME = re.compile(r"credential|password|passwd|parola|secret", re.I)
+KOD_UZANTILARI = frozenset(
+    [
+        ".py",
+        ".pyi",
+        ".ts",
+        ".tsx",
+        ".js",
+        ".jsx",
+        ".mjs",
+        ".cjs",
+        ".cs",
+        ".java",
+        ".kt",
+        ".go",
+        ".rs",
+        ".rb",
+        ".php",
+        ".swift",
+        ".c",
+        ".cc",
+        ".cpp",
+        ".h",
+        ".hpp",
+        ".vue",
+        ".svelte",
+        ".html",
+        ".css",
+        ".scss",
+        ".md",
+        ".rst",
+        ".sql",
+        ".sh",
+        ".ps1",
+        ".bat",
+        ".lua",
+        ".dart",
+        ".scala",
+    ]
 )
 TARAYICI_PROFILI = re.compile(r"(Chrome|Edge|Firefox|Opera|Brave)[\\/].*(User Data|Profiles)", re.I)
 # Uygulamanin kendi sirlari ve ajan arac yapilandirmasi: model bunlari okuyamaz
@@ -146,7 +189,11 @@ def hassas_mi(p: Path) -> bool:
         return True
     if parcalar & {k.lower() for k in KORUMALI_KLASORLER}:
         return True
-    return bool(GIZLI_AD.search(p.name) or TARAYICI_PROFILI.search(str(p)))
+    if GIZLI_AD.search(p.name) or TARAYICI_PROFILI.search(str(p)):
+        return True
+    if GIZLI_KELIME.search(p.name):
+        return p.suffix.lower() not in KOD_UZANTILARI and not p.is_dir()
+    return False
 
 
 def yerel_host_mu(host: str | None) -> bool:

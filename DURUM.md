@@ -228,8 +228,17 @@ Python 3.12 + FastAPI + pywebview; arayuz vanilla JS. Paketleme: PORTABLE (kulla
             Harness BULGULARI: onay sonrasi 'devam' yarisi; claude.cmd tirnak hatasi (exe dogrudan);
             test EKLEYEN ajan haksiz cezalaniyordu -> korunan testler orijinaline geri yuklenir;
             saglayici kotasi 'olculemedi' olarak ayrilir. Tum olculen kosular sayilir (iyi secilmez).
-      - [ ] Siradaki: kesif/review + yanlis basari beyani iyilestirmesi; ayni guclu modelle yerel olcum
-            (urun payini ayirmak icin); sonra portable paketleme  <- SIRADAKI
+      - [x] Iyilestirme (kullanici: 'eksik yuzdeleri gelistir, Claude Code ile ayni olacak'). Testler/izinler
+            GEVSETILMEDI. URUN HATALARI: (1) hassas dosya filtresi 'parola/password' kelimesini klasor ve kaynak
+            kod adlarinda da ariyordu: adi 'parola' gecen PROJE KOKU tamamen okunamiyordu -> kelime kurali yalniz
+            kod-disi dosyalara (credentials.json, passwords.txt; .env/anahtarlar her zaman gizli);
+            (2) dosya_ara bos klasorde Masaustu'nu ariyordu -> proje acikken proje koku; (3) ardisik 6 izin
+            reddinde gorev durur (40 adimlik ret dongusu vardi); (4) sistem istemi: cevabi yalniz okunan
+            koddan cikar, yazilan dosyayi geri okuyup dogrula, test yoksa calistirarak dogrula.
+            OLCUM HATASI: review-ts-kullanilmayan kontrolu dogru cevabi aciklama satiri yuzunden reddediyordu
+            -> yalniz liste maddeleri sayilir (Claude Code icin de ayni).
+            Yeniden olcum (ayni model): kesif 3/12 -> 12/12, todo-filtre 0/3 -> 3/3, tekrar-dene 0/3 (model).
+      - [ ] Tam yeniden olcum 30x3 (yeni surum) + KARSILASTIRMA v2  <- SIRADAKI
 - 2026-11-10 (16): A6 bitti (hooks + slash + hook UI; tarayicida dogrulandi). DIKKAT: ayni dalda paralel
   bir oturum A6.1/A6.2 commit'ledi (14da54a, 1c791d4); benim skill commit'im (81b748a) onlarla ust uste.
   399 test geciyor.

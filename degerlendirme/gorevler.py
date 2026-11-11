@@ -786,8 +786,12 @@ gorev(
     korunan=list(_KULLANILMAYAN),
     gizli={"_gizli/k.py": d("""
         import pathlib, sys
+        import re
         c = pathlib.Path("KULLANILMAYAN.md").read_text(encoding="utf-8")
-        ok = "eskiFormat" in c and "yedekAl" in c and "formatla" not in c.replace("eskiFormat", "") and "geriYukle" not in c
+        # yalniz LISTE maddeleri sayilir (aciklama satirlarinda kullanilanlarin anilmasi serbest)
+        maddeler = [m for m in re.findall(r"^\\s*(?:[-*+]|\\d+[.)])\\s+(.*)$", c, re.M)]
+        adlar = {a for m in maddeler for a in re.findall(r"[A-Za-z_]\\w*", m)}
+        ok = {"eskiFormat", "yedekAl"} <= adlar and not ({"formatla", "geriYukle"} & adlar)
         sys.exit(0 if ok else 1)
     """)},
     kontroller=[{"argv": ["{py}", "_gizli/k.py"]}],
