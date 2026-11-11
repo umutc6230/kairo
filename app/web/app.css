@@ -519,3 +519,6 @@ pre.duz { white-space: pre-wrap; font-family: var(--mono); font-size: 13px; marg
   .alt-sol, .alt-sag { min-width: 0; flex-wrap: wrap; }
   .alt-sol > *, .alt-sag > * { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 }
+.yan-mesajlar { display: flex; flex-direction: column; gap: 10px; }
+.yan-k { align-self: flex-end; background: var(--yuzey2); padding: 6px 12px; border-radius: 14px; max-width: 85%; white-space: pre-wrap; }
+.yan-a { font-size: 13.5px; }

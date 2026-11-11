@@ -2,7 +2,54 @@
 // Her biri ust cubuktaki dugmeyle acilip kapanir; ayni anda birden fazlasi ustuste durabilir.
 import { diffHtml } from "./inceleme.js";
 import { kacir } from "./md.js";
-import { $, $$, api, bildir } from "./ortak.js";
+import { kacir as _k, md } from "./md.js";
+import { $, $$, api, bildir, sseOku } from "./ortak.js";
+
+// ---- yan sohbet (Claude Desktop "Side chat"): ayri oturum, ana sohbete karismaz ----
+let yanOturum = null;
+let yanAkis = null;
+async function yanGonder(metin) {
+  const kap = $("#yan-mesajlar");
+  kap.insertAdjacentHTML("beforeend", `<div class="yan-k">${_k(metin)}</div>`);
+  const cevap = document.createElement("div");
+  cevap.className = "yan-a md";
+  cevap.textContent = "…";
+  kap.append(cevap);
+  let yazi = "";
+  try {
+    if (!yanOturum) yanOturum = (await api("/api/oturumlar", { method: "POST" })).id;
+    yanAkis = new AbortController();
+    for await (const o of sseOku(`/api/oturumlar/${yanOturum}/mesaj`, { metin, ekler: [] }, yanAkis.signal)) {
+      if (o.tur === "parca") { yazi += o.metin; cevap.innerHTML = md(yazi); }
+      else if (o.tur === "hata") cevap.textContent = o.mesaj;
+      else if (o.tur === "durum" && !yazi) cevap.textContent = o.metin;
+      kap.scrollTop = kap.scrollHeight;
+    }
+  } catch (e) { cevap.textContent = e.message; }
+  yanAkis = null;
+}
+
+// ---- plan paneli: calisan (ya da son) ajan gorevinin plani ----
+let planZaman = null;
+async function planYenile() {
+  clearTimeout(planZaman);
+  if ($('[data-panel="plan"]').hidden) return;
+  const g = $("#plan-govde");
+  try {
+    const { gorevler } = await api("/api/gorevler");
+    const r0 = gorevler.find((x) => x.durum === "calisiyor") || gorevler[0];
+    if (!r0) { g.innerHTML = '<div class="soluk">Henüz ajan görevi yok. Proje açıp bir görev verdiğinde planı burada görünür.</div>'; }
+    else {
+      const r = await api(`/api/gorevler/${r0.id}`);
+      $("#pl-gorev").textContent = (r.hedef || "").slice(0, 60);
+      const isaret = { tamam: "✓", suruyor: "▸", atlandi: "–", bekliyor: "○" };
+      g.innerHTML = (r.plan || []).length
+        ? `<ul class="plan-liste">${r.plan.map((p) => `<li class="plan-${kacir(p.durum)}">${isaret[p.durum] || "○"} ${kacir(p.baslik)}</li>`).join("")}</ul><div class="soluk kucuk">Durum: ${kacir(r.durum)}</div>`
+        : `<div class="soluk">Bu görev henüz plan yazmadı (durum: ${kacir(r.durum)}).</div>`;
+    }
+  } catch (e) { g.innerHTML = `<div class="soluk">${kacir(e.message)}</div>`; }
+  planZaman = setTimeout(planYenile, 3000);
+}
 
 const ACIK = "kairo.dock";
 let tmIs = null; // calisan terminal isi
@@ -27,6 +74,8 @@ export function dockAcKapa(ad, zorla = null) {
   ciz(acik);
   if (ac && ad === "degisiklik") degisiklikYenile();
   if (ac && ad === "terminal") setTimeout(() => $("#tm-girdi").focus(), 0);
+  if (ac && ad === "yan") setTimeout(() => $("#yan-girdi").focus(), 0);
+  if (ac && ad === "plan") planYenile();
 }
 
 // ---- terminal ----
@@ -105,6 +154,13 @@ export function dockKur() {
   $("#tr-adres").onkeydown = (e) => { if (e.key === "Enter") trAc(e.target.value); };
   $("#tr-yenile").onclick = () => { const f = $("#tr-cerceve"); if (f.src) f.src = f.src; };
   $("#tr-geri").onclick = () => { try { $("#tr-cerceve").contentWindow.history.back(); } catch { /* farkli origin */ } };
-  document.addEventListener("keydown", (e) => { if (e.ctrlKey && e.key === "`") { e.preventDefault(); dockAcKapa("terminal"); } });
+  document.addEventListener("keydown", (e) => {
+    if (e.ctrlKey && e.key === "`") { e.preventDefault(); dockAcKapa("terminal"); }
+    if (e.ctrlKey && e.key === ";") { e.preventDefault(); dockAcKapa("yan"); }
+  });
+  $("#yan-girdi").onkeydown = (e) => {
+    if (e.key === "Enter" && e.target.value.trim() && !yanAkis) { yanGonder(e.target.value.trim()); e.target.value = ""; }
+  };
+  $("#yan-yeni").onclick = () => { yanAkis?.abort(); yanOturum = null; $("#yan-mesajlar").innerHTML = ""; };
   ciz(acikPaneller());
 }

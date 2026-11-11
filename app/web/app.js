@@ -11,7 +11,7 @@ import { skillSayfasiYukle, skillerKur } from "./skiller.js";
 import { gorevBildirimIzle, gorevSayfasiYukle, gorevlerKur } from "./gorevler.js";
 import { dikteDurumuYenile, dikteKur } from "./dikte.js";
 import { baglamYenile, sagPanelKur } from "./sagpanel.js";
-import { dockKur, degisiklikYenile } from "./dock.js";
+import { dockAcKapa, dockKur, degisiklikYenile } from "./dock.js";
 import { gorunumUygula, kisayolEslesir } from "./ayarlar2.js";
 import { rutinleriYukle, rutinlerKur } from "./rutinler.js";
 import { ajanBloklariniCiz, ajanliOturum, akisVar, durdur, mesajlariCiz, sohbetKur, yeniSohbetEkrani } from "./sohbet.js";
@@ -366,6 +366,8 @@ async function baslat() {
   document.addEventListener("oturumlar-degisti", degisiklikYenile);
   $("#baslik-menu").onclick = (e) => baslikMenusu(e.currentTarget);
   $("#btn-daha").onclick = (e) => menuAc(e.currentTarget, [
+    { metin: "Yan sohbet (Ctrl+;)", ikon: "liste", eylem: () => dockAcKapa("yan", true) },
+    { metin: "Plan", ikon: "liste", eylem: () => dockAcKapa("plan", true) },
     { metin: "Arka plan işleri", ikon: "terminal", eylem: () => arkaPlanIsleri() },
     { metin: "Ajan görevleri", ikon: "liste", eylem: () => git({ tur: "gorevler" }) },
     { metin: uyanikAcik ? "Uyanık tutmayı kapat" : "Bilgisayarı uyanık tut", ikon: "guc", eylem: () => uyanikDegistir() },

@@ -26,6 +26,7 @@ export const EK_PANELLER = `
 <div class="modal-govde" data-panel="masaustu" hidden>
   ${satir("Sürüm", "", `<span id="ms-surum" class="soluk"></span>`)}
   ${satir("Oturum açılınca başlat", "Windows Başlangıç klasörüne kısayol koyar; kapatınca silinir.", anahtar("baslangicta_ac"))}
+  ${satir("Sistem tepsisi", "Kapat düğmesi Kairo'yu tepsiye küçültür; rutinler çalışmaya devam eder. Yeniden başlatınca geçerli olur.", anahtar("sistem_tepsisi"))}
   ${satir("Hızlı açma kısayolu", "Kairo'yu her yerden öne getirir. Ör. Ctrl+Alt+Space (boş: kapalı).", `<input class="alan" data-ayar="hizli_kisayol" style="max-width:170px">`)}
   ${satir("Dikte kısayolu", "Sohbette mikrofonu açar/kapatır.", `<input class="alan" data-ayar="dikte_kisayolu" style="max-width:170px">`)}
   <div class="ayar-not" id="ms-hata" hidden></div>
@@ -147,7 +148,12 @@ export async function baglayiciIceAktarCiz(govde, yenile) {
             if (!t) return;
             veri.basliklar = { Authorization: `Bearer ${t.trim()}` };
           }
-          try { await api("/api/mcp", { method: "POST", govde: veri }); bildir(`${d.baslik} eklendi.`, "basari", 1500); ciz(); yenile(); } catch (e) { bildir(e.message, "hata"); }
+          try {
+            await api("/api/mcp", { method: "POST", govde: veri });
+            if (d.oauth) { await api(`/api/mcp/${d.ad}/oauth`, { method: "POST" }); bildir(`${d.baslik} eklendi; tarayıcıda giriş yap.`, "bilgi", 5000); }
+            else bildir(`${d.baslik} eklendi.`, "basari", 1500);
+            ciz(); yenile();
+          } catch (e) { bildir(e.message, "hata"); }
         };
       });
     } catch (e) { kap.innerHTML = `<div class="soluk kucuk">${kacir(e.message)}</div>`; }

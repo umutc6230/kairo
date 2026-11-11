@@ -23,6 +23,12 @@ AD_TEMIZ = re.compile(r"[^a-z0-9_-]+")
 DIZIN = [
     {"ad": "context7", "baslik": "Context7", "aciklama": "Kutuphanelerin guncel dokumantasyonu.",
      "url": "https://mcp.context7.com/mcp"},
+    {"ad": "linear", "baslik": "Linear", "aciklama": "Issue ve proje takibi (hesabinla giris).",
+     "url": "https://mcp.linear.app/mcp", "oauth": True},
+    {"ad": "notion", "baslik": "Notion", "aciklama": "Sayfa ve veritabanlarin (hesabinla giris).",
+     "url": "https://mcp.notion.com/mcp", "oauth": True},
+    {"ad": "sentry", "baslik": "Sentry", "aciklama": "Hata kayitlari ve olaylar (hesabinla giris).",
+     "url": "https://mcp.sentry.dev/mcp", "oauth": True},
     {"ad": "github", "baslik": "GitHub", "aciklama": "Issue, PR, depo arama ve yonetimi.",
      "url": "https://api.githubcopilot.com/mcp/", "baslik_iste": "GitHub token (ghp_...)"},
     {"ad": "playwright", "baslik": "Playwright", "aciklama": "Tarayici otomasyonu ve test.",

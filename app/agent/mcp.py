@@ -25,8 +25,10 @@ from typing import Any
 from urllib.parse import urlsplit
 
 import httpx
+from loguru import logger
 from pydantic import BaseModel, Field, model_validator
 
+from app.agent import mcp_oauth
 from app.agent.dosyalar import ortam_allowlist
 from app.agent.policy import maskele
 from app.exceptions import Bulunamadi, UygulamaHatasi
@@ -47,6 +49,7 @@ class McpSunucu(BaseModel):
     basliklar: dict[str, str] = {}  # HTTP kimlik (or. Authorization): sir, disari maskeli
     izinli_araclar: list[str] = []  # onaysiz (okuma gibi) calisacak araclar
     aktif: bool = True
+    oauth: dict = {}  # OAuth girisi (mcp_oauth): token, yenileme, bitis; disari GITMEZ
 
     @model_validator(mode="after")
     def _tasima(self) -> McpSunucu:
@@ -65,6 +68,7 @@ class McpSunucu(BaseModel):
         d = self.model_dump()
         d["ortam"] = {k: "****" for k in self.ortam}
         d["basliklar"] = {k: "****" for k in self.basliklar}
+        d["oauth"] = mcp_oauth.ozet(self.oauth)
         d["uzak"] = bool(self.url)  # arayuz: veri bu bilgisayardan disari gider
         return d
 
@@ -99,7 +103,8 @@ class _HttpBaglanti:
             raise McpHatasi(f"'{self.s.ad}' sunucusuna ulasilamadi: {type(e).__name__}") from e
         if r.status_code == 401:
             raise McpHatasi(
-                f"'{self.s.ad}' kimlik dogrulamasi basarisiz (401); anahtari yenileyin."
+                f"'{self.s.ad}' kimlik dogrulamasi gerekiyor (401): Baglayicilar'da 'Giris yap' "
+                "ile OAuth girisi yapin ya da anahtari yenileyin."
             )
         if r.status_code == 404 and self.oturum:
             self.oturum, self.hazir = "", False
@@ -384,7 +389,28 @@ class McpYoneticisi:
         for ad in list(self._baglantilar):
             self._kapat(ad)
 
+    def oauth_kaydet(self, ad: str, oauth: dict) -> None:
+        """Giris ya da yenileme sonrasi: token Authorization basligina yazilir."""
+        sunucular = self.liste()
+        for i, s in enumerate(sunucular):
+            if s.ad == ad:
+                baslik = {**s.basliklar, "Authorization": f"Bearer {oauth['erisim']}"}
+                sunucular[i] = s.model_copy(update={"oauth": oauth, "basliklar": baslik})
+                self._yaz(sunucular)
+                self._kapat(ad)
+                return
+        raise Bulunamadi("MCP sunucusu bulunamadi.")
+
     def _baglanti(self, s: McpSunucu) -> _Baglanti:
+        if s.oauth:  # suresi dolmak uzereyse yenile (basarisizsa eski tokenla dener, 401 doner)
+            try:
+                with httpx.Client(timeout=mcp_oauth.ZAMAN, transport=self.transport) as c:
+                    yeni = mcp_oauth.gerekirse_yenile(s.oauth, c)
+                if yeni:
+                    self.oauth_kaydet(s.ad, yeni)
+                    s = next(x for x in self.liste() if x.ad == s.ad)
+            except (UygulamaHatasi, httpx.HTTPError) as e:
+                logger.warning("MCP OAuth yenilenemedi ({}): {}", s.ad, e)
         b = self._baglantilar.get(s.ad)
         if b is None or b.s != s:
             if b:

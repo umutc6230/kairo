@@ -7,6 +7,7 @@ import json
 import os
 import secrets
 import time
+import webbrowser
 from collections.abc import AsyncIterator, Callable
 from contextlib import asynccontextmanager
 from datetime import UTC, datetime
@@ -14,6 +15,7 @@ from pathlib import Path
 from typing import Any
 from urllib.parse import urlsplit
 
+import httpx
 from fastapi import FastAPI, Request, UploadFile
 from fastapi.responses import FileResponse, JSONResponse, Response, StreamingResponse
 from fastapi.staticfiles import StaticFiles
@@ -22,7 +24,7 @@ from pydantic import BaseModel, Field, ValidationError
 
 from app import URUN_ADI, URUN_SAHIBI, URUN_SAHIBI_GITHUB, URUN_SAHIBI_X, __version__
 from app.agent import akis as akis_mod
-from app.agent import mcp_ice
+from app.agent import mcp_ice, mcp_oauth
 from app.agent import review as rv
 from app.agent import worktree as wt
 from app.agent.akis import Akis, AkisDeposu
@@ -433,6 +435,7 @@ def uygulama_olustur(
         korunan = (
             yol.startswith("/api") and yol != "/api/bilgi"
             and not yol.startswith("/api/webhook/")
+            and yol != "/api/mcp/oauth/geri"  # tek kullanimlik state ile korunur
         )  # fmt: skip
         if korunan and istek.headers.get(OTURUM_BASLIGI) != oturum_anahtari:
             return JSONResponse(
@@ -837,6 +840,51 @@ def uygulama_olustur(
         return {**p, "csp": ONIZLEME_CSP}
 
     # ---- MCP (A7): sunucular yalniz oturumlu arayuzden; sirlar maskeli doner ----
+    oauth_bekleyen: dict[str, dict] = {}  # state -> {ad, ...}; 10 dk gecerli, tek kullanimlik
+
+    @app.post("/api/mcp/{ad}/oauth")
+    async def mcp_oauth_baslat(ad: str, istek: Request) -> dict:
+        s = next((x for x in mcp.liste() if x.ad == ad), None)
+        if s is None or not s.url:
+            raise UygulamaHatasi("OAuth girisi yalniz uzak (URL) baglayicilar icin.")
+        geri = str(istek.base_url).rstrip("/") + "/api/mcp/oauth/geri"
+
+        def _baslat() -> tuple[str, dict]:
+            with httpx.Client(timeout=mcp_oauth.ZAMAN) as c:
+                return mcp_oauth.baslat(s.url, geri, c, s.oauth.get("client_id", ""))
+
+        adres, b = await asyncio.to_thread(_baslat)
+        simdi = time.time()
+        for k in [k for k, v in oauth_bekleyen.items() if simdi - v["zaman"] > 600]:
+            oauth_bekleyen.pop(k)
+        oauth_bekleyen[b["durum"]] = b | {"ad": ad}
+        await asyncio.to_thread(webbrowser.open, adres)
+        return {"adres": adres}
+
+    @app.get("/api/mcp/oauth/geri")
+    async def mcp_oauth_geri(state: str = "", code: str = "", error: str = "") -> Response:
+        b = oauth_bekleyen.pop(state, None)
+        if b is None or time.time() - b["zaman"] > 600:
+            sonuc = "Gecersiz ya da suresi dolmus giris istegi."
+        elif error or not code:
+            sonuc = f"Giris iptal edildi: {error or 'kod yok'}"
+        else:
+            try:
+
+                def _tamamla() -> dict:
+                    with httpx.Client(timeout=mcp_oauth.ZAMAN) as c:
+                        return mcp_oauth.tamamla(b, code, c)
+
+                mcp.oauth_kaydet(b["ad"], await asyncio.to_thread(_tamamla))
+                sonuc = f"'{b['ad']}' baglayicisina giris yapildi. Bu sekmeyi kapatabilirsin."
+            except UygulamaHatasi as e:
+                sonuc = str(e)
+        govde = (
+            "<!doctype html><meta charset=utf-8><title>Kairo</title>"
+            f"<body style='font:16px system-ui;padding:40px'>{sonuc.replace('<', '&lt;')}</body>"
+        )
+        return Response(govde, media_type="text/html; charset=utf-8")
+
     @app.get("/api/mcp/ice-aktar")
     async def mcp_bulunanlar() -> dict:
         """Claude Code / Claude Desktop'taki baglayicilar + hazir dizin (yalniz okunur)."""

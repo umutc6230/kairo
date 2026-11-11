@@ -19,6 +19,7 @@ from loguru import logger
 from app import URUN_ADI, URUN_SAHIBI, URUN_SAHIBI_GITHUB, URUN_SAHIBI_X, __version__
 from app.api import uygulama_olustur
 from app.config import OrtamAyarlari, veri_dizini
+from app.services.ayarlar import AyarDeposu
 
 YARDIM_SONU = f"Urun sahibi: {URUN_SAHIBI}  |  X: {URUN_SAHIBI_X}  |  GitHub: {URUN_SAHIBI_GITHUB}"
 
@@ -37,6 +38,7 @@ class PencereApi:
         # sonsuz ozyinelemeye girip GIL'i tutar ve arka uc sunucusu yanit veremez.
         self._pencere = None
         self._buyuk = False
+        self._tepside = False  # True: kapat dugmesi pencereyi gizler, uygulama tepside surer
 
     def kucult(self) -> None:
         self._pencere.minimize()
@@ -50,7 +52,10 @@ class PencereApi:
         return self._buyuk
 
     def kapat(self) -> None:
-        self._pencere.destroy()
+        if self._tepside:
+            self._pencere.hide()
+        else:
+            self._pencere.destroy()
 
 
 IKON = Path(__file__).resolve().parent / "web" / "kairo.ico"
@@ -189,7 +194,14 @@ def main(argv: list[str] | None = None) -> int:
                 )
 
         fastapi_app.state.one_getir = one_getir
+        if AyarDeposu(dizin).oku().sistem_tepsisi:
+            from app.services.tepsi import Tepsi
+
+            tepsi = Tepsi(URUN_ADI, IKON, one_getir, api._pencere.destroy)
+            api._tepside = tepsi.baslat()
         webview.start(private_mode=False, storage_path=str(dizin / "webview"))
+    if "tepsi" in locals():
+        tepsi.kapat()
     sunucu.should_exit = True  # lifespan kapanisi: kendi baslattigimiz model sunucusunu durdurur
     is_parcacigi.join(timeout=15)
     return 0

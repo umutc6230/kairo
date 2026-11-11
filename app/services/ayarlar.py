@@ -100,6 +100,7 @@ class KullaniciAyarlari(BaseModel):
     bildirim_onay: bool = True  # onay beklerken
     bildirim_zamanlama: bool = True  # rutin bitince / calisamayinca
     baslangicta_ac: bool = False  # Windows oturum acilinca baslat (Baslangic klasoru kisayolu)
+    sistem_tepsisi: bool = True  # kapatinca tepside calismaya devam et
     hizli_kisayol: str = Field(default="Ctrl+Alt+Space", max_length=40)  # her yerden ac
     dikte_kisayolu: str = Field(default="Ctrl+D", max_length=40)
     ayrinti: Literal["normal", "dusunme", "ayrintili"] = "normal"  # sohbet ayrinti duzeyi

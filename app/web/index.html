@@ -260,6 +260,16 @@
         </section>
       </main>
       <section id="dock" class="dock" hidden aria-label="Paneller">
+        <div class="dock-panel" data-panel="yan" hidden>
+          <div class="dock-baslik"><b>Yan sohbet</b><span class="soluk kucuk">ana sohbeti etkilemez</span><span class="dc-bosluk"></span>
+            <button class="ikon-btn" id="yan-yeni" title="Yeni yan sohbet" data-ikon="arti"></button><button class="ikon-btn" data-kapat title="Kapat" data-ikon="x"></button></div>
+          <div class="dock-govde yan-mesajlar" id="yan-mesajlar"></div>
+          <div class="tm-satir"><input class="tm-girdi" id="yan-girdi" placeholder="Hızlı soru sor, Enter" autocomplete="off" style="font-family:var(--font)"></div>
+        </div>
+        <div class="dock-panel" data-panel="plan" hidden>
+          <div class="dock-baslik"><b>Plan</b><span class="soluk kucuk" id="pl-gorev"></span><span class="dc-bosluk"></span><button class="ikon-btn" data-kapat title="Kapat" data-ikon="x"></button></div>
+          <div class="dock-govde" id="plan-govde"></div>
+        </div>
         <div class="dock-panel" data-panel="terminal" hidden>
           <div class="dock-baslik"><b>Terminal</b><span class="soluk kucuk" id="tm-cwd"></span><span class="dc-bosluk"></span>
             <button class="ikon-btn" id="tm-temizle" title="Temizle" data-ikon="cop"></button><button class="ikon-btn" data-kapat title="Kapat" data-ikon="x"></button></div>

@@ -277,8 +277,8 @@ export function ayarlarAc(sekme = "ai") {
       const { sunucular } = await api("/api/mcp");
       kap.innerHTML = sunucular.map((s) => `<div class="secenek-kart ${s.aktif ? "" : "pasif"}" data-mc="${kacir(s.ad)}">
         <div style="flex:1"><div class="ust"><b>${kacir(s.ad)}</b> ${s.uzak ? `<span class="rozet sari" title="Araç çağrılarında veri bu bilgisayardan çıkar">uzak</span> <code class="soluk">${kacir(s.url)}</code>` : `<code class="soluk">${kacir([s.komut, ...s.argumanlar].join(" "))}</code>`}</div>
-          <div class="alt mc-araclar">${Object.keys(s.ortam).length ? `ortam: ${kacir(Object.keys(s.ortam).join(", "))} (gizli) · ` : ""}Araçları görmek için Bağlan.</div></div>
-        <button class="btn" data-is="test">Bağlan</button><button class="btn" data-is="ac">${s.aktif ? "Kapat" : "Aç"}</button><button class="btn tehlike" data-is="sil">Sil</button></div>`).join("")
+          <div class="alt mc-araclar">${s.oauth?.bagli ? "OAuth ile giriş yapıldı · " : ""}${Object.keys(s.ortam).length ? `ortam: ${kacir(Object.keys(s.ortam).join(", "))} (gizli) · ` : ""}Araçları görmek için Bağlan.</div></div>
+        ${s.uzak ? `<button class="btn" data-is="oauth" title="Tarayıcıda hesabınla giriş yap (OAuth)">${s.oauth?.bagli ? "Yeniden giriş" : "Giriş yap"}</button>` : ""}<button class="btn" data-is="test">Bağlan</button><button class="btn" data-is="ac">${s.aktif ? "Kapat" : "Aç"}</button><button class="btn tehlike" data-is="sil">Sil</button></div>`).join("")
         || '<div class="ayar-not">Henüz bağlayıcı yok.</div>';
       $$("[data-mc]", kap).forEach((kart) => {
         const ad = kart.dataset.mc;
@@ -299,6 +299,11 @@ export function ayarlarAc(sekme = "ai") {
                   };
                 });
                 b.disabled = false;
+                return;
+              }
+              if (b.dataset.is === "oauth") {
+                await api(`/api/mcp/${ad}/oauth`, { method: "POST" });
+                bildir("Tarayıcıda giriş sayfası açıldı. Giriş bitince 'Bağlan'a bas.", "bilgi", 5000);
                 return;
               }
               if (b.dataset.is === "sil") {
