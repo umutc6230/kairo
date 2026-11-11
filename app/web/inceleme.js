@@ -14,7 +14,7 @@ const KONUM_TR = {
   satir_diff_disi: ["satır değişikliğin dışında", "sari"],
 };
 
-function diffHtml(metin) {
+export function diffHtml(metin) {
   return metin.split("\n").map((s) => {
     const sinif = s.startsWith("+") && !s.startsWith("+++") ? "diff-arti"
       : s.startsWith("-") && !s.startsWith("---") ? "diff-eksi"

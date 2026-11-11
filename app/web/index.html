@@ -19,8 +19,9 @@
       <div class="baslik-sag">
         <div class="arac-cubugu">
           <button class="ikon-btn" id="btn-sag-panel" title="Oturum paneli" data-ikon="liste"></button>
-          <button class="ikon-btn" id="btn-gorevler" title="Görevler ve zamanlamalar" data-ikon="saat"></button>
-          <button class="ikon-btn" id="btn-artifact" title="Artifact'ler" data-ikon="dosya"></button>
+          <button class="ikon-btn" data-dock="terminal" title="Terminal (Ctrl+`)" data-ikon="terminal"></button>
+          <button class="ikon-btn" data-dock="degisiklik" title="Değişiklikler" data-ikon="diff"></button>
+          <button class="ikon-btn" data-dock="tarayici" title="Tarayıcı" data-ikon="dunya"></button>
           <button class="ikon-btn" id="btn-dosyalar" title="Proje dosyaları" data-ikon="klasor"></button>
           <button class="ikon-btn" id="btn-daha" title="Diğer" data-ikon="daha"></button>
         </div>
@@ -37,6 +38,7 @@
         <nav class="kenar-nav" aria-label="Ana menü">
           <button class="nav-oge" data-git="yeni"><span data-ikon="arti"></span>Yeni</button>
           <button class="nav-oge" data-git="ara"><span data-ikon="ara"></span>Ara</button>
+          <button class="nav-oge" data-git="rutinler"><span data-ikon="saat"></span>Rutinler</button>
           <button class="nav-oge" data-git="artifactler"><span data-ikon="dosya"></span>Artifact'ler</button>
           <button class="nav-oge" data-git="ozellestir"><span data-ikon="sihir"></span>Özelleştir</button>
         </nav>
@@ -213,6 +215,17 @@
           </div>
         </section>
 
+        <section class="gorunum sayfa" id="g-rutinler" hidden>
+          <div class="sayfa-ic genis">
+            <div class="satir"><h1 style="flex:1">Rutinler</h1><button class="btn ana" id="rt-yeni"><span data-ikon="arti"></span>Yeni rutin</button></div>
+            <p class="soluk">Açık projede belirli zamanlarda çalışan ajan görevleri. Yalnız uygulama açıkken tetiklenir.</p>
+            <div id="rt-form" hidden></div>
+            <div id="rt-liste" class="ayar-grup"></div>
+            <h3>Şablonlar</h3>
+            <div id="rt-sablonlar" class="rutin-sablon"></div>
+          </div>
+        </section>
+
         <!-- SKILL'LER VE TALIMATLAR -->
         <section class="gorunum sayfa" id="g-skiller" hidden>
           <div class="sayfa-ic">
@@ -246,6 +259,25 @@
           </div>
         </section>
       </main>
+      <section id="dock" class="dock" hidden aria-label="Paneller">
+        <div class="dock-panel" data-panel="terminal" hidden>
+          <div class="dock-baslik"><b>Terminal</b><span class="soluk kucuk" id="tm-cwd"></span><span class="dc-bosluk"></span>
+            <button class="ikon-btn" id="tm-temizle" title="Temizle" data-ikon="cop"></button><button class="ikon-btn" data-kapat title="Kapat" data-ikon="x"></button></div>
+          <pre class="tm-cikti" id="tm-cikti"></pre>
+          <div class="tm-satir"><span class="soluk">&gt;</span><input class="tm-girdi" id="tm-girdi" placeholder="Komut yaz, Enter (çalışan komuta girdi gönderir)" autocomplete="off" spellcheck="false">
+            <button class="ikon-btn" id="tm-durdur" title="Durdur" data-ikon="durdur" hidden></button></div>
+        </div>
+        <div class="dock-panel" data-panel="degisiklik" hidden>
+          <div class="dock-baslik"><b>Değişiklikler</b><span class="dc-bosluk"></span>
+            <button class="ikon-btn" id="dg-yenile" title="Yenile" data-ikon="yenile"></button><button class="ikon-btn" data-kapat title="Kapat" data-ikon="x"></button></div>
+          <div class="dock-govde" id="dg-govde"></div>
+        </div>
+        <div class="dock-panel" data-panel="tarayici" hidden>
+          <div class="dock-baslik"><button class="ikon-btn" id="tr-geri" title="Geri" data-ikon="sol"></button><button class="ikon-btn" id="tr-yenile" title="Yenile" data-ikon="yenile"></button>
+            <input class="alan tr-adres" id="tr-adres" placeholder="localhost:3000" spellcheck="false"><button class="ikon-btn" data-kapat title="Kapat" data-ikon="x"></button></div>
+          <iframe id="tr-cerceve" class="tr-cerceve" sandbox="allow-scripts allow-forms allow-same-origin allow-popups" referrerpolicy="no-referrer"></iframe>
+        </div>
+      </section>
       <aside id="sag-panel" class="sag-panel" aria-label="Oturum paneli">
         <div class="sp-baslik"><span>Ortam</span></div>
         <div class="sp-satir"><span data-ikon="ekran"></span><span style="flex:1">Bu bilgisayar</span><button class="ikon-btn kucuk-ikon" id="sp-ayar" title="Ayarlar" data-ikon="disli"></button></div>

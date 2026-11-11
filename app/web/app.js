@@ -11,9 +11,11 @@ import { skillSayfasiYukle, skillerKur } from "./skiller.js";
 import { gorevSayfasiYukle, gorevlerKur } from "./gorevler.js";
 import { dikteDurumuYenile, dikteKur } from "./dikte.js";
 import { baglamYenile, sagPanelKur } from "./sagpanel.js";
+import { dockKur, degisiklikYenile } from "./dock.js";
+import { rutinleriYukle, rutinlerKur } from "./rutinler.js";
 import { ajanBloklariniCiz, ajanliOturum, akisVar, durdur, mesajlariCiz, sohbetKur, yeniSohbetEkrani } from "./sohbet.js";
 
-const BASLIKLAR = { karsilastir: "Karşılaştır", ocr: "OCR testi", arac: "Araç testi", paket: "Test paketi", skiller: "Skill'ler ve talimatlar", modeller: "Modeller", gorevler: "Ajan görevleri" };
+const BASLIKLAR = { karsilastir: "Karşılaştır", ocr: "OCR testi", arac: "Araç testi", paket: "Test paketi", skiller: "Skill'ler ve talimatlar", modeller: "Modeller", gorevler: "Ajan görevleri", rutinler: "Rutinler" };
 const gecmis = [];
 let gecmisKonum = -1;
 
@@ -38,10 +40,26 @@ function git(hedef, { kaydetme = false } = {}) {
     gorunumGoster(hedef.tur);
     if (hedef.tur === "skiller") skillSayfasiYukle();
     if (hedef.tur === "gorevler") gorevSayfasiYukle();
+    if (hedef.tur === "rutinler") rutinleriYukle();
     if (hedef.tur === "modeller") modelSayfasiYukle();
   }
   $("#btn-geri").disabled = gecmisKonum <= 0;
   $("#btn-ileri").disabled = gecmisKonum >= gecmis.length - 1;
+}
+
+let uyanikAcik = false;
+api("/api/uyanik").then((r) => { uyanikAcik = r.acik; }).catch(() => {});
+async function uyanikDegistir() {
+  try { uyanikAcik = (await api("/api/uyanik", { method: "PUT", govde: { acik: !uyanikAcik } })).acik; bildir(uyanikAcik ? "Uygulama açıkken bilgisayar uyumayacak." : "Uyanık tutma kapatıldı.", "basari", 1800); } catch (e) { bildir(e.message, "hata"); }
+}
+
+async function arkaPlanIsleri() {
+  try {
+    const { isler } = await api("/api/komutlar");
+    modal({ baslik: "Arka plan işleri", genis: true, dugmeler: [{ metin: "Kapat" }], icerik: isler.length
+      ? isler.map((i) => `<div class="kart"><div class="kart-baslik"><code>${kacir(i.komut)}</code><span class="rozet">${kacir(i.durum)}</span></div><pre class="dosya-gorunum" style="max-height:200px">${kacir(i.cikti.slice(-3000))}</pre></div>`).join("")
+      : '<div class="soluk">Çalışan ya da biten arka plan işi yok.</div>' });
+  } catch (e) { bildir(e.message, "hata"); }
 }
 
 // Claude Desktop gibi: basliga tiklaninca etkin sohbetin menusu
@@ -338,10 +356,15 @@ async function baslat() {
   ozellestirSekmeleri();
   $("#sp-proje").onclick = () => projeAc();
   sagPanelKur({ baglayiciAc: () => ayarlarAc("mcp"), ayarAc: () => ayarlarAc() });
-  $("#btn-gorevler").onclick = () => git({ tur: "gorevler" });
-  $("#btn-artifact").onclick = () => artifactPenceresi();
+  dockKur();
+  rutinlerKur();
+  document.addEventListener("oturumlar-degisti", degisiklikYenile);
   $("#baslik-menu").onclick = (e) => baslikMenusu(e.currentTarget);
   $("#btn-daha").onclick = (e) => menuAc(e.currentTarget, [
+    { metin: "Arka plan işleri", ikon: "terminal", eylem: () => arkaPlanIsleri() },
+    { metin: "Ajan görevleri", ikon: "liste", eylem: () => git({ tur: "gorevler" }) },
+    { metin: uyanikAcik ? "Uyanık tutmayı kapat" : "Bilgisayarı uyanık tut", ikon: "guc", eylem: () => uyanikDegistir() },
+    "ayrac",
     { metin: "Özelleştir (skill, plugin)", ikon: "sihir", eylem: () => git({ tur: "skiller" }) },
     { metin: "Modeller", ikon: "model", eylem: () => git({ tur: "modeller" }) },
     { metin: "Ayarlar", ikon: "disli", eylem: () => ayarlarAc() },

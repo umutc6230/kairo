@@ -442,6 +442,18 @@ pre.duz { white-space: pre-wrap; font-family: var(--mono); font-size: 13px; marg
 .sp-satir svg { width: 16px; height: 16px; flex-shrink: 0; color: var(--soluk); }
 .baglam-cubuk { width: 28px; height: 6px; border-radius: 3px; background: var(--yuzey3); overflow: hidden; display: inline-block; }
 .baglam-cubuk span { display: block; height: 100%; width: 0; background: var(--mavi); }
+.dock { width: 460px; flex: none; border-left: 1px solid var(--cizgi2); display: flex; flex-direction: column; min-height: 0; }
+.dock[hidden] { display: none; }
+.dock-panel { flex: 1; min-height: 0; display: flex; flex-direction: column; border-bottom: 1px solid var(--cizgi2); }
+.dock-panel[hidden] { display: none; }
+.dock-baslik { display: flex; align-items: center; gap: 6px; padding: 8px 10px; font-size: 13px; border-bottom: 1px solid var(--cizgi); }
+.dock-govde { flex: 1; overflow: auto; padding: 10px; font-size: 13px; }
+.tm-cikti { flex: 1; margin: 0; overflow: auto; padding: 10px; font-family: var(--mono); font-size: 12px; white-space: pre-wrap; word-break: break-all; }
+.tm-satir { display: flex; align-items: center; gap: 6px; padding: 6px 10px; border-top: 1px solid var(--cizgi); font-family: var(--mono); }
+.tm-girdi { flex: 1; background: none; border: 0; outline: 0; color: inherit; font: inherit; font-size: 12px; }
+.tr-adres { flex: 1; height: 28px; font-size: 12px; }
+.tr-cerceve { flex: 1; border: 0; background: #fff; width: 100%; }
+.rutin-sablon { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 10px; }
 .durum-cubugu { height: 28px; flex-shrink: 0; display: flex; align-items: center; gap: 12px; padding: 0 12px; border-top: 1px solid var(--cizgi2); font-size: 12px; background: var(--bg); }
 .durum-cubugu .hap { height: 22px; padding: 0 8px; font-size: 12px; }
 .durum-cubugu .dc-bosluk { flex: 1; }

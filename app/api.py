@@ -68,6 +68,7 @@ from app.services.testler import (
     TestServisi,
     ornek_belge,
 )
+from app.services.uyanik import Uyanik
 from app.services.uzantilar import UzantiYoneticisi
 from app.services.yerel_llm import DUSUNME_SECENEKLERI, MODELLER, YerelLLM
 
@@ -1263,6 +1264,21 @@ def uygulama_olustur(
         except ValidationError as e:
             raise UygulamaHatasi(f"Gecersiz zamanlama: {e.errors()[0].get('msg')}") from e
 
+    @app.post("/api/zamanlamalar/{zid}/calistir")
+    async def zamanlama_calistir(zid: str) -> dict:
+        """Rutini simdi calistir (Claude Desktop 'Run now'); projesi acik olmali."""
+        z = next((x for x in zamanlayici.liste() if x.id == zid), None)
+        if z is None:
+            raise UygulamaHatasi("Rutin bulunamadi.")
+        alan = sohbet.projeler.aktif() if sohbet.projeler else None
+        if alan is None or not alan.kokler or Path(alan.kokler[0]) != Path(z.proje_kok):
+            raise UygulamaHatasi(f"Once rutinin projesini acin: {z.proje_kok}")
+        run = await ajan.baslat(
+            f"[rutin: {z.ad}] {z.hedef}", [], Butce(max_adim=z.max_adim),
+            model=ayarlar.oku().aktif_model,
+        )  # fmt: skip
+        return {"run": run.id}
+
     @app.delete("/api/zamanlamalar/{zid}")
     async def zamanlama_sil(zid: str) -> dict:
         zamanlayici.sil(zid)
@@ -1561,6 +1577,31 @@ def uygulama_olustur(
     @app.get("/api/komutlar")
     async def komut_listesi() -> dict:
         return {"isler": [komutlar.ozet(i) for i in komutlar.isler.values()]}
+
+    uyanik = Uyanik()
+
+    @app.get("/api/uyanik")
+    async def uyanik_durum() -> dict:
+        return {"acik": uyanik.acik}
+
+    @app.put("/api/uyanik")
+    async def uyanik_ayarla(veri: dict) -> dict:
+        return {"acik": uyanik.ayarla(bool(veri.get("acik")))}
+
+    # Terminal paneli: kullanicinin KENDI yazdigi komut, etkin projede calisir.
+    # Model degil kullanici calistirdigi icin onay sorulmaz; izolasyon adaptoru yine uygulanir.
+    @app.post("/api/terminal")
+    async def terminal_calistir(veri: dict) -> dict:
+        kokler = sohbet.aktif_alan().izinli_kokler
+        cwd = Path(kokler[0]) if kokler else Path.home()
+        is_ = await komutlar.baslat(
+            str(veri.get("komut", ""))[:4000], cwd, arka_plan=True, timeout=3600, sahip="terminal"
+        )
+        return komutlar.ozet(is_)
+
+    @app.get("/api/komutlar/{is_id}")
+    async def komut_getir(is_id: str) -> dict:
+        return komutlar.ozet(komutlar.getir(is_id))
 
     @app.post("/api/komutlar/{is_id}/durdur")
     async def komut_durdur_ucu(is_id: str) -> dict:
