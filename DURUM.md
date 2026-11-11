@@ -220,7 +220,16 @@ Python 3.12 + FastAPI + pywebview; arayuz vanilla JS. Paketleme: PORTABLE (kulla
             BULGULAR: yeni veri klasorunde OpenRouter listesi bos -> her model 'aracsiz' sayiliyordu (CLI de);
             tirnakli ortam degiskeni anahtari gecersiz sayiliyordu. Ikisi duzeltildi.
             Duman testi (nemotron-3.5-super-vl:free): median GECTI; slug KALDI + yanlis basari beyani.
-      - [ ] Tam kosu 30x3 (arka planda)  <- SIRADAKI; sonra portable paketleme
+      - [x] Tam kosu + Claude Code karsilastirmasi (degerlendirme/KARSILASTIRMA-2026-11-11.md):
+            Yerel (nemotron-3.5-super-vl:free) %83.2 / 95 olculen kosu (13 olculemedi: kota/harness);
+            yanlis basari beyani 11; kesif/review %25, entegrasyon %66.7, ozellik %80, digerleri %95-100.
+            Claude Code 2.1.322 (Opus 5.5) %100 / 30 kosu, 3.36 $, ort. 26 sn. Fark -16.8 puan:
+            esdegerlik SAGLANMADI; fark urun+model toplami (farkli modeller), tavan etkisi var.
+            Harness BULGULARI: onay sonrasi 'devam' yarisi; claude.cmd tirnak hatasi (exe dogrudan);
+            test EKLEYEN ajan haksiz cezalaniyordu -> korunan testler orijinaline geri yuklenir;
+            saglayici kotasi 'olculemedi' olarak ayrilir. Tum olculen kosular sayilir (iyi secilmez).
+      - [ ] Siradaki: kesif/review + yanlis basari beyani iyilestirmesi; ayni guclu modelle yerel olcum
+            (urun payini ayirmak icin); sonra portable paketleme  <- SIRADAKI
 - 2026-11-10 (16): A6 bitti (hooks + slash + hook UI; tarayicida dogrulandi). DIKKAT: ayni dalda paralel
   bir oturum A6.1/A6.2 commit'ledi (14da54a, 1c791d4); benim skill commit'im (81b748a) onlarla ust uste.
   399 test geciyor.

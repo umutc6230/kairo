@@ -1,7 +1,7 @@
 # OZELLIK-MATRISI - YerelAIStudio ajan yetenekleri
 
 Kaynak is tanimi: `AGENT-GELISTIRME-TALIMATI.md`. Inceleme: `AGENT-INCELEME-2026-11-09.md`.
-Guncel: 2026-11-09 | referans commit: `3ed71de` + A0 ve A1 dilimleri.
+Guncel: 2026-11-11 | dal: `feature/ajan-katmani`
 
 Durum degerleri: **yok** / **kismi** / **uygulaniyor** / **test edildi** / **dis bagimlilik bekliyor**.
 "test edildi" yalniz otomatik test ya da kayitli canli olcum kaniti varsa yazilir. Yalniz UI eklenmesi
@@ -43,30 +43,30 @@ servislerine erisim taklit edilmez; her satir YerelAIStudio'nun kendi calisan ka
 
 | Kimlik | Ozellik grubu | Mevcut durum | Hedef davranis | Bagimlilik | Asama | Test kimligi | Kanit yolu | Kisit |
 |---|---|---|---|---|---|---|---|---|
-| F01 | Kod yazma, refactoring, hata duzeltme, test/build | yok | `apply_patch`/`write_file`/terminal + eski hash + checkpoint; test kosup sonucu dogrulayan dongu | A1, A2 | A2-A3 | - | - | Yazma araci A1 izin motoru olmadan acilmaz |
-| F02 | Plan, goal, uzun gorev, background isler | yok (sohbette sabit 6 tur) | Kalici Run/Step durum makinesi, butce, pause/resume/cancel/retry | A0.5, A0.6, A1 | A3 | - | - | Tek yerel model: inference sirali |
-| F03 | Proje talimatlari, memory, compact, resume, fork | kismi (CLAUDE.md + @import, oturum kaydi) | Kaynakli/butceli baglam, compact ozeti, memory kayit+kaynak+gecersizlesme, fork/export | A0.4, A0.6 | A4 | `tests/test_skiller.py` (talimat importu) | `tests/test_skiller.py` | Guvenilmeyen repo talimati yetki yukseltmez |
-| F04 | Diff, checkpoint, rewind, Git/worktree | yok | Dosya bazli snapshot/diff, conflict-aware geri alma, worktree secenegi | A2 | A2-A5 | - | - | `reset --hard` kullanilmaz |
-| F05 | Skills, slash komutlari, referans ve scriptler | kismi (kesif + otomatik yukleme; script calistirma yok) | Surumlu metadata, kaynak/hash/trust, registry'li slash komutlari | A1, A6 | A6 | `tests/test_skiller.py` | `tests/test_skiller.py` | Manifestte izin istemek izin degildir |
-| F06 | Hooks ve fail-closed denetimler | yok | Surumlu olay sozlesmeleri; guvenlik hook'u basarisizsa islem engellenir | A1, A6 | A6 | - | - | Timeout + recursion siniri zorunlu |
-| F07 | MCP, OAuth ve dis servisler | yok | stdio + streamable HTTP MCP istemcisi, backend token, ayni policy katmani | A1, A7 | A7 | - | - | Varsayilan kapali |
-| F08 | Plugin, marketplace, bagimlilik, eval | yok | Manifest/surum/karantina/kaynak inceleme/rollback | A7 | A7 | - | - | BRAIN-POLICY kaynak taramasi zorunlu |
-| F09 | Mods karsiligi (panel, komut, olay) | yok | Izole worker + dar uzantı API'si | A7 | A7 | - | - | Claude Mods API uyumlulugu iddia edilmez |
-| F10 | Subagents, teams, agent view | yok | Dar yetki, ortak butce, dosya sahipligi, mesaj kutusu | A3, A8 | A8 | - | - | Tek model: paralel inference yok |
-| F11 | Dynamic workflows | yok | Tipli adimlar, bagimlilik, tekrar; model kodu ana surecte eval edilmez | A8 | A8 | - | - | - |
-| F12 | Web arastirmasi, Chrome/Edge, DOM/console, GIF | yok | Izole otomasyon profili, DOM/a11y agaci, screenshot, E2E kaniti | A1, A9 | A9 | - | - | Sayfa icerigi talimat sayilmaz |
-| F13 | Windows computer use | yok | Pencere kapsamli UI Automation + gorsel fallback | A9 | A9 | - | - | UAC/secure desktop asilmaz |
-| F14 | LSP, VS Code, JetBrains | yok | Sembol/referans/diagnostic; dosya/satir/secim/diff | A2, A10 | A10 | - | - | Dis bagimlilik bekliyor (IDE kurulumu) |
-| F15 | Yerel/PR review, derin review, guvenlik incelemesi | yok | Kanitli bulgu, yeniden dogrulama, REVIEW.md | A2, A5 | A5-A8 | - | - | Ayni modelin iki kez demesi kanit degil |
-| F16 | CLI, headless, Python/TS SDK, API | kismi (`python -m app --sunucu`, gecit uclari) | Ayni ajan cekirdegine headless/SDK erisimi, JSON event stream, resume | A3 | A10 | `tests/test_agecidi.py` | `tests/test_agecidi.py` | CLI/SDK ayri motor kurmaz |
-| F17 | Schedule, loop, channels, CI/webhook | yok | Kalici zamanlayici, imzali olay, idempotency | A3, A11 | A11 | - | - | Uygulama kapaliyken calismaz (iddia edilmez) |
-| F18 | Remote control, mobil, cloud | yok | Varsayilan kapali, cihaz eslestirme, kisa omurlu token | A1, A12 | A12 | - | - | Loopback internete acilmaz |
-| F19 | Model, effort, fallback, maliyet | kismi (model secimi, dusunme seviyesi, sure/token istatistigi) | ModelCapability profilleri, gorunur fallback, RAM/sure maliyeti | A4 | A4 | `tests/test_yerel_llm.py`, `karsilastir.py` | `tests/test_yerel_llm.py` | Desteklenmeyen effort gizlenir |
-| F20 | Permissions, Auto mode, sandbox, politika | kismi (backend izin motoru + modlar + yonetilen politika; OS izolasyonu yok) | Backend allow/ask/deny + OS siniri; mod secimi | A0, A1 | A1 | `tests/test_a1_izinler.py` | `app/agent/policy.py` | OS duzeyinde sandbox YOK; UI'da acikca yazar |
-| F21 | OTel, doctor, status, logs, butce | kismi (loguru, istatistik cipleri) | Tanilama uclari, butce gostergesi, redakte log | - | A0-A12 | - | - | Sir maskeleme A1 |
-| F22 | Voice, artifacts, preview, status line | kismi (ses eki, OCR, markdown) | Izole origin artifact onizlemesi, dictation adaptoru, durum cubugu | A5 | A5-A10 | `tests/test_api.py` | `tests/test_api.py` | Model HTML'ine bridge token verilmez |
-| F23 | GitHub/GitLab, issue -> PR, Actions | yok | Yetkilendirilmis repo islemleri; model metni tek basina gonderim yetkisi degil | A2, A10 | A10-A11 | - | - | Dis bagimlilik bekliyor (yetki) |
-| F24 | Dev containers, gateway auth, uzak saglayicilar | yok | Istege bagli adaptorler | A1, A12 | A1-A4-A12 | - | - | Yerel urun icin zorunlu degil |
+| F01 | Kod yazma, refactoring, hata duzeltme, test/build | test edildi | Yama/yaz (eski hash + checkpoint), terminal, test kosup dogrulayan dongu | A1, A2 | A2-A3 | `test_a2_araclar.py`, `test_a3_ajan.py` | `app/agent/araclar.py` | Gercek model: A13 degerlendirmesi |
+| F02 | Plan, goal, uzun gorev, background isler | test edildi | Kalici Run/Adim, butce, duraklat/devam/iptal/tekrar, cokme sonrasi kurtarma | A0.5, A0.6, A1 | A3 | `test_a3_ajan.py`, `test_a13_kapi.py` | `app/agent/runner.py` | Tek yerel model: inference sirali |
+| F03 | Proje talimatlari, memory, compact, resume, fork | test edildi | Kaynakli baglam, otomatik ozet, hafiza (kaynak + gecersizlesme) | A0.4, A0.6 | A4 | `test_a4_baglam.py` | `app/agent/ozet.py`, `app/services/hafiza.py` | Alt klasor talimat kapsami ertelendi |
+| F04 | Diff, checkpoint, rewind, Git/worktree | test edildi | Dosya bazli checkpoint/geri alma, izole worktree | A2 | A2-A8 | `test_a2_kalan.py`, `test_a8_worktree.py` | `app/agent/checkpoints.py`, `worktree.py` | `reset --hard` kullanilmaz |
+| F05 | Skills, slash komutlari, referans ve scriptler | test edildi | Surum/hash/guven, ilan edilmis scriptler ayni izin yolundan | A1, A6 | A6 | `test_a6_skill.py`, `test_a6_skill_script.py` | `app/services/skiller.py` | Manifestte izin istemek izin degildir |
+| F06 | Hooks ve fail-closed denetimler | test edildi | Surumlu olaylar; guvenlik hook'u basarisizsa islem engellenir | A1, A6 | A6 | `test_a6_hooks.py` | `app/agent/hooks.py` | Timeout + recursion siniri |
+| F07 | MCP, OAuth ve dis servisler | kismi | stdio + streamable HTTP MCP, ayni policy katmani | A1, A7 | A7 | `test_a7_mcp.py` | `app/agent/mcp.py` | OAuth akisi ve MCP prompts yok |
+| F08 | Plugin, marketplace, bagimlilik, eval | test edildi | Manifest/karantina/inceleme/katalog hash | A7 | A7 | `test_a7_plugin.py` | `app/services/pluginler.py` | Plugin eval yok |
+| F09 | Mods karsiligi (panel, komut, olay) | yok | Izole worker + dar uzanti API'si | A7 | A7 | - | - | Ertelendi |
+| F10 | Subagents, teams, agent view | test edildi | Dar yetki, dosya sahipligi, takim panosu | A3, A8 | A8 | `test_a8_alt_ajan.py`, `test_a8_takim.py` | `app/agent/takim.py` | Tek model: paralel inference yok |
+| F11 | Dynamic workflows | test edildi | Tipli adimlar (ajan/komut), bagimlilik, tekrar; eval yok | A8 | A8 | `test_a8_akis.py` | `app/agent/akis.py` | - |
+| F12 | Web arastirmasi, tarayici, DOM/console | test edildi | Izole profil, a11y agaci, ekran goruntusu | A1, A9 | A9 | `test_a9_web.py`, `test_a9_tarayici.py` | `app/agent/tarayici.py` | GIF kaydi yok; Playwright istege bagli |
+| F13 | Windows computer use | test edildi | Izinli programlarda UI Automation | A9 | A9 | `test_a9_masaustu.py` | `app/agent/masaustu.py` | Gorsel fallback yok; UAC asilmaz |
+| F14 | LSP, VS Code, JetBrains | kismi | LSP tanim/referans/sembol/tani + metin yedegi | A2, A10 | A10 | `test_a10_lsp.py` | `app/agent/lsp.py` | IDE eklentileri ATLANDI (kullanici karari) |
+| F15 | Yerel/PR review, derin review, guvenlik incelemesi | test edildi | Kanitli bulgu, derin gecisler | A2, A5 | A5-A8 | `test_a5_review_artifact.py` | `app/agent/review.py` | PR yorumu yok (GitHub atlandi) |
+| F16 | CLI, headless, Python/TS SDK, API | kismi | Ayni motor: headless CLI + Python SDK, JSON olaylar, onayda kod 3 | A3 | A10 | `test_a10_cli_sdk.py` | `app/cli.py`, `app/sdk.py` | TS SDK yok |
+| F17 | Schedule, loop, channels, CI/webhook | test edildi | Kalici zamanlayici (DST/idempotent), HMAC webhook, GitHub Actions | A3, A11 | A11 | `test_a11_zamanlayici.py`, `test_a11_webhook.py` | `.github/workflows/` | Uygulama kapaliyken calismaz; CI hesap faturasi nedeniyle baslamadi |
+| F18 | Remote control, mobil, cloud | kismi | Tailscale uzerinden telefondan tam arayuz, eslesme/iptal/TLS | A1, A12 | A12 | `test_a12_uzak.py`, `test_a13_e2e.py` | `app/uzak.py` | Cloud worker dis bagimlilik bekliyor; canli telefon denemesi yok |
+| F19 | Model, effort, fallback, maliyet | test edildi | Yetenek profili, OpenRouter, dusunme seviyesi | A4 | A4 | `test_openrouter.py`, `test_yerel_llm.py` | `app/agent/yetenek.py` | Desteklenmeyen effort gizlenir |
+| F20 | Permissions, Auto mode, sandbox, politika | test edildi | Backend allow/ask/deny, modlar, yonetilen politika, istege bagli konteyner | A0, A1 | A1 | `test_a1_izinler.py`, `test_a1_8_izolasyon.py` | `app/agent/policy.py` | Konteyner yoksa OS sandbox YOK (acikca yazar) |
+| F21 | OTel, doctor, status, logs, butce | kismi | /doctor, /status, redakte log, butce | - | A0-A12 | `test_a10_cli_sdk.py::test_doctor_*` | `app/doktor.py` | OTel yok |
+| F22 | Voice, artifacts, preview, status line | test edildi | Yerel dikte, artifact onizleme | A5 | A5 | `test_a5_dikte_a11y.py`, `test_a5_review_artifact.py` | `app/services/artifactler.py` | - |
+| F23 | GitHub/GitLab, issue -> PR, Actions | kismi | CI is akislari var; issue/PR araclari ATLANDI | A2, A10 | A10-A11 | - | `.github/workflows/` | Kullanici karari: A10 kalani atlandi |
+| F24 | Dev containers, gateway auth, uzak saglayicilar | kismi | OpenRouter + konteyner izolasyonu; kurumsal gateway yok | A1, A12 | A1-A12 | `test_openrouter.py` | `app/services/openrouter.py` | Bedrock/Google/Microsoft dis bagimlilik bekliyor |
 
 ## Korunan mevcut ozellikler (gerileme yasagi)
 
@@ -86,12 +86,14 @@ servislerine erisim taklit edilmez; her satir YerelAIStudio'nun kendi calisan ka
 
 | Olcut | Hedef | Mevcut | Kanit |
 |---|---|---|---|
-| Python testleri | hepsi gecer | 247 gecti, 3 atladi (2026-11-09, sahte model) | `pytest -q` |
-| Python kapsami | >= %90 | %94 (2026-11-09) | `pytest --cov` |
+| Python testleri | hepsi gecer | 520 gecti, 3 atladi (2026-11-10) | `pytest -q` |
+| Python kapsami | >= %90 | %91 (2026-11-10) | `pytest --cov` |
 | Ruff format/check | temiz | temiz | `ruff check .` |
-| JS birim + E2E | gecer | yok | - |
-| 30 gorevlik model eval | >= %80 cekirdek basari | yok | - |
-| Claude Code karsilastirmasi | olculmus | yapilmadi | kalite esitligi **dogrulanmadi** |
+| Iptal kapisi | durum < 1 sn, surec agaci < 5 sn | olculdu: gecti | `tests/test_a13_kapi.py` |
+| Arayuz E2E | gecer | masaustu + telefon (uzak TLS) gecti | `tests/test_a13_e2e.py` |
+| JS birim testleri | gecer | yok (yalniz `node --check` + E2E) | - |
+| 30 gorevlik model eval | >= %80 cekirdek basari | %83.2 (95 olculen kosu, nemotron-3.5-super-vl:free); kesif/review %25 | `degerlendirme/KARSILASTIRMA-2026-11-11.md` |
+| Claude Code karsilastirmasi | olculmus | olculdu: CC %100 (30 kosu, Opus 5.5, 3.36 $); fark -16.8 puan, esdegerlik SAGLANMADI (farkli modeller) | `degerlendirme/KARSILASTIRMA-2026-11-11.md` |
 
 Model kalite esitligi hicbir satirda iddia edilmez; karsilastirmali olcum yapilana kadar
 "dogrulanmadi" durumu gecerlidir.

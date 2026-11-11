@@ -85,11 +85,19 @@ def _argv(a: list[str]) -> list[str]:
     return [yerine.get(x, x) for x in a]
 
 
+def test_dosyasi_mi(yol: str) -> bool:
+    ad = Path(yol).name.lower()
+    return ad.startswith("test_") or ".test." in ad or ad.endswith("_test.py")
+
+
 def gizli_kontrol(gorev: dict, proje: Path, korunan: dict[str, str]) -> dict:
-    """Kosudan SONRA: korunan dosya kontrolu + gizli dosyalar + kontrol adimlari."""
-    degisen = [y for y, h in korunan.items() if _hash(proje / y) != h]
+    """Kosudan SONRA. Korunan TEST dosyalari orijinaline geri yuklenir (zayiflatilmis test ise
+    yaramaz; modelin EKLEDIGI testler cezalandirilmaz). Korunan diger dosyalar (or. kesif
+    gorevinde kaynak kod) degismisse kosu basarisiz."""
+    degisen = [y for y, h in korunan.items() if not test_dosyasi_mi(y) and _hash(proje / y) != h]
     if degisen:
         return {"basari": False, "neden": f"korunan dosya degisti: {degisen}"}
+    _yaz(proje, {y: gorev["dosyalar"][y] for y in korunan if test_dosyasi_mi(y)})
     _yaz(proje, gorev.get("gizli", {}))
     for i, k in enumerate(gorev["kontroller"]):
         if k.get("once_yaz"):
@@ -150,7 +158,7 @@ def kos(studio: Any, gorev: dict, proje: Path, sure_siniri: int = KOSU_SURESI) -
                 if a["durum"] == "onay_bekliyor" and a.get("onay_id"):
                     studio.onay(a["onay_id"], True)
                     mudahale += 1
-            studio.islem(rid, "devam")
+            # onay ucu bekleyen gorevi kendisi surdurur; ayrica 'devam' yarisa yol acar
         elif d in (
             "karar_bekliyor",
             "duraklatildi",
@@ -168,6 +176,9 @@ def kos(studio: Any, gorev: dict, proje: Path, sure_siniri: int = KOSU_SURESI) -
     sure = round(time.monotonic() - bas, 1)
     kontrol = gizli_kontrol(gorev, proje, korunan)
     adimlar = son.get("adimlar") or []
+    hata = son.get("hata") or ""
+    if durum == "basarisiz" and ("istek siniri" in hata or "429" in hata):
+        durum = "saglayici_limiti"  # model yetenegi degil: olculemedi, ayri raporlanir
     return {
         "gorev": gorev["id"], "kategori": gorev["kategori"], "dil": gorev["dil"],
         "run_id": rid, "ajan_durumu": durum, "basari": kontrol["basari"],
@@ -182,7 +193,82 @@ def kos(studio: Any, gorev: dict, proje: Path, sure_siniri: int = KOSU_SURESI) -
     }  # fmt: skip
 
 
+CC_ORTAM_SIL = ("CLAUDECODE", "CLAUDE_CODE_CHILD_SESSION", "CLAUDE_CODE_SESSION_ID", "CLAUDE_PID",
+                "CLAUDE_CODE_MESSAGING_SOCKET", "CLAUDE_CODE_MESSAGING_TOKEN",
+                "CLAUDE_CODE_SESSION_ATTENDED", "CLAUDE_CODE_ENTRYPOINT")  # fmt: skip
+
+
+def claude_exe() -> str:
+    """npm'in claude.cmd sarmalayicisi subprocess'te tirnaklamayi bozuyor: exe dogrudan."""
+    npm = Path(os.environ.get("APPDATA", "")) / "npm" / "node_modules" / "@anthropic-ai"
+    exe = npm / "claude-code" / "bin" / "claude.exe"
+    return str(exe) if exe.exists() else (shutil.which("claude") or "claude")
+
+
+def kos_claude_code(gorev: dict, proje: Path, sure_siniri: int, butce_usd: float,
+                    model: str = "") -> dict:  # fmt: skip
+    """Referans olcum: ayni gorev/fixture/gizli kontrol, Claude Code headless (`claude -p`).
+
+    Esit kosullar: ayni hedef+kabul metni, ayni adim siniri (--max-turns), ayni sure siniri,
+    ayni arac turleri (dosya oku/yaz/duzenle/ara + komut) on-izinli (bizim ajanda da onaylar
+    harness tarafindan veriliyor). Kullanici CLAUDE.md'si/MCP'si yuklenmez (proje ayarlari).
+    """
+    korunan = kur(gorev, proje)
+    exe = claude_exe()
+    kabul = "; ".join(gorev["kabul"])
+    istem = gorev["hedef"] + (f"\nKabul: {kabul}" if kabul else "")
+    argv = [exe, "-p", istem, "--output-format", "json", "--max-turns", str(gorev["max_adim"]),
+            "--permission-mode", "acceptEdits", "--allowedTools",
+            "Bash Read Edit Write Glob Grep", "--setting-sources", "project",
+            "--strict-mcp-config", "--no-session-persistence",
+            "--max-budget-usd", str(butce_usd)]  # fmt: skip
+    if model:
+        argv += ["--model", model]
+    ortam = {k: v for k, v in os.environ.items() if k not in CC_ORTAM_SIL}
+    bas = time.monotonic()
+    veri: dict = {}
+    durum = "basarisiz"
+    try:
+        r = subprocess.run(argv, cwd=proje, env=ortam, capture_output=True, text=True,
+                           encoding="utf-8", errors="replace", timeout=sure_siniri,
+                           stdin=subprocess.DEVNULL)  # fmt: skip
+        try:
+            veri = json.loads(r.stdout.strip().splitlines()[-1]) if r.stdout.strip() else {}
+        except ValueError:
+            veri = {}
+        if veri.get("subtype") == "success" and not veri.get("is_error"):
+            durum = "basarili"
+        elif veri.get("subtype"):
+            durum = str(veri["subtype"])  # error_max_turns, error_max_budget_usd ...
+    except subprocess.TimeoutExpired:
+        durum = "zaman_asimi"
+    sure = round(time.monotonic() - bas, 1)
+    kontrol = gizli_kontrol(gorev, proje, korunan)
+    u = veri.get("usage") or {}
+    return {
+        "gorev": gorev["id"], "kategori": gorev["kategori"], "dil": gorev["dil"],
+        "run_id": veri.get("session_id", ""), "ajan_durumu": durum, "basari": kontrol["basari"],
+        "ajan_hatasi": "" if durum == "basarili" else str(veri.get("result", ""))[:300],
+        "kontrol_nedeni": kontrol["neden"][:600],
+        "yanlis_basari_beyani": durum == "basarili" and not kontrol["basari"],
+        "mudahale": 0, "arac_hatasi": 0, "adim": veri.get("num_turns", 0),
+        "token": sum(u.get(k, 0) or 0 for k in ("input_tokens", "output_tokens",
+                                                "cache_read_input_tokens",
+                                                "cache_creation_input_tokens")),
+        "maliyet_usd": veri.get("total_cost_usd", 0),
+        "model": ",".join(veri.get("modelUsage") or {}),
+        "sure_sn": sure, "ilk_adim_sn": None,
+    }  # fmt: skip
+
+
+OLCULEMEDI = {"saglayici_limiti", "harness_hatasi"}
+
+
 def ozet_tablo(kosular: list[dict]) -> dict:
+    """Basari orani yalniz OLCULEBILEN kosularda; kota/harness hatalari ayri sayilir."""
+    olculemeyen = [k for k in kosular if k["ajan_durumu"] in OLCULEMEDI]
+    kosular = [k for k in kosular if k["ajan_durumu"] not in OLCULEMEDI]
+
     def oran(liste: list[dict]) -> float:
         return round(100 * sum(k["basari"] for k in liste) / len(liste), 1) if liste else 0.0
 
@@ -194,6 +280,8 @@ def ozet_tablo(kosular: list[dict]) -> dict:
         gorevler.setdefault(k["gorev"], []).append(k["basari"])
     return {
         "kosu": len(kosular), "basari_yuzde": oran(kosular),
+        "olculemedi": len(olculemeyen),
+        "olculemeyen_gorevler": sorted({k["gorev"] for k in olculemeyen}),
         "kategori": {c: {"kosu": len(v), "basari_yuzde": oran(v)} for c, v in kategoriler.items()},
         "yanlis_basari_beyani": sum(k["yanlis_basari_beyani"] for k in kosular),
         "mudahale_toplam": sum(k["mudahale"] for k in kosular),
@@ -201,6 +289,7 @@ def ozet_tablo(kosular: list[dict]) -> dict:
         "zaman_asimi": sum(k["ajan_durumu"] == "zaman_asimi" for k in kosular),
         "toplam_sure_sn": round(sum(k["sure_sn"] for k in kosular), 1),
         "toplam_token": sum(k["token"] or 0 for k in kosular),
+        "toplam_maliyet_usd": round(sum(k.get("maliyet_usd") or 0 for k in kosular), 2),
         "kararsiz_gorevler": [g for g, s in gorevler.items() if 0 < sum(s) < len(s)],
     }  # fmt: skip
 
@@ -213,7 +302,7 @@ def markdown(rapor: dict) -> str:
              f"{s['ortam'].get('gpu', '-')}",
              f"- Kosu: {o['kosu']}, basari %{o['basari_yuzde']}, yanlis basari beyani "
              f"{o['yanlis_basari_beyani']}, mudahale {o['mudahale_toplam']}, zaman asimi "
-             f"{o['zaman_asimi']}", "",
+             f"{o['zaman_asimi']}, olculemedi (kota/harness) {o['olculemedi']}", "",
              "| Kategori | Kosu | Basari % |", "|---|---|---|"]  # fmt: skip
     satir += [f"| {c} | {v['kosu']} | {v['basari_yuzde']} |" for c, v in o["kategori"].items()]
     satir += ["", "| Gorev | Ajan | Gizli | Sure sn | Adim | Mudahale | Neden |",
@@ -238,6 +327,9 @@ def main(argv: list[str]) -> int:
     p.add_argument("--kategori", action="append", default=[])
     p.add_argument("--rapor", default=str(KOK / "degerlendirme" / "raporlar"))
     p.add_argument("--sure", type=int, default=KOSU_SURESI, help="Kosu basina saniye siniri")
+    p.add_argument("--ajan", choices=["yerel-ai-studio", "claude-code"], default="yerel-ai-studio")
+    p.add_argument("--cc-butce-usd", type=float, default=3.0, help="Claude Code kosu basi tavan")
+    p.add_argument("--cc-model", default="", help="Claude Code modeli (bos: varsayilan)")
     args = p.parse_args(argv)
 
     surum, gorevler = gorevleri_yukle()
@@ -246,6 +338,8 @@ def main(argv: list[str]) -> int:
     if args.kategori:
         gorevler = [g for g in gorevler if g["kategori"] in args.kategori]
     calisma = Path(tempfile.mkdtemp(prefix="yas-deg-"))
+    if args.ajan == "claude-code":
+        return _claude_code_degerlendir(args, surum, gorevler, calisma)
     os.environ["YAS_VERI_DIZINI"] = str(calisma / "veri")
     from app.config import veri_dizini
     from app.services.ayarlar import AyarDeposu
@@ -315,6 +409,44 @@ def main(argv: list[str]) -> int:
         json.dumps(rapor, ensure_ascii=False, indent=1), encoding="utf-8"
     )
     (rapor_dizin / f"rapor-{damga}.md").write_text(markdown(rapor), encoding="utf-8")
+    print(json.dumps(rapor["ozet"], ensure_ascii=False, indent=1))
+    sil(calisma / "projeler") if (calisma / "projeler").exists() else None
+    return 0
+
+
+def _claude_code_degerlendir(args: Any, surum: str, gorevler: list[dict], calisma: Path) -> int:
+    rapor_dizin = Path(args.rapor)
+    rapor_dizin.mkdir(parents=True, exist_ok=True)
+    damga = datetime.now(UTC).strftime("%Y%m%dT%H%M%SZ")
+    jsonl = rapor_dizin / f"kosular-claude-code-{damga}.jsonl"
+    kosular: list[dict] = []
+    for g in gorevler:
+        for t in range(args.tekrar):
+            proje = calisma / "projeler" / f"{g['id']}-{t + 1}"
+            k = kos_claude_code(g, proje, args.sure, args.cc_butce_usd, args.cc_model)
+            k["tekrar"] = t + 1
+            kosular.append(k)
+            with jsonl.open("a", encoding="utf-8") as f:
+                f.write(json.dumps(k, ensure_ascii=False) + "\n")
+            print(
+                f"[{len(kosular)}] {g['id']} #{t + 1}: {'GECTI' if k['basari'] else 'KALDI'} "
+                f"({k['ajan_durumu']}, {k['sure_sn']} sn, ${k['maliyet_usd']})",
+                flush=True,
+            )
+    surum_cc = subprocess.run([claude_exe(), "--version"],
+                              capture_output=True, text=True).stdout.strip()  # fmt: skip
+    rapor = {
+        "zaman": damga,
+        "surumler": {"uygulama": surum_cc, "gorev_seti": surum, "saglayici": "anthropic",
+                     "model": ",".join(sorted({k["model"] for k in kosular if k["model"]})),
+                     "kuantizasyon": "saglayici tarafinda", "ortam": ortam_bilgisi()},
+        "ozet": ozet_tablo(kosular),
+        "kosular": kosular,
+    }  # fmt: skip
+    (rapor_dizin / f"rapor-claude-code-{damga}.json").write_text(
+        json.dumps(rapor, ensure_ascii=False, indent=1), encoding="utf-8"
+    )
+    (rapor_dizin / f"rapor-claude-code-{damga}.md").write_text(markdown(rapor), encoding="utf-8")
     print(json.dumps(rapor["ozet"], ensure_ascii=False, indent=1))
     sil(calisma / "projeler") if (calisma / "projeler").exists() else None
     return 0
