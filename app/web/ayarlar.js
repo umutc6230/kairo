@@ -1,5 +1,6 @@
 // AI Ayarlari, Hakkinda ve Arama pencereleri.
 import { uzantiKomutlariniYukle, uzantiSekmesiKur } from "./uzantilar.js";
+import { baglayiciIceAktarCiz, EK_PANELLER, EK_SEKMELER, ekSekmeKur } from "./ayarlar2.js";
 import { ikon, ikonlariYerlestir } from "./ikonlar.js";
 import { kacir } from "./md.js";
 import { $, $$, api, bildir, durum, el, modal, onayla, sayi, sor } from "./ortak.js";
@@ -40,7 +41,7 @@ export function ayarlarAc(sekme = "ai") {
   const a = durum.ayarlar;
   const s = durum.sunucu || {};
   const govde = el(`<div>
-    <div class="sekmeler"><button class="sekme" data-sekme="ai">AI Ayarları</button><button class="sekme" data-sekme="hafiza">Hafıza</button><button class="sekme" data-sekme="mcp">Bağlayıcılar</button><button class="sekme" data-sekme="plugin">Plugin'ler</button><button class="sekme" data-sekme="uzanti">Uzantılar</button><button class="sekme" data-sekme="hooks">Hook'lar</button><button class="sekme" data-sekme="hakkinda">Hakkında</button></div>
+    <div class="sekmeler"><button class="sekme" data-sekme="ai">AI Ayarları</button><button class="sekme" data-sekme="hafiza">Hafıza</button><button class="sekme" data-sekme="mcp">Bağlayıcılar</button><button class="sekme" data-sekme="plugin">Plugin'ler</button><button class="sekme" data-sekme="uzanti">Uzantılar</button><button class="sekme" data-sekme="hooks">Hook'lar</button>${EK_SEKMELER}<button class="sekme" data-sekme="hakkinda">Hakkında</button></div>
     <div class="modal-govde" data-panel="ai">
       <div class="ayar-grup"><label>Sağlayıcı</label>
         <label class="secenek-kart ${a.saglayici !== "openrouter" ? "secili" : ""}"><input type="radio" name="ay-sag" value="yerel" ${a.saglayici !== "openrouter" ? "checked" : ""}><div><div class="ust">Yerel (llama.cpp) <span class="rozet yesil">internetsiz</span></div>
@@ -145,6 +146,7 @@ export function ayarlarAc(sekme = "ai") {
         <button class="btn" id="hk-ekle">Ekle</button></div>
       <div id="hk-liste" class="ayar-grup"></div>
     </div>
+    ${EK_PANELLER}
     <div class="modal-govde" data-panel="hakkinda" hidden>
       <div class="hakkinda-logo">${ikon("logo")}</div>
       <div><b style="font-size:18px">${kacir(durum.bilgi.urun)}</b> <span class="soluk">sürüm ${kacir(durum.bilgi.surum)}</span></div>
@@ -161,6 +163,7 @@ export function ayarlarAc(sekme = "ai") {
   };
   $$(".sekme", govde).forEach((b) => { b.onclick = () => sekmeAc(b.dataset.sekme); });
   sekmeAc(sekme);
+  ekSekmeKur(govde, kaydet);
 
   // ---- Hafıza ----
   const hafizaCiz = async () => {
@@ -321,6 +324,7 @@ export function ayarlarAc(sekme = "ai") {
     } catch (err) { bildir(err.message, "hata"); }
   };
   mcpCiz();
+  baglayiciIceAktarCiz(govde, mcpCiz);
 
   // ---- Plugin'ler ----
   const bilesenOzet = (b) => {

@@ -1,5 +1,6 @@
 // Sohbet gorunumu: mesajlar, dusunce blogu, yazma alani, ekler, akis ve durdurma.
 import { sohbetteGorevGoster } from "./gorevler.js";
+import { masaustuBildirimi } from "./ayarlar2.js";
 import { komutMu } from "./komutlar.js";
 import { projeDurumu } from "./proje.js";
 import { ikon, ikonlariYerlestir } from "./ikonlar.js";
@@ -392,6 +393,7 @@ export async function gonder() {
           break;
         case "bitti":
           yanit.bitir(o.mesaj.istatistik);
+          if (durum.ayarlar?.bildirim_yanit) masaustuBildirimi("Kairo yanıtladı", (o.mesaj.metin || "").slice(0, 140));
           break;
       }
     }

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import os
 import secrets
 import time
 from collections.abc import AsyncIterator, Callable
@@ -21,6 +22,7 @@ from pydantic import BaseModel, Field, ValidationError
 
 from app import URUN_ADI, URUN_SAHIBI, URUN_SAHIBI_GITHUB, URUN_SAHIBI_X, __version__
 from app.agent import akis as akis_mod
+from app.agent import mcp_ice
 from app.agent import review as rv
 from app.agent import worktree as wt
 from app.agent.akis import Akis, AkisDeposu
@@ -43,6 +45,7 @@ from app.agent.zamanlayici import Tetik, Zamanlayici
 from app.config import web_dizini
 from app.exceptions import GecersizEk, OnayGerekli, UygulamaHatasi, YerelLLMHatasi
 from app.services import ekler as ekler_modulu
+from app.services import masaustu_ayar as mda
 from app.services import sistem
 from app.services import skiller as skl
 from app.services.agecidi import AgGecidi, agecidi_uygulamasi
@@ -373,6 +376,8 @@ def uygulama_olustur(
         if gecit and a.sunucu_acik:
             await agecidi.baslat(a.sunucu_port)
         zd = asyncio.create_task(_zamanlayici_dongusu()) if gecit else None
+        if gecit:  # genel "hizli ac" kisayolu (Claude Desktop Quick Entry)
+            kisayol.ayarla(a.hizli_kisayol)
         if gecit:  # Claude Code plugin'lerini arka planda ice aktar (acilisi bekletmez)
             asyncio.get_running_loop().run_in_executor(None, _cc_esitle)
         yield
@@ -382,6 +387,7 @@ def uygulama_olustur(
         await ajan.kapat()  # calisan gorevler guvenli sinirda duraklatilir
         mcp.kapat()  # MCP sunucu surecleri yetim kalmasin
         uzantilar.kapat()
+        kisayol.kapat()
         for kz in sohbet.kod_zekasi.values():  # dil sunuculari
             kz.kapat()
         if sohbet.tarayici.acik_mi():
@@ -512,6 +518,15 @@ def uygulama_olustur(
     async def ayar_yaz(degisiklik: dict) -> dict:
         once = ayarlar.oku()
         yeni = ayarlar.guncelle(degisiklik)
+        if "baslangicta_ac" in degisiklik:  # gercek durum kisayol dosyasidir
+            await asyncio.to_thread(mda.baslangic_ayarla, yeni.baslangicta_ac)
+        if (
+            gecit
+            and once.hizli_kisayol != yeni.hizli_kisayol
+            and not kisayol.ayarla(yeni.hizli_kisayol)
+            and yeni.hizli_kisayol
+        ):
+            raise UygulamaHatasi(kisayol.hata or "Kisayol kaydedilemedi.")
         if (once.sunucu_acik, once.sunucu_port) != (yeni.sunucu_acik, yeni.sunucu_port):
             if yeni.sunucu_acik:
                 await agecidi.baslat(yeni.sunucu_port)
@@ -822,6 +837,28 @@ def uygulama_olustur(
         return {**p, "csp": ONIZLEME_CSP}
 
     # ---- MCP (A7): sunucular yalniz oturumlu arayuzden; sirlar maskeli doner ----
+    @app.get("/api/mcp/ice-aktar")
+    async def mcp_bulunanlar() -> dict:
+        """Claude Code / Claude Desktop'taki baglayicilar + hazir dizin (yalniz okunur)."""
+        var = {s.ad for s in mcp.liste()}
+        bulunan = await asyncio.to_thread(mcp_ice.bul)
+        return {"bulunan": [b | {"var": b["ad"] in var} for b in bulunan],
+                "dizin": [d | {"var": d["ad"] in var} for d in mcp_ice.DIZIN]}  # fmt: skip
+
+    @app.post("/api/mcp/ice-aktar")
+    async def mcp_ice_aktar(veri: dict) -> dict:
+        istenen = set(veri.get("anahtarlar") or [])
+        eklenen, hatalar = [], []
+        for b in await asyncio.to_thread(mcp_ice.bul):
+            if b["anahtar"] not in istenen:
+                continue
+            try:
+                mcp.ekle(b["veri"])
+                eklenen.append(b["ad"])
+            except (UygulamaHatasi, ValueError) as e:
+                hatalar.append(f"{b['ad']}: {str(e)[:120]}")
+        return {"eklenen": eklenen, "hatalar": hatalar}
+
     @app.get("/api/mcp")
     async def mcp_listesi() -> dict:
         return {"sunucular": [s.disari() for s in mcp.liste()]}
@@ -1193,7 +1230,8 @@ def uygulama_olustur(
             wt.depo_koku(proje)  # git yoksa hemen Turkce hata
 
             def izole_kur(run_id: str) -> tuple[str, str]:
-                yol, dal = wt.olustur(proje, veri_dizini / "worktrees", run_id)
+                onek = ayarlar.oku().branch_oneki
+                yol, dal = wt.olustur(proje, veri_dizini / "worktrees", run_id, onek)
                 return str(yol), dal
 
         run = await ajan.baslat(
@@ -1594,6 +1632,26 @@ def uygulama_olustur(
         return {"isler": [komutlar.ozet(i) for i in komutlar.isler.values()]}
 
     uyanik = Uyanik()
+    app.state.one_getir = lambda: None  # masaustu penceresi (main baglar)
+    kisayol = mda.GenelKisayol(lambda: app.state.one_getir())
+
+    @app.get("/api/masaustu")
+    async def masaustu_durum() -> dict:
+        return {"baslangicta_ac": mda.baslangic_durumu(), "kisayol_hata": kisayol.hata,
+                "depolama": await asyncio.to_thread(mda.depolama, veri_dizini),
+                "veri_dizini": str(veri_dizini)}  # fmt: skip
+
+    @app.post("/api/bildirim")
+    async def bildirim_gonder(veri: dict) -> dict:
+        ok = await asyncio.to_thread(
+            mda.bildirim, str(veri.get("baslik", URUN_ADI)), str(veri.get("metin", ""))
+        )
+        return {"gonderildi": ok}
+
+    @app.post("/api/masaustu/klasor-ac")
+    async def veri_klasoru_ac() -> dict:
+        os.startfile(veri_dizini)  # noqa: S606 - kullanicinin kendi veri klasoru
+        return {"acildi": True}
 
     @app.get("/api/uyanik")
     async def uyanik_durum() -> dict:

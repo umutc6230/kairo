@@ -8,10 +8,11 @@ import { sayfaModelleriniYenile, sayfalarKur } from "./sayfalar.js";
 import { modelSayfasiYukle, modellerKur } from "./modeller.js";
 import { projeAc, projeDurumu, projeKur } from "./proje.js";
 import { skillSayfasiYukle, skillerKur } from "./skiller.js";
-import { gorevSayfasiYukle, gorevlerKur } from "./gorevler.js";
+import { gorevBildirimIzle, gorevSayfasiYukle, gorevlerKur } from "./gorevler.js";
 import { dikteDurumuYenile, dikteKur } from "./dikte.js";
 import { baglamYenile, sagPanelKur } from "./sagpanel.js";
 import { dockKur, degisiklikYenile } from "./dock.js";
+import { gorunumUygula, kisayolEslesir } from "./ayarlar2.js";
 import { rutinleriYukle, rutinlerKur } from "./rutinler.js";
 import { ajanBloklariniCiz, ajanliOturum, akisVar, durdur, mesajlariCiz, sohbetKur, yeniSohbetEkrani } from "./sohbet.js";
 
@@ -114,6 +115,8 @@ function grupAdi(iso) {
   const bugun = new Date();
   bugun.setHours(0, 0, 0, 0);
   const gun = Math.floor((bugun - new Date(t.getFullYear(), t.getMonth(), t.getDate())) / 864e5);
+  const arsiv = durum.ayarlar?.arsiv_gun || 0; // N gun dokunulmayan sohbet Arsiv'e (silinmez)
+  if (arsiv && gun >= arsiv) return "Arşiv";
   if (gun <= 0) return "Bugün";
   if (gun === 1) return "Dün";
   if (gun < 7) return "Bu hafta";
@@ -346,6 +349,8 @@ async function baslat() {
   durum.bilgi = await api("/api/bilgi");
   turkcelestir(durum.bilgi, null);
   durum.ayarlar = await api("/api/ayarlar");
+  gorunumUygula(durum.ayarlar);
+  gorevBildirimIzle();
   await durumYenile();
   sohbetKur({ oturumlarYenile: oturumlariYenile, baslikAyarla });
   ayarlarKur(hepsiniYenile);
@@ -399,6 +404,7 @@ async function baslat() {
   $("#agecidi-hapi").onclick = () => { ayarlarAc(); setTimeout(() => document.getElementById("ay-agecidi")?.scrollIntoView({ behavior: "smooth" }), 50); };
 
   document.addEventListener("keydown", (e) => {
+    if (kisayolEslesir(e, durum.ayarlar?.dikte_kisayolu)) { e.preventDefault(); $("#btn-dikte")?.click(); return; }
     if (!e.ctrlKey) return;
     const k = e.key.toLowerCase();
     if (k === "n") { e.preventDefault(); git({ tur: "yeni" }); }

@@ -3,7 +3,27 @@
 import { ikonlariYerlestir } from "./ikonlar.js";
 import { kacir } from "./md.js";
 import { artifactListesiCiz, diffGoster, reviewYap } from "./inceleme.js";
-import { $, $$, api, bildir, el, modal, onayla, sayi } from "./ortak.js";
+import { $, $$, api, bildir, durum, el, modal, onayla, sayi } from "./ortak.js";
+import { masaustuBildirimi } from "./ayarlar2.js";
+
+// ---- bildirim: durum gecislerinde (onay istendi, rutin bitti) Windows bildirimi ----
+const sonDurum = new Map();
+function bildirimGerekirse(r) {
+  const once = sonDurum.get(r.id);
+  sonDurum.set(r.id, r.durum);
+  if (once === undefined || once === r.durum) return; // ilk gorus ya da degisiklik yok
+  const a = durum.ayarlar || {};
+  const ad = (r.hedef || "").slice(0, 80);
+  if (["onay_bekliyor", "karar_bekliyor"].includes(r.durum) && a.bildirim_onay) masaustuBildirimi("Onay bekleniyor", ad);
+  else if (BITMIS.has(r.durum) && /^\[(rutin|zamanlanmis)/.test(r.hedef || "") && a.bildirim_zamanlama) masaustuBildirimi(`Rutin: ${(DURUM_TR[r.durum] || [r.durum])[0]}`, ad);
+}
+export function gorevBildirimIzle() {
+  const tur = async () => {
+    try { (await api("/api/gorevler")).gorevler.forEach(bildirimGerekirse); } catch { /* sessiz */ }
+  };
+  tur();
+  setInterval(tur, 6000);
+}
 
 const DURUM_TR = {
   calisiyor: ["Çalışıyor", "mavi"],
@@ -385,6 +405,7 @@ async function gorevYenile(zorla = true) {
     if (BITMIS.has(r.durum) || ["onay_bekliyor", "karar_bekliyor", "duraklatildi"].includes(r.durum)) {
       listeCiz();
     }
+    bildirimGerekirse(r);
   } catch (e) {
     detayKabi().innerHTML = `<div class="uyari-kutu">${kacir(e.message)}</div>`;
   }

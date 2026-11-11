@@ -133,9 +133,10 @@ def main(argv: list[str] | None = None) -> int:
     def kapat() -> None:  # --sunucu modunda /api/yerel/kapat ile
         sunucu.should_exit = True
 
+    fastapi_app = uygulama_olustur(dizin, kapat=kapat if args.sunucu else None)
     sunucu = uvicorn.Server(
         uvicorn.Config(
-            uygulama_olustur(dizin, kapat=kapat if args.sunucu else None),
+            fastapi_app,
             host="127.0.0.1",
             port=port,
             log_level="warning",
@@ -178,6 +179,16 @@ def main(argv: list[str] | None = None) -> int:
             js_api=api,
         )
         api._pencere.events.shown += lambda: pencere_ikonu(api._pencere)
+
+        def one_getir() -> None:  # genel kisayol: pencere one gelsin
+            api._pencere.restore()
+            api._pencere.show()
+            with contextlib.suppress(Exception):
+                api._pencere.native.Invoke(
+                    __import__("System").Action(api._pencere.native.Activate)
+                )
+
+        fastapi_app.state.one_getir = one_getir
         webview.start(private_mode=False, storage_path=str(dizin / "webview"))
     sunucu.should_exit = True  # lifespan kapanisi: kendi baslattigimiz model sunucusunu durdurur
     is_parcacigi.join(timeout=15)

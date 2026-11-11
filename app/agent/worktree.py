@@ -42,9 +42,9 @@ def depo_koku(proje: Path) -> Path:
     return Path(cikti)
 
 
-def olustur(proje: Path, hedef_dizin: Path, run_id: str) -> tuple[Path, str]:
+def olustur(proje: Path, hedef_dizin: Path, run_id: str, onek: str = "ajan") -> tuple[Path, str]:
     kok = depo_koku(proje)
-    dal = f"ajan/{run_id}"
+    dal = f"{onek or 'ajan'}/{run_id}"
     yol = hedef_dizin / run_id
     yol.parent.mkdir(parents=True, exist_ok=True)
     kod, cikti = _git(kok, "worktree", "add", "-b", dal, str(yol), "HEAD")

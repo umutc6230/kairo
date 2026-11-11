@@ -91,6 +91,21 @@ class KullaniciAyarlari(BaseModel):
     saat_dilimi: str = "Europe/Istanbul"  # A11: zamanlamalarin varsayilani
     lsp_sunuculari: dict[str, str] = {}  # A10.1: {".py": "pylsp"}; yalniz kullanici tanimlar
     otomatik_ogrenme: bool = False  # ajan kendi not ekleyebilir (A4.4: kullanici acar)
+    # ---- Claude Desktop ayar karsiliklari ----
+    tema: Literal["sistem", "acik", "koyu"] = "koyu"
+    yazi_boyutu: Literal["kucuk", "orta", "buyuk"] = "orta"
+    sohbet_genisligi: Literal["dar", "genis"] = "dar"
+    hareket: Literal["sistem", "azalt"] = "sistem"
+    bildirim_yanit: bool = False  # yanit bitince (pencere arka plandayken)
+    bildirim_onay: bool = True  # onay beklerken
+    bildirim_zamanlama: bool = True  # rutin bitince / calisamayinca
+    baslangicta_ac: bool = False  # Windows oturum acilinca baslat (Baslangic klasoru kisayolu)
+    hizli_kisayol: str = Field(default="Ctrl+Alt+Space", max_length=40)  # her yerden ac
+    dikte_kisayolu: str = Field(default="Ctrl+D", max_length=40)
+    ayrinti: Literal["normal", "dusunme", "ayrintili"] = "normal"  # sohbet ayrinti duzeyi
+    cikti_stili: Literal["varsayilan", "aciklayici", "ogretici", "kisa"] = "varsayilan"
+    branch_oneki: str = Field(default="kairo", pattern=r"^[A-Za-z0-9._-]{0,30}$")
+    arsiv_gun: int = Field(default=0, ge=0, le=365)  # 0 = hic; N gun dokunulmayan sohbet arsivlenir
     konteyner_imaj: str = Field(
         default="python:3.12-slim", pattern=r"^[a-z0-9][a-z0-9._/:@-]{0,199}$"
     )

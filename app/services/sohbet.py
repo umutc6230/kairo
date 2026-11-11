@@ -586,6 +586,15 @@ async def cevap_akit(
     }
 
 
+# Claude Desktop "Output style" karsiligi: sistem istemine eklenen kisa yonerge
+CIKTI_STILLERI = {
+    "aciklayici": "Cevap stili: secimlerinin nedenini kisaca acikla; onemli kavramlari tanit.",
+    "ogretici": "Cevap stili: ogretici ol; adim adim anlat ve kullanicinin kendisinin "
+    "yapabilecegi kucuk bir adim birak.",
+    "kisa": "Cevap stili: olabildigince kisa yaz; gereksiz aciklama ve tekrar yok.",
+}
+
+
 class SohbetServisi:
     def __init__(
         self,
@@ -798,6 +807,7 @@ class SohbetServisi:
             proje_talimati,
             hafiza,
             ayar.sistem_istemi,
+            CIKTI_STILLERI.get(getattr(ayar, "cikti_stili", ""), ""),
             skill_listesi,
             skill_metni,
         )  # sabit -> degisken

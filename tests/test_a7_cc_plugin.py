@@ -166,7 +166,9 @@ async def test_model_ile_skill_secimi(tmp_path) -> None:
 
     for ad, ac in (("x-control", "X Twitter bookmark yonetir"), ("pdf", "PDF dosyasi okur")):
         (tmp_path / ad).mkdir()
-        (tmp_path / ad / "SKILL.md").write_text(f"---\nname: {ad}\ndescription: {ac}\n---\nx", "utf-8")
+        (tmp_path / ad / "SKILL.md").write_text(
+            f"---\nname: {ad}\ndescription: {ac}\n---\nx", "utf-8"
+        )
     sk = SkillDeposu(tmp_path, [("claude", tmp_path)]).kesfet()
 
     class Llm:
@@ -181,5 +183,7 @@ async def test_model_ile_skill_secimi(tmp_path) -> None:
     s = await model_ile_sec(llm, sk, "twitter bookmark cek", "twitter bookmark cek")
     assert s and s.ad == "x-control" and "x-control" in llm.istem
     assert await model_ile_sec(Llm("0"), sk, "bookmark", "bookmark") is None
-    assert await model_ile_sec(Llm("1"), sk, "merhaba", "merhaba") is None  # aday yok: model cagrilmaz
+    assert (
+        await model_ile_sec(Llm("1"), sk, "merhaba", "merhaba") is None
+    )  # aday yok: model cagrilmaz
     assert secim_coz("Cevap: 9", sk) is None and secim_coz("", sk) is None
