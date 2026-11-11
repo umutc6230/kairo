@@ -61,7 +61,7 @@ def pencere_boyutu(ekranlar: list) -> tuple[int, int]:
 
 def arg_ayristir(argv: list[str] | None = None) -> argparse.Namespace:
     p = argparse.ArgumentParser(
-        prog="YerelAIStudio",
+        prog="Kairo",
         description=f"{URUN_ADI}: yerel (llama.cpp) modelleri sohbet, OCR, arac ve "
         "karsilastirma testleriyle deneme uygulamasi.",
         epilog=YARDIM_SONU,

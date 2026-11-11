@@ -202,6 +202,7 @@ ALT_AJAN_ARACI = _f(
         "araclar": {"type": "array", "items": {"type": "string"}},
         "dosyalar": {"type": "array", "items": {"type": "string"}},
         "max_adim": {"type": "integer"},
+        "profil": {"type": "string"},
     },
     ["gorev", "araclar"],
 )
@@ -320,6 +321,8 @@ class AgentRunner:
         self.hooks = hooks
         self.araclar_kok: Callable[[str, str], tuple] | None = None
         self.takim: Any = None  # TakimPanosu (api baglar)
+        self.uzantilar: Any = None  # UzantiYoneticisi (api baglar)
+        self.ajan_profilleri: Callable[[], dict] = lambda: {}  # plugin agents/*.md
         self._gorevler: dict[str, asyncio.Task] = {}
         self._iptal: set[str] = set()
         self._duraklat: set[str] = set()
@@ -536,7 +539,14 @@ class AgentRunner:
                     if k in izinli
                 }
             else:
-                semalar = [*semalar, ALT_AJAN_ARACI]
+                profiller = self.ajan_profilleri()
+                arac = ALT_AJAN_ARACI
+                if profiller:  # Claude Code plugin ajanlari: 'profil' ile secilir
+                    liste = "; ".join(f"{k}: {v['aciklama'][:120]}" for k, v in profiller.items())
+                    arac = json.loads(json.dumps(ALT_AJAN_ARACI))
+                    ek = f" Hazir profiller (profil=ad): {liste[:3000]}"
+                    arac["function"]["description"] += ek
+                semalar = [*semalar, arac]
             run.durum = RunDurum.calisiyor
             self.depo.kaydet(run)
             while True:
@@ -615,6 +625,11 @@ class AgentRunner:
                 await asyncio.to_thread(
                     self.hooks.tetikle, "run_bitis", {"run": run.id, "durum": str(run.durum)}
                 )
+            if self.uzantilar is not None and run.durum in BITMIS and not run.parent:
+                await asyncio.to_thread(
+                    self.uzantilar.olay, "run_bitis",
+                    {"run": run.id, "durum": str(run.durum), "ozet": run.sonuc.ozet[:500]},
+                )  # fmt: skip
 
     def _adim_olustur(self, run: Run, c: dict) -> Adim:
         ad = (c.get("function") or {}).get("name", "")
@@ -846,6 +861,11 @@ class AgentRunner:
         g = a.argumanlar
         gorev = str(g.get("gorev") or "").strip()
         araclar = [str(x) for x in g.get("araclar") or []][:30]
+        profil = self.ajan_profilleri().get(str(g.get("profil") or ""))
+        if profil:  # profil talimati + (verilmediyse) profilin arac listesi
+            ayrac = "\n\n---\nGOREV: "
+            gorev = f"{profil['govde'][:6000]}{ayrac}{gorev}" if gorev else ""
+            araclar = araclar or profil["araclar"] or ["proje_dosya_oku", "proje_ara", "proje_glob"]
         dosyalar = [str(x) for x in g.get("dosyalar") or []][:50]
         kalan_adim = run.butce.max_adim - run.kullanim.adim
         kalan_token = run.butce.max_token - run.kullanim.token

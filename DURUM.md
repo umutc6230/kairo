@@ -1,6 +1,9 @@
 # DURUM - yerel-ai-studio
 guncel: 2026-11-11 | son arac: Claude Code (Opus 5.5) | dal: feature/ajan-katmani
 
+- 2026-11-11: Urun adi Kairo yapildi (URUN_ADI, basliklar, X-Title), yeni piksel baykus karakteri ikonlar.js LOGO + app/web/kairo.svg favicon. Paket/klasor adi degismedi.
+- 2026-11-11: Claude Code plugin uyumlulugu tamam: Plugin sekmesi "Claude Code'dan ice aktar", git/marketplace kurulumu, bilesen ozeti, hook/MCP ac-kapa (varsayilan kapali); /plugin:komut sohbette genisletilip mesaj olarak gider. Tarayicida code-review plugin'i ice aktarildi + komut genisledi. Uzanti (Mods) sistemi eklendi (F09). Testler: 331+ gecti.
+
 ## Ne
 Yerel sansursuz modelleri (DeepSeek-V4-Pro Qwen3.5 9B, Gemma 4 12B, Gemma 4 E4B heretic) sohbet,
 OCR, arac cagirma ve karsilastirma testleriyle deneme masaustu uygulamasi. Claude Desktop duzeni.

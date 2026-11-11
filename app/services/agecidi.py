@@ -187,9 +187,7 @@ def _sse_satirlari(metin: str) -> list[dict]:
 def agecidi_uygulamasi(
     yonetici: ModelYonetici, ayarlar: AyarDeposu, kapat: Callable[[], None] | None = None
 ) -> FastAPI:
-    app = FastAPI(
-        title="Yerel AI Studio sunucusu", version=__version__, docs_url=None, redoc_url=None
-    )
+    app = FastAPI(title="Kairo sunucusu", version=__version__, docs_url=None, redoc_url=None)
     istatistik = {"istek": 0, "son": []}  # arayuzde "son istekler"
 
     def kaydet(yol: str, model: str | None, istemci: str) -> None:
@@ -246,7 +244,7 @@ def agecidi_uygulamasi(
     @app.get("/")
     @app.head("/")
     async def kok() -> PlainTextResponse:
-        return PlainTextResponse("Ollama is running (Yerel AI Studio)")
+        return PlainTextResponse("Ollama is running (Kairo)")
 
     @app.get("/api/version")
     async def surum() -> dict:
@@ -288,7 +286,7 @@ def agecidi_uygulamasi(
                     "general.name": p.ad,
                     "llama.context_length": ayarlar.oku().baglam_token,
                 },
-                "modelfile": f"# Yerel AI Studio: {p.ad}",
+                "modelfile": f"# Kairo: {p.ad}",
             }
         )
 
@@ -310,7 +308,7 @@ def agecidi_uygulamasi(
     @app.post("/api/create")
     async def desteklenmiyor() -> JSONResponse:
         return JSONResponse(
-            {"error": "Model indirme/silme Yerel AI Studio'nun Modeller sayfasindan yapilir."},
+            {"error": "Model indirme/silme Kairo'nun Modeller sayfasindan yapilir."},
             status_code=400,
         )
 
@@ -553,7 +551,7 @@ async def portu_kim_kullaniyor(port: int) -> str:
     except (httpx.HTTPError, ValueError):
         return "baska bir program"
     if "yerel_ai_studio" in v:
-        return "arka planda calisan baska bir Yerel AI Studio"
+        return "arka planda calisan baska bir Kairo"
     if "version" in v:
         return f"Ollama (surum {v['version']})"
     return "baska bir program"

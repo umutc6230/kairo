@@ -1,4 +1,5 @@
 // AI Ayarlari, Hakkinda ve Arama pencereleri.
+import { uzantiKomutlariniYukle, uzantiSekmesiKur } from "./uzantilar.js";
 import { ikon, ikonlariYerlestir } from "./ikonlar.js";
 import { kacir } from "./md.js";
 import { $, $$, api, bildir, durum, el, modal, onayla, sayi, sor } from "./ortak.js";
@@ -39,7 +40,7 @@ export function ayarlarAc(sekme = "ai") {
   const a = durum.ayarlar;
   const s = durum.sunucu || {};
   const govde = el(`<div>
-    <div class="sekmeler"><button class="sekme" data-sekme="ai">AI Ayarları</button><button class="sekme" data-sekme="hafiza">Hafıza</button><button class="sekme" data-sekme="mcp">Bağlayıcılar</button><button class="sekme" data-sekme="plugin">Plugin'ler</button><button class="sekme" data-sekme="hooks">Hook'lar</button><button class="sekme" data-sekme="hakkinda">Hakkında</button></div>
+    <div class="sekmeler"><button class="sekme" data-sekme="ai">AI Ayarları</button><button class="sekme" data-sekme="hafiza">Hafıza</button><button class="sekme" data-sekme="mcp">Bağlayıcılar</button><button class="sekme" data-sekme="plugin">Plugin'ler</button><button class="sekme" data-sekme="uzanti">Uzantılar</button><button class="sekme" data-sekme="hooks">Hook'lar</button><button class="sekme" data-sekme="hakkinda">Hakkında</button></div>
     <div class="modal-govde" data-panel="ai">
       <div class="ayar-grup"><label>Sağlayıcı</label>
         <label class="secenek-kart ${a.saglayici !== "openrouter" ? "secili" : ""}"><input type="radio" name="ay-sag" value="yerel" ${a.saglayici !== "openrouter" ? "checked" : ""}><div><div class="ust">Yerel (llama.cpp) <span class="rozet yesil">internetsiz</span></div>
@@ -115,10 +116,21 @@ export function ayarlarAc(sekme = "ai") {
         <button class="btn" id="mc-ekle">Ekle</button></div>
       <div id="mc-liste" class="ayar-grup"></div>
     </div>
+    <div class="modal-govde" data-panel="uzanti" hidden>
+      <div class="ayar-not">Uzantı, uygulamaya yeni <b>komut</b>, <b>panel</b>, <b>olay dinleyici</b> ya da <b>araç</b> ekler. Ayrı bir süreçte çalışır ve yalnız ilan ettiği yetenekleri kullanabilir; araçları her çağrıda onay ister. Kurulumdan önce karantinada incelenir.</div>
+      <div class="satir"><input class="alan" id="uz-yol" placeholder="Uzantı klasörü (uzanti.json içeren)" style="flex:1">
+        <button class="btn" id="uz-incele">Karantinaya al ve incele</button></div>
+      <div id="uz-rapor"></div>
+      <div id="uz-liste" class="ayar-grup"></div>
+    </div>
     <div class="modal-govde" data-panel="plugin" hidden>
       <div class="ayar-not">Plugin, skill paketi getirir. Önce <b>karantinaya</b> alınır ve dosyaları incelenir; içindeki kurulum scriptleri hiçbir zaman çalıştırılmaz. Raporu okuyup sen onaylarsan kurulur. Her sürüm saklanır, önceki sürüme geri dönülebilir.</div>
       <div class="satir"><input class="alan" id="pl-yol" placeholder="Plugin klasörü (plugin.json içeren)" style="flex:1">
         <button class="btn" id="pl-incele">Karantinaya al ve incele</button></div>
+      <div class="satir"><input class="alan" id="pl-git" placeholder="Git adresi (https://github.com/..) ya da marketplace klasörü/adresi" style="flex:1">
+        <button class="btn" id="pl-git-incele">Git'ten incele</button><button class="btn" id="pl-pazar">Marketplace aç</button></div>
+      <div class="satir"><button class="btn" id="pl-cc">Claude Code'dan içe aktar</button><span class="soluk kucuk">Bu bilgisayardaki Claude Code plugin'leri aynen kurulur.</span></div>
+      <div id="pl-secim"></div>
       <div id="pl-rapor"></div>
       <div id="pl-liste" class="ayar-grup"></div>
     </div>
@@ -311,18 +323,30 @@ export function ayarlarAc(sekme = "ai") {
   mcpCiz();
 
   // ---- Plugin'ler ----
+  const bilesenOzet = (b) => {
+    if (!b) return "";
+    const parca = [b.skill && `${b.skill} skill`, b.komut?.length && `komut: ${b.komut.map((x) => "/" + x).join(" ")}`,
+      b.ajan?.length && `ajan: ${b.ajan.join(", ")}`, b.hook && `${b.hook} hook`, b.mcp?.length && `MCP: ${b.mcp.join(", ")}`].filter(Boolean);
+    return `<div class="soluk kucuk">${kacir(parca.join(" · "))}</div>${b.desteklenmeyen?.length ? `<div class="soluk kucuk">Desteklenmeyen: ${kacir(b.desteklenmeyen.join("; "))}</div>` : ""}`;
+  };
   const pluginCiz = async () => {
     const kap = $("#pl-liste", govde);
     try {
       const { pluginler } = await api("/api/pluginler");
       kap.innerHTML = pluginler.map((p) => `<div class="secenek-kart ${p.acik ? "" : "pasif"}" data-pl="${kacir(p.ad)}">
         <div style="flex:1"><div class="ust"><b>${kacir(p.ad)}</b> <span class="rozet">v${kacir(p.aktif)}</span>${p.onceki ? ` <span class="soluk kucuk">önceki: v${kacir(p.onceki)}</span>` : ""}</div>
-        <div class="alt">${kacir(p.aciklama)}</div></div>
+        <div class="alt">${kacir(p.aciklama)}</div>${bilesenOzet(p.bilesenler)}
+        ${p.bilesenler?.hook ? `<label class="kucuk"><input type="checkbox" data-bil="hooks" ${p.hooks_acik ? "checked" : ""}> Hook'ları çalıştır (${p.bilesenler.hook})</label> ` : ""}${p.bilesenler?.mcp?.length ? `<label class="kucuk"><input type="checkbox" data-bil="mcp" ${p.mcp_acik ? "checked" : ""}> MCP sunucularını aç (${kacir(p.bilesenler.mcp.join(", "))})</label>` : ""}</div>
         ${p.onceki ? '<button class="btn" data-is="geri">Geri al</button>' : ""}<button class="btn" data-is="ac">${p.acik ? "Kapat" : "Aç"}</button><button class="btn tehlike" data-is="sil">Kaldır</button></div>`).join("")
         || '<div class="ayar-not">Kurulu plugin yok.</div>';
       $$("[data-pl]", kap).forEach((kart) => {
         const ad = kart.dataset.pl;
         const p = pluginler.find((x) => x.ad === ad);
+        $$("[data-bil]", kart).forEach((c) => {
+          c.onchange = async () => {
+            try { await api(`/api/pluginler/${ad}/bilesen`, { method: "PUT", govde: { tur: c.dataset.bil, acik: c.checked } }); bildir("Kaydedildi.", "basari", 1000); } catch (err) { bildir(err.message, "hata"); c.checked = !c.checked; }
+          };
+        });
         $$("[data-is]", kart).forEach((b) => {
           b.onclick = async () => {
             try {
@@ -345,17 +369,36 @@ export function ayarlarAc(sekme = "ai") {
       const k = await istek();
       const r = k.rapor;
       rapor.innerHTML = `<div class="kart"><div class="kart-baslik"><b>${kacir(k.manifest.name)} v${kacir(k.manifest.version)}</b><span class="soluk kucuk">${kacir(r.dosya_sayisi)} dosya · ${kacir(Math.round(r.toplam_bayt / 1024))} KB</span></div>
-        <div>${kacir(k.manifest.description)}</div>
+        <div>${kacir(k.manifest.description)}</div>${bilesenOzet(k.bilesenler)}
         ${r.kurulum_scriptleri.length ? `<div class="uyari-kutu kucuk">Kurulum scriptleri (ÇALIŞTIRILMAYACAK): ${kacir(r.kurulum_scriptleri.join(", "))}</div>` : ""}
         ${r.riskler.length ? `<div class="uyari-kutu kucuk"><b>Dikkat:</b><ul>${r.riskler.map((x) => `<li><code>${kacir(x.dosya)}</code> ${kacir(x.neden)}</li>`).join("")}</ul></div>` : '<div class="soluk kucuk">Bilinen riskli desen bulunmadı (bu bir güvenlik garantisi değildir).</div>'}
         <details><summary class="kucuk">Dosyalar</summary><ul class="kucuk">${r.dosyalar.map((f) => `<li><code>${kacir(f.dosya)}</code> <span class="soluk">${kacir(f.sha256)}</span></li>`).join("")}</ul></details>
         <div class="dugme-sira"><button class="btn ana" id="pl-kur">İnceledim, kur</button></div></div>`;
       $("#pl-kur", rapor).onclick = async () => {
-        try { await api("/api/pluginler/kur", { method: "POST", govde: { karantina: k.karantina } }); rapor.innerHTML = ""; bildir("Plugin kuruldu.", "basari", 1500); pluginCiz(); } catch (err) { bildir(err.message, "hata"); }
+        try { await api("/api/pluginler/kur", { method: "POST", govde: { karantina: k.karantina } }); rapor.innerHTML = ""; bildir("Plugin kuruldu.", "basari", 1500); pluginCiz(); uzantiKomutlariniYukle(); } catch (err) { bildir(err.message, "hata"); }
       };
     } catch (err) { rapor.innerHTML = `<div class="uyari-kutu kucuk">${kacir(err.message)}</div>`; }
   };
   $("#pl-incele", govde).onclick = () => plIncele(() => api("/api/pluginler/karantina", { method: "POST", govde: { yol: $("#pl-yol", govde).value.trim() } }));
+  const secimCiz = (baslik, ogeler, istek) => {
+    const kap = $("#pl-secim", govde);
+    kap.innerHTML = `<div class="ayar-grup"><b class="kucuk">${kacir(baslik)}</b>${ogeler.map((x, i) => `<div class="satir"><span style="flex:1">${kacir(x.ad)} <span class="soluk kucuk">${kacir(x.alt || "")}</span></span><button class="btn" data-sec="${i}" ${x.bos ? "disabled" : ""}>${x.bos ? "boş" : "İncele"}</button></div>`).join("") || '<div class="ayar-not">Bulunamadı.</div>'}</div>`;
+    $$("[data-sec]", kap).forEach((b) => { b.onclick = () => plIncele(() => istek(ogeler[+b.dataset.sec])); });
+  };
+  $("#pl-cc", govde).onclick = async () => {
+    try {
+      const { pluginler } = await api("/api/pluginler/claude-code");
+      secimCiz("Claude Code'da kurulu plugin'ler", pluginler.map((p) => ({ ...p, alt: p.surum })), (p) => api("/api/pluginler/karantina", { method: "POST", govde: { yol: p.yol, ad: p.ad } }));
+    } catch (err) { bildir(err.message, "hata"); }
+  };
+  $("#pl-git-incele", govde).onclick = () => plIncele(() => api("/api/pluginler/git", { method: "POST", govde: { url: $("#pl-git", govde).value.trim() } }));
+  $("#pl-pazar", govde).onclick = async () => {
+    const kaynak = $("#pl-git", govde).value.trim();
+    try {
+      const m = await api("/api/pluginler/marketplace", { method: "POST", govde: { kaynak } });
+      secimCiz(`Marketplace: ${m.ad}`, m.pluginler.map((p) => ({ ad: p.name, alt: p.description })), (p) => api("/api/pluginler/marketplace/kur", { method: "POST", govde: { kaynak, ad: p.ad } }));
+    } catch (err) { bildir(err.message, "hata"); }
+  };
   api("/api/pluginler/katalog").then(({ katalog }) => {
     if (!katalog.length) return;
     const kat = el(`<div class="ayar-grup"><b class="kucuk">Katalog (kilitli sürüm ve hash)</b>${katalog.map((x) => `<div class="satir"><span>${kacir(x.name)} v${kacir(x.version)}</span><button class="btn" data-kat="${kacir(x.name)}">İncele</button></div>`).join("")}</div>`);
@@ -363,6 +406,7 @@ export function ayarlarAc(sekme = "ai") {
     $("#pl-liste", govde).before(kat);
   }).catch(() => {});
   pluginCiz();
+  uzantiSekmesiKur(govde);
 
   const modelleriCiz = () => {
     $("#ay-modeller", govde).innerHTML = modelKartlari($("#ay-ara", govde).value, $("#ay-indirilen", govde).checked);

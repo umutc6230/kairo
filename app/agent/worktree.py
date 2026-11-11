@@ -59,7 +59,7 @@ def entegre_et(proje: Path, yol: Path, dal: str, mesaj: str, test_komutu: str = 
         raise UygulamaHatasi("Bu gorevin worktree'si bulunamadi (zaten entegre ya da silinmis).")
     # 1) worktree'deki degisiklikler ajan dalina commit
     _git(yol, "add", "-A")
-    kod, cikti = _git(yol, "-c", "user.name=Yerel AI Studio", "-c", "user.email=ajan@yerel",
+    kod, cikti = _git(yol, "-c", "user.name=Kairo", "-c", "user.email=ajan@yerel",
                       "commit", "-m", mesaj[:200] or "ajan degisikligi")  # fmt: skip
     if kod != 0 and "nothing to commit" not in cikti:
         raise UygulamaHatasi(f"Ajan dalina commit yapilamadi: {cikti[:300]}")

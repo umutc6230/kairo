@@ -38,14 +38,14 @@ const P = {
   model: '<rect x="4" y="4" width="16" height="16" rx="2"/><rect x="9" y="9" width="6" height="6"/><path d="M9 1v3M15 1v3M9 20v3M15 20v3M20 9h3M20 14h3M1 9h3M1 14h3"/>',
 };
 
-// Uygulamanin kendi piksel logosu (kucuk turuncu lama).
-const LOGO = `<svg viewBox="0 0 13 10" shape-rendering="crispEdges" fill="#e07a4f">
-<rect x="9" y="0" width="1" height="2"/><rect x="11" y="0" width="1" height="2"/>
-<rect x="9" y="2" width="3" height="3"/><rect x="12" y="3" width="1" height="1"/>
-<rect x="9" y="5" width="2" height="1"/><rect x="1" y="5" width="10" height="3"/>
-<rect x="0" y="5" width="1" height="2"/><rect x="1" y="8" width="1" height="2"/>
-<rect x="3" y="8" width="1" height="2"/><rect x="7" y="8" width="1" height="2"/>
-<rect x="9" y="8" width="1" height="2"/><rect x="10" y="3" width="1" height="1" fill="#1f1f1e"/></svg>`;
+// Kairo karakteri: kucuk piksel baykus (turkuaz).
+const LOGO = `<svg viewBox="0 0 13 10" shape-rendering="crispEdges" fill="#2bb6a8">
+<rect x="2" y="0" width="1" height="1"/><rect x="10" y="0" width="1" height="1"/>
+<rect x="2" y="1" width="9" height="8"/><rect x="1" y="4" width="1" height="3"/><rect x="11" y="4" width="1" height="3"/>
+<rect x="3" y="2" width="3" height="3" fill="#f4f1e8"/><rect x="7" y="2" width="3" height="3" fill="#f4f1e8"/>
+<rect x="4" y="3" width="1" height="1" fill="#1f1f1e"/><rect x="8" y="3" width="1" height="1" fill="#1f1f1e"/>
+<rect x="6" y="5" width="1" height="1" fill="#f2b134"/>
+<rect x="4" y="9" width="2" height="1" fill="#f2b134"/><rect x="7" y="9" width="2" height="1" fill="#f2b134"/></svg>`;
 
 export function ikon(ad) {
   if (ad === "logo") return LOGO;

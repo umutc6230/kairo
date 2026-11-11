@@ -234,7 +234,7 @@ async def test_gercek_port_acma_cakisma_ve_kapatma(gecit):
     d = g1.durum()
     assert d["ollama_adres"] == f"http://127.0.0.1:{port}" and d["openai_adres"].endswith("/v1")
     g2 = ag.AgGecidi(gecit)
-    assert await g2.baslat(port) is False and "baska bir Yerel AI Studio" in g2.hata
+    assert await g2.baslat(port) is False and "baska bir Kairo" in g2.hata
     await g1.durdur()
     assert not g1.acik and ag.port_bos(port)
     assert await ag.portu_kim_kullaniyor(port) == "baska bir program"

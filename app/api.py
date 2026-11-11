@@ -67,6 +67,7 @@ from app.services.testler import (
     TestServisi,
     ornek_belge,
 )
+from app.services.uzantilar import UzantiYoneticisi
 from app.services.yerel_llm import DUSUNME_SECENEKLERI, MODELLER, YerelLLM
 
 UPLOAD_PARCA_BAYT = 1024 * 1024  # upload akisinda tek seferde okunan parca
@@ -282,6 +283,10 @@ def uygulama_olustur(
     hafiza = HafizaDeposu(veri_dizini)
     hooklar = HookDeposu(veri_dizini)
     mcp = McpYoneticisi(veri_dizini)
+    uzantilar = UzantiYoneticisi(veri_dizini)
+    hooklar.ek_kaynak = pluginler.hook_tanimlari  # Claude Code plugin hook'lari (acilirsa)
+    mcp.ek_kaynak = pluginler.mcp_tanimlari  # Claude Code plugin .mcp.json (acilirsa)
+    sohbet.uzantilar = uzantilar
     sohbet.tarayici = Tarayici(veri_dizini)
     sohbet.masaustu = Masaustu(
         lambda: ayarlar.oku().masaustu_izinli, veri_dizini / "ekran-goruntuleri"
@@ -352,6 +357,8 @@ def uygulama_olustur(
     )
     ajan.araclar_kok = ajan_baglami_kok
     ajan.takim = TakimPanosu(veri_dizini)
+    ajan.uzantilar = uzantilar
+    ajan.ajan_profilleri = pluginler.ajan_profilleri
     isitmalar: set[asyncio.Task] = set()
     agecidi = AgGecidi(agecidi_uygulamasi(yonetici, ayarlar, kapat))
     magaza = magaza or Magaza()
@@ -370,6 +377,7 @@ def uygulama_olustur(
         await uzak_sunucu.kapat()  # A12: uzak erisim uygulamayla birlikte kapanir
         await ajan.kapat()  # calisan gorevler guvenli sinirda duraklatilir
         mcp.kapat()  # MCP sunucu surecleri yetim kalmasin
+        uzantilar.kapat()
         for kz in sohbet.kod_zekasi.values():  # dil sunuculari
             kz.kapat()
         if sohbet.tarayici.acik_mi():
@@ -662,7 +670,9 @@ def uygulama_olustur(
 
     @app.post("/api/pluginler/karantina")
     async def plugin_karantina(veri: dict) -> dict:
-        return await asyncio.to_thread(pluginler.karantinaya_al, str(veri.get("yol", "")))
+        return await asyncio.to_thread(
+            pluginler.karantinaya_al, str(veri.get("yol", "")), str(veri.get("ad", ""))
+        )
 
     @app.get("/api/pluginler/katalog")
     async def plugin_katalog() -> dict:
@@ -671,6 +681,40 @@ def uygulama_olustur(
     @app.post("/api/pluginler/katalog/{ad}")
     async def plugin_katalogdan(ad: str) -> dict:
         return await asyncio.to_thread(pluginler.katalogdan_karantina, ad)
+
+    # ---- Claude Code plugin uyumlulugu ----
+    @app.get("/api/pluginler/claude-code")
+    async def plugin_claude_code() -> dict:
+        """Bu bilgisayardaki Claude Code'un kurulu plugin'leri (ice aktarmak icin)."""
+        return {"pluginler": pluginler.claude_code_pluginleri()}
+
+    @app.post("/api/pluginler/marketplace")
+    async def plugin_marketplace(veri: dict) -> dict:
+        return pluginler.marketplace(str(veri.get("kaynak", "")))
+
+    @app.post("/api/pluginler/marketplace/kur")
+    async def plugin_marketplace_karantina(veri: dict) -> dict:
+        return await asyncio.to_thread(
+            pluginler.marketplace_karantina, str(veri.get("kaynak", "")), str(veri.get("ad", ""))
+        )
+
+    @app.post("/api/pluginler/git")
+    async def plugin_git(veri: dict) -> dict:
+        return await asyncio.to_thread(
+            pluginler.git_karantina, str(veri.get("url", "")), str(veri.get("ref", ""))
+        )
+
+    @app.get("/api/pluginler/komutlar")
+    async def plugin_komutlari() -> dict:
+        return {"komutlar": pluginler.komutlar()}
+
+    @app.post("/api/pluginler/komut")
+    async def plugin_komut(veri: dict) -> dict:
+        return pluginler.komut_genislet(str(veri.get("komut", "")), str(veri.get("arg", ""))[:4000])
+
+    @app.put("/api/pluginler/{ad}/bilesen")
+    async def plugin_bilesen(ad: str, veri: dict) -> dict:
+        return pluginler.bilesen_ac(ad, str(veri.get("tur", "")), bool(veri.get("acik")))
 
     @app.post("/api/pluginler/kur")
     async def plugin_kur(veri: dict) -> dict:
@@ -717,6 +761,39 @@ def uygulama_olustur(
             tani, veri_dizini, Path(a.llm_dizin), openrouter.anahtar_durumu()["var"]
         )
         return {"kontroller": sonuc}
+
+    # ---- uzantilar (A7.6): ayri surec, yalniz ilan edilen yetenek, arac her zaman onay ----
+    @app.get("/api/uzantilar")
+    async def uzanti_listesi() -> dict:
+        return {"uzantilar": uzantilar.liste(), "komutlar": uzantilar.komut_listesi()}
+
+    @app.post("/api/uzantilar/karantina")
+    async def uzanti_karantina(veri: dict) -> dict:
+        return await asyncio.to_thread(uzantilar.karantinaya_al, str(veri.get("yol", "")))
+
+    @app.post("/api/uzantilar/kur")
+    async def uzanti_kur(veri: dict) -> dict:
+        return await asyncio.to_thread(uzantilar.kur, str(veri.get("ad", "")))
+
+    @app.put("/api/uzantilar/{ad}/durum")
+    async def uzanti_durum(ad: str, veri: dict) -> dict:
+        return uzantilar.ac_kapat(ad, bool(veri.get("acik")))
+
+    @app.delete("/api/uzantilar/{ad}")
+    async def uzanti_kaldir(ad: str) -> dict:
+        uzantilar.kaldir(ad)
+        return {"silindi": ad}
+
+    @app.post("/api/uzantilar/komut")
+    async def uzanti_komut(veri: dict) -> dict:
+        return await asyncio.to_thread(
+            uzantilar.komut, str(veri.get("komut", "")), str(veri.get("arg", ""))
+        )
+
+    @app.get("/api/uzantilar/{ad}/panel")
+    async def uzanti_panel(ad: str) -> dict:
+        p = await asyncio.to_thread(uzantilar.panel, ad)
+        return {**p, "csp": ONIZLEME_CSP}
 
     # ---- MCP (A7): sunucular yalniz oturumlu arayuzden; sirlar maskeli doner ----
     @app.get("/api/mcp")

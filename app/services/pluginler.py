@@ -15,18 +15,22 @@ import hashlib
 import json
 import re
 import shutil
+import subprocess
+import tempfile
 from datetime import datetime
 from pathlib import Path
 
 from pydantic import BaseModel, Field
 
+from app.agent.dosyalar import ortam_allowlist
 from app.exceptions import Bulunamadi, UygulamaHatasi
+from app.services import cc_plugin as cc
 from app.services.depo import json_oku, json_yaz
 
 AD = r"^[a-z0-9][a-z0-9_-]{0,47}$"
 SURUM = r"^\d+\.\d+\.\d+$"
-MAX_DOSYA = 500
-MAX_BOYUT = 20 * 1024 * 1024
+MAX_DOSYA = 10_000  # gercek Claude Code plugin'leri node_modules ile gelebiliyor (telegram: 3622)
+MAX_BOYUT = 150 * 1024 * 1024
 RISKLI = [
     (re.compile(r"curl[^\n|]*\|\s*(ba)?sh|iwr[^\n|]*\|\s*iex", re.I), "uzaktan indirip calistirma"),
     (re.compile(r"\beval\s*\(|\bexec\s*\(", re.I), "dinamik kod calistirma"),
@@ -45,8 +49,7 @@ KURULUM_SCRIPTI = re.compile(r"^(install|setup|postinstall|preinstall)\.|^setup\
 class Manifest(BaseModel):
     name: str = Field(pattern=AD)
     version: str = Field(pattern=SURUM)
-    description: str = Field(min_length=1, max_length=600)
-    skills: str = "skills"
+    description: str = Field(default="", max_length=600)
 
 
 def _sha(p: Path) -> str:
@@ -54,12 +57,23 @@ def _sha(p: Path) -> str:
 
 
 def _manifest_oku(kok: Path) -> Manifest:
-    yol = kok / "plugin.json"
-    if not yol.is_file():
-        raise UygulamaHatasi("plugin.json bulunamadi.")
+    """Claude Code formati (.claude-plugin/plugin.json) ya da kokte plugin.json."""
     try:
-        # utf-8-sig: Windows araclari (Not Defteri, PowerShell) BOM ekliyor
-        return Manifest(**json.loads(yol.read_text(encoding="utf-8-sig")))
+        ham = cc.ham_manifest(kok)  # utf-8-sig: Windows araclari BOM ekliyor
+    except (ValueError, OSError) as e:
+        raise UygulamaHatasi(f"plugin.json gecersiz: {str(e)[:300]}") from e
+    if ham is None:
+        raise UygulamaHatasi(
+            "plugin.json bulunamadi (.claude-plugin/plugin.json ya da plugin.json)."
+        )
+    if not ham.get("name"):
+        raise UygulamaHatasi("plugin.json gecersiz: 'name' zorunlu.")
+    try:
+        return Manifest(
+            name=cc.ad_normalize(ham["name"]),
+            version=cc.surum_normalize(ham.get("version")),
+            description=str(ham.get("description") or "")[:600],
+        )
     except (ValueError, TypeError) as e:
         raise UygulamaHatasi(f"plugin.json gecersiz: {str(e)[:300]}") from e
 
@@ -128,10 +142,30 @@ class PluginDeposu:
                 f"Kurum politikasi yalniz izinli plugin'lere izin veriyor: {ad} listede yok."
             )
 
-    def karantinaya_al(self, kaynak: str) -> dict:
+    def karantinaya_al(self, kaynak: str, ad: str = "") -> dict:
         k = Path(kaynak).expanduser()
         if not k.is_dir():
             raise UygulamaHatasi(f"Klasor bulunamadi: {kaynak}")
+        if cc.ham_manifest(k) is None:
+            # Claude Code 'strict: false': manifest marketplace'te olabilir; ad/surum klasorden
+            icerik = [p for p in k.iterdir() if p.name not in (".in_use", ".orphaned_at")]
+            if not icerik:
+                raise UygulamaHatasi("Plugin klasoru bos (indirilmemis ya da yarim kurulum).")
+            surum = cc.surum_normalize(k.name) if k.name[:1].isdigit() else "0.0.0"
+            ad_ = ad or (k.parent.name if k.name[:1].isdigit() else k.name)
+            m = Manifest(name=cc.ad_normalize(ad_.split("@")[0]), version=surum)
+            hedef = self.karantina / f"{m.name}-{m.version}"
+            if hedef.exists():
+                shutil.rmtree(hedef)
+            shutil.copytree(k, hedef, symlinks=True)
+            (hedef / ".claude-plugin").mkdir(exist_ok=True)
+            (hedef / ".claude-plugin" / "plugin.json").write_text(
+                json.dumps({"name": m.name, "version": m.version,
+                            "description": "(manifest yok; klasorden turetildi)"}),
+                encoding="utf-8",
+            )  # fmt: skip
+            return {"manifest": m.model_dump(), "rapor": inceleme_raporu(hedef),
+                    "karantina": hedef.name, "bilesenler": _ozet(cc.bilesenler(hedef))}  # fmt: skip
         m = _manifest_oku(k)
         self._politika(m.name)
         dosyalar = [p for p in k.rglob("*") if p.is_file()]
@@ -145,7 +179,50 @@ class PluginDeposu:
             "manifest": m.model_dump(),
             "rapor": inceleme_raporu(hedef),
             "karantina": hedef.name,
+            "bilesenler": _ozet(cc.bilesenler(hedef)),
         }
+
+    def git_karantina(self, url: str, ref: str = "") -> dict:
+        """Git kaynagini indirir ve HICBIR SEY calistirmadan karantinaya alir."""
+        if not re.fullmatch(r"https://[\w.-]+/[\w./-]+", url or ""):
+            raise UygulamaHatasi("Yalniz https git adresi kabul edilir.")
+        gecici = Path(tempfile.mkdtemp(prefix="indir-", dir=self.karantina))
+        try:
+            arg = ["git", "-c", "core.hooksPath=" + str(gecici / "yok"), "clone", "--depth", "1"]
+            if ref and re.fullmatch(r"[\w./-]{1,100}", ref):
+                arg += ["--branch", ref]
+            r = subprocess.run(  # noqa: S603 - sabit argumanlar
+                [*arg, url, str(gecici / "r")],
+                capture_output=True,
+                text=True,
+                timeout=180,
+                env=ortam_allowlist(),
+            )
+            if r.returncode != 0:
+                raise UygulamaHatasi(f"Indirilemedi: {(r.stdout + r.stderr)[-300:]}")
+            shutil.rmtree(gecici / "r" / ".git", ignore_errors=True)
+            return self.karantinaya_al(str(gecici / "r"))
+        finally:
+            shutil.rmtree(gecici, ignore_errors=True)
+
+    # ---- Claude Code marketplace + bu bilgisayardaki Claude Code plugin'leri ----
+    def marketplace(self, kaynak: str) -> dict:
+        try:
+            return cc.marketplace_oku(Path(kaynak).expanduser())
+        except (ValueError, OSError) as e:
+            raise UygulamaHatasi(f"Marketplace okunamadi: {e}") from e
+
+    def marketplace_karantina(self, kaynak: str, ad: str) -> dict:
+        p = next((x for x in self.marketplace(kaynak)["pluginler"] if x["name"] == ad), None)
+        if p is None:
+            raise Bulunamadi("Marketplace'te boyle bir plugin yok.")
+        k = p["kaynak"]
+        if k["tur"] == "yol":
+            return self.karantinaya_al(k["yol"])
+        return self.git_karantina(k["url"], k["ref"])
+
+    def claude_code_pluginleri(self) -> list[dict]:
+        return cc.claude_code_kurulu()
 
     # ---- katalog (A7.5): data/plugin-katalog.json [{name, version, yol, sha256}] ----
     def katalog(self) -> list[dict]:
@@ -217,8 +294,93 @@ class PluginDeposu:
 
     def liste_ogesi(self, ad: str) -> dict:
         g = self._kayit()[ad]
-        m = _manifest_oku(self.kok / ad / g["aktif"]) if g.get("aktif") else None
-        return {"ad": ad, **g, "aciklama": m.description if m else "", "acik": not g.get("kapali")}
+        kok = self.kok / ad / g["aktif"] if g.get("aktif") else None
+        m = _manifest_oku(kok) if kok else None
+        return {
+            **g,
+            "ad": ad,
+            "aciklama": m.description if m else "",
+            "acik": not g.get("kapali"),
+            "bilesenler": _ozet(cc.bilesenler(kok)) if kok else {},
+            "hooks_acik": bool(g.get("hooks_acik")),
+            "mcp_acik": bool(g.get("mcp_acik")),
+        }
+
+    def bilesen_ac(self, ad: str, tur: str, acik: bool) -> dict:
+        """Hook ve MCP komut CALISTIRIR: kurulumda kapali gelir, kullanici acikca acar."""
+        if tur not in ("hooks", "mcp"):
+            raise UygulamaHatasi("Tur: hooks ya da mcp.")
+        kayit = self._kayit()
+        if ad not in kayit:
+            raise Bulunamadi("Plugin bulunamadi.")
+        kayit[ad][f"{tur}_acik"] = acik
+        json_yaz(self.kayit, kayit)
+        return self.liste_ogesi(ad)
+
+    def _acik_pluginler(self) -> list[tuple[str, Path]]:
+        out = []
+        for ad, g in self._kayit().items():
+            if g.get("kapali") or not g.get("aktif"):
+                continue
+            try:
+                self._politika(ad)
+            except UygulamaHatasi:
+                continue
+            out.append((ad, self.kok / ad / g["aktif"]))
+        return out
+
+    def komutlar(self) -> list[dict]:
+        out = []
+        for ad, kok in self._acik_pluginler():
+            for k in cc.bilesenler(kok)["komutlar"]:
+                out.append({"komut": f"{ad}:{k['ad']}", "kisa": k["ad"], "plugin": ad,
+                            "aciklama": k["aciklama"], "ipucu": k["ipucu"]})  # fmt: skip
+        return out
+
+    def komut_genislet(self, komut: str, arg: str) -> dict:
+        ad, _, kisa = komut.partition(":")
+        for p, kok in self._acik_pluginler():
+            if kisa and p != ad:
+                continue
+            hedef = kisa or ad
+            for k in cc.bilesenler(kok)["komutlar"]:
+                if k["ad"] == hedef:
+                    istem = cc.komut_genislet(k["govde"], arg, kok)
+                    return {"plugin": p, "komut": k["ad"], "istem": istem}
+        raise Bulunamadi(f"/{komut} plugin komutu bulunamadi.")
+
+    def ajan_profilleri(self) -> dict[str, dict]:
+        return {
+            f"{ad}:{a['ad']}": a
+            for ad, kok in self._acik_pluginler()
+            for a in cc.bilesenler(kok)["ajanlar"]
+        }
+
+    def hook_tanimlari(self) -> list[dict]:
+        out = []
+        for ad, kok in self._acik_pluginler():
+            if not self._kayit()[ad].get("hooks_acik"):
+                continue
+            for i, h in enumerate(cc.bilesenler(kok)["hooks"]):
+                out.append({
+                    "id": f"p{i:02d}{ad}"[:12], "ad": f"{ad} ({h['olay']})"[:80],
+                    "olay": h["olay"], "tur": "guvenlik", "komut": cc.degisken_ac(h["komut"], kok),
+                    "eslesen": h["eslesen"], "timeout": max(1, min(h["timeout"], 120)),
+                    "bicim": "claude", "kaynak": f"plugin:{ad}",
+                    "ortam": {"CLAUDE_PLUGIN_ROOT": str(kok)},
+                })  # fmt: skip
+        return out
+
+    def mcp_tanimlari(self) -> list[dict]:
+        out = []
+        for ad, kok in self._acik_pluginler():
+            if not self._kayit()[ad].get("mcp_acik"):
+                continue
+            for sad, ham in cc.bilesenler(kok)["mcp"].items():
+                d = cc.mcp_donustur(cc.ad_normalize(f"{ad}-{sad}")[:32], ham, kok)
+                if d:
+                    out.append(d)
+        return out
 
     def liste(self) -> list[dict]:
         return [self.liste_ogesi(ad) for ad in sorted(self._kayit())]
@@ -226,14 +388,20 @@ class PluginDeposu:
     def skill_kaynaklari(self) -> list[tuple[str, Path]]:
         """Aktif ve acik plugin'lerin skill klasorleri (politika her seferinde kontrol edilir:
         sonradan yasaklanan plugin'in skill'leri hemen devre disi kalir)."""
-        sonuc = []
-        for ad, g in self._kayit().items():
-            if g.get("kapali") or not g.get("aktif"):
-                continue
-            try:
-                self._politika(ad)
-                m = _manifest_oku(self.kok / ad / g["aktif"])
-            except UygulamaHatasi:
-                continue
-            sonuc.append((f"plugin:{ad}", self.kok / ad / g["aktif"] / m.skills))
-        return sonuc
+        return [
+            (f"plugin:{ad}", d)
+            for ad, kok in self._acik_pluginler()
+            for d in cc.bilesenler(kok)["skills"]
+        ]
+
+
+def _ozet(b: dict) -> dict:
+    skill = sum(len([x for x in d.iterdir() if (x / "SKILL.md").is_file()]) for d in b["skills"])
+    return {
+        "skill": skill,
+        "komut": [k["ad"] for k in b["komutlar"]],
+        "ajan": [a["ad"] for a in b["ajanlar"]],
+        "hook": len(b["hooks"]),
+        "mcp": list(b["mcp"]),
+        "desteklenmeyen": b["desteklenmeyen"],
+    }

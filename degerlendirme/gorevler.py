@@ -729,7 +729,7 @@ gorev(
 
 # Kesif cevaplarinin ANLAM denetimi: liste maddeleri + tablo satirlari sayilir; basligi "okunmayan /
 # kullanilan / dahil degil / referans" olan bolum ACIKLAMADIR, sayilmaz. Bicim (tablo/liste) cezalanmaz.
-_MADDE = r'''
+_MADDE = r"""
 import re
 
 HARIC = re.compile(r"okunmayan|kullan[iı]lan|dahil de[gğ]il|hari[cç]|referans", re.I)
@@ -749,7 +749,7 @@ def maddeler(metin):
         elif s.strip().startswith("|") and not re.fullmatch(r"\s*\|[\s:|-]+\|?\s*", s):
             out.append(s)
     return out
-'''
+"""
 
 gorev(
     id="kesif-ortam-degiskenleri", kategori="kesif", dil="python",

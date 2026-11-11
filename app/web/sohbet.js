@@ -322,7 +322,7 @@ export function yeniSohbetEkrani() {
 export async function gonder() {
   const girdi = $("#girdi");
   const metin = girdi.value.trim();
-  if (komutMu(metin)) { // yerel slash komut: modele mesaj olarak gitmez
+  if (komutMu(metin, (istem) => { $("#girdi").value = istem; gonder(); })) { // yerel slash komut: modele mesaj olarak gitmez
     girdi.value = "";
     boyutla();
     return;

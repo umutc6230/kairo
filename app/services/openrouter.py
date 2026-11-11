@@ -20,7 +20,7 @@ OR_ADRES = "https://openrouter.ai/api/v1"
 ONBELLEK_SN = 24 * 3600
 OR_BASLIK = {
     "HTTP-Referer": "https://github.com/umutc6230/yerel-ai-studio",
-    "X-Title": "Yerel AI Studio",
+    "X-Title": "Kairo",
 }
 
 

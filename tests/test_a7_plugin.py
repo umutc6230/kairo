@@ -52,7 +52,7 @@ def test_bozuk_manifest_ve_politika(tmp_path) -> None:
     d = PluginDeposu(tmp_path / "veri")
     bozuk = tmp_path / "bozuk"
     bozuk.mkdir()
-    (bozuk / "plugin.json").write_text('{"name": "X Y", "version": "1"}', encoding="utf-8")
+    (bozuk / "plugin.json").write_text('{"version": "1"}', encoding="utf-8")  # name yok
     with pytest.raises(UygulamaHatasi, match="gecersiz"):
         d.karantinaya_al(str(bozuk))
     k = d.karantinaya_al(str(plugin(tmp_path, "1.0.0")))

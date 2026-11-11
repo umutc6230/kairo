@@ -320,6 +320,7 @@ def cikti_metni(sonuc: Any) -> dict:
 class McpYoneticisi:
     def __init__(self, veri_dizini: Path, transport: Any = None) -> None:
         self.yol = veri_dizini / "mcp.json"
+        self.ek_kaynak = lambda: []  # plugin .mcp.json tanimlari (api baglar)
         self.transport = transport  # testlerde sahte uzak sunucu
         self._baglantilar: dict[str, _Baglanti] = {}
 
@@ -331,6 +332,16 @@ class McpYoneticisi:
             except ValueError:
                 continue
         return sonuc
+
+    def tum(self) -> list[McpSunucu]:
+        """Kullanicinin sunuculari + etkinlestirilmis plugin MCP'leri (diske yazilmaz)."""
+        ek = []
+        for d in self.ek_kaynak():
+            try:
+                ek.append(McpSunucu(**d))
+            except ValueError:
+                continue
+        return [*self.liste(), *ek]
 
     def _yaz(self, sunucular: list[McpSunucu]) -> None:
         json_yaz(self.yol, [s.model_dump() for s in sunucular])
@@ -384,7 +395,7 @@ class McpYoneticisi:
         return b
 
     def test(self, ad: str) -> dict:
-        s = next((x for x in self.liste() if x.ad == ad), None)
+        s = next((x for x in self.tum() if x.ad == ad), None)
         if s is None:
             raise Bulunamadi("MCP sunucusu bulunamadi.")
         b = self._baglanti(s)
@@ -401,7 +412,7 @@ class McpYoneticisi:
         izin_uygula(arac_adi, salt_okunur, ozet) PolitikaMotoru kararini uygular."""
         semalar: list[dict] = []
         isleyiciler: dict = {}
-        for s in self.liste():
+        for s in self.tum():
             if not s.aktif:
                 continue
             b = self._baglanti(s)

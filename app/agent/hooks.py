@@ -1,3 +1,4 @@
+# ruff: noqa: E501 - Claude uyumluluk sozlukleri
 """Hook'lar (A6.4-5): olaylarda kullanicinin tanimladigi komut calisir.
 
 Sozlesme (surum 1): komut stdin'den JSON alir {"surum", "olay", "veri"} (sirlar maskelenmis).
@@ -11,6 +12,7 @@ Hook calisirken yeni hook tetiklenmez (recursion siniri 1). Ortam allowlist ile 
 from __future__ import annotations
 
 import json
+import re
 import subprocess
 import sys
 import threading
@@ -24,6 +26,7 @@ from pydantic import BaseModel, Field
 from app.agent.dosyalar import ortam_allowlist
 from app.agent.policy import maskele
 from app.exceptions import Bulunamadi
+from app.services import cc_plugin as cc
 from app.services.depo import json_oku, json_yaz
 
 SOZLESME_SURUMU = 1
@@ -44,6 +47,11 @@ class Hook(BaseModel):
     arac: str = Field(default="", max_length=80)  # pre/post_tool icin filtre; bos = hepsi
     timeout: int = Field(default=10, ge=1, le=120)
     aktif: bool = True
+    # Claude Code plugin hook'lari: matcher regex'i, Claude stdin bicimi, CLAUDE_PLUGIN_ROOT
+    eslesen: str = Field(default="", max_length=200)
+    bicim: Literal["yerel", "claude"] = "yerel"
+    kaynak: str = ""
+    ortam: dict[str, str] = {}
 
 
 class HookSonucu(BaseModel):
@@ -53,6 +61,17 @@ class HookSonucu(BaseModel):
 
 
 _yerel = threading.local()
+
+
+def _eslesir(desen: str, arac: str) -> bool:
+    """Claude matcher'i (or. 'Edit|Write', 'Bash') hem Claude hem bu uygulamanin arac adina uyar."""
+    if desen in ("*", ""):
+        return True
+    adlar = {arac, cc.TERS_ESLESME.get(arac, "")}
+    try:
+        return any(a and re.fullmatch(desen, a) for a in adlar)
+    except re.error:
+        return desen in adlar
 
 
 def _maskeli(x: object) -> object:
@@ -68,6 +87,7 @@ def _maskeli(x: object) -> object:
 class HookDeposu:
     def __init__(self, veri_dizini: Path) -> None:
         self.yol = veri_dizini / "hooks.json"
+        self.ek_kaynak = lambda: []  # plugin hook tanimlari (api baglar)
 
     def liste(self) -> list[Hook]:
         sonuc = []
@@ -77,6 +97,16 @@ class HookDeposu:
             except ValueError:
                 continue
         return sonuc
+
+    def tum(self) -> list[Hook]:
+        """Kullanicinin hook'lari + etkinlestirilmis plugin hook'lari (plugin'ler diske YAZILMAZ)."""
+        ek = []
+        for h in self.ek_kaynak():
+            try:
+                ek.append(Hook(**h))
+            except ValueError:
+                continue
+        return [*self.liste(), *ek]
 
     def _yaz(self, hooks: list[Hook]) -> None:
         json_yaz(self.yol, [h.model_dump() for h in hooks])
@@ -106,8 +136,15 @@ class HookDeposu:
     def _calistir(h: Hook, olay: str, veri: dict, cwd: Path | None) -> tuple[str, str]:
         """('izin'|'engel'|'hata', mesaj)."""
         # maske DEGERLERE uygulanir: serilestirilmis metne uygulamak JSON tirnaklarini bozuyordu
-        girdi = json.dumps({"surum": SOZLESME_SURUMU, "olay": olay, "veri": _maskeli(veri)},
-                           ensure_ascii=False, default=str)  # fmt: skip
+        if h.bicim == "claude":  # Claude Code hook stdin bicimi
+            claude_olay = {v: k for k, v in cc.OLAY_ESLESME.items()}.get(olay, olay)
+            arac = str(veri.get("arac", ""))
+            govde = {"hook_event_name": claude_olay, "session_id": str(veri.get("run", "")),
+                     "cwd": str(cwd or ""), "tool_name": cc.TERS_ESLESME.get(arac, arac),
+                     "tool_input": _maskeli(veri.get("argumanlar", {})), "prompt": veri.get("metin", "")}  # fmt: skip
+        else:
+            govde = {"surum": SOZLESME_SURUMU, "olay": olay, "veri": _maskeli(veri)}
+        girdi = json.dumps(govde, ensure_ascii=False, default=str)
         try:
             r = subprocess.run(  # noqa: S602 - kullanicinin kendi tanimladigi hook komutu
                 h.komut,
@@ -116,7 +153,7 @@ class HookDeposu:
                 capture_output=True,
                 timeout=h.timeout,
                 cwd=str(cwd) if cwd and cwd.is_dir() else None,
-                env=ortam_allowlist(),
+                env={**ortam_allowlist(), **h.ortam, "CLAUDE_PROJECT_DIR": str(cwd or "")},
                 creationflags=subprocess.CREATE_NO_WINDOW if sys.platform == "win32" else 0,
             )
         except subprocess.TimeoutExpired:
@@ -138,14 +175,19 @@ class HookDeposu:
         sonuc = HookSonucu()
         _yerel.icinde = True
         try:
-            for h in self.liste():
+            for h in self.tum():
                 if not h.aktif or h.olay != olay or (h.arac and h.arac != arac):
+                    continue
+                if h.eslesen and not _eslesir(h.eslesen, arac):
                     continue
                 durum, mesaj = self._calistir(h, olay, veri, cwd)
                 sonuc.calisan.append({"hook": h.ad, "tur": h.tur, "durum": durum, "mesaj": mesaj})
                 if durum == "hata":
                     logger.warning("Hook hatasi ({}): {}", h.ad, mesaj)
-                engeller = h.tur == "guvenlik" and durum in ("engel", "hata")
+                # guvenlik hook'u hata/timeout'ta da engeller; Claude hook'u (Claude gibi) yalniz cikis 2
+                engeller = (h.tur == "guvenlik" and durum in ("engel", "hata")) or (
+                    h.bicim == "claude" and durum == "engel"
+                )
                 if engeller and sonuc.izin:
                     sonuc.izin = False
                     sonuc.neden = f"Guvenlik hook'u '{h.ad}' engelledi: {mesaj}"

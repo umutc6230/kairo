@@ -609,6 +609,7 @@ class SohbetServisi:
         self.komutlar = komutlar or KomutServisi()
         self.hafiza = None  # HafizaDeposu (api baglar)
         self.mcp = None  # McpYoneticisi (api baglar)
+        self.uzantilar = None  # UzantiYoneticisi (api baglar)
         self.tarayici = None  # Tarayici (api baglar)
         self.masaustu = None  # Masaustu (api baglar)
         self.kod_zekasi: dict[str, Any] = {}  # alan id -> KodZekasi (dil sunuculari surer)
@@ -678,6 +679,19 @@ class SohbetServisi:
             mcp_sema, mcp_isl = self.mcp.semalar_ve_isleyiciler(mcp_izin)
             araclar += mcp_sema
             isleyiciler |= mcp_isl
+        if self.uzantilar is not None and self.politika is not None:  # A7.6 uzanti araclari
+            politika_u = self.politika
+
+            def uzanti_izin(ad: str, kw: dict) -> None:  # her zaman onay: dis kod
+                politika_u.uygula(
+                    Istek(arac=ad, yan_etki=YanEtki.dis, ozet=f"Uzanti araci {ad}",
+                          komut=json.dumps(kw, sort_keys=True, ensure_ascii=False)[:4000]),
+                    alan,
+                )  # fmt: skip
+
+            u_sema, u_isl = self.uzantilar.arac_semalari_ve_isleyiciler(uzanti_izin)
+            araclar += u_sema
+            isleyiciler |= u_isl
         if self.politika is not None and self.politika.ag_acik():  # A9.1 web okuma/arama
             from app.agent.web import ARAMA_ARACI, WEB_ARACI, web_ara, web_getir
             from app.agent.yazma import sonuc_veya_hata

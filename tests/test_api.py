@@ -27,7 +27,7 @@ async def test_bilgi_ve_arayuz(istemci):
     assert b["urun_sahibi"] == "Umut Çelik" and "x.com/umutc6230" in b["x"]
     assert [d["deger"] for d in b["dusunme_secenekleri"]] == ["kapali", "dengeli", "derin"]
     r = await istemci.get("/")
-    assert r.status_code == 200 and "Yerel AI Studio" in r.text
+    assert r.status_code == 200 and "Kairo" in r.text
     js = await istemci.get("/web/app.js")
     assert js.status_code == 200 and js.headers["cache-control"] == "no-cache"  # guncel JS
 

@@ -5,6 +5,7 @@ import { diffGoster, reviewYap } from "./inceleme.js";
 import { kacir } from "./md.js";
 import { api, bildir, durum, modal } from "./ortak.js";
 import { projeAc } from "./proje.js";
+import { pluginKomutuMu, uzantiKomutlariniYukle, uzantiKomutuMu } from "./uzantilar.js";
 
 const git = (hedef) => document.querySelector(`[data-git="${hedef}"]`)?.click();
 
@@ -39,6 +40,7 @@ export const KOMUTLAR = {
   "/hooks": { aciklama: "Hook'lar", calistir: () => ayarlarAc("hooks") },
   "/mcp": { aciklama: "MCP bağlayıcıları", calistir: () => ayarlarAc("mcp") },
   "/plugin": { aciklama: "Plugin'ler", calistir: () => ayarlarAc("plugin") },
+  "/uzanti": { aciklama: "Uzantılar (Mods)", calistir: () => ayarlarAc("uzanti") },
   "/permissions": { aciklama: "Proje, mod ve izin kapsamı", calistir: () => projeAc() },
   "/diff": { aciklama: "Çalışma ağacı diff'i", calistir: () => diffGoster() },
   "/review": { aciklama: "Diff'i kod review'dan geçirir (/review derin: güvenlik + doğruluk geçişleri)", calistir: (arg) => reviewYap(arg === "derin") },
@@ -173,7 +175,7 @@ function yardim() {
 }
 
 /** Metin bir komutsa calistirir ve true doner; degilse false (normal mesaj). */
-export function komutMu(metin) {
+export function komutMu(metin, mesajGonder = null) {
   if (!metin.startsWith("/")) return false;
   const [ad, ...kalan] = metin.split(/\s+/);
   const k = KOMUTLAR[ad.toLowerCase()];
@@ -185,5 +187,9 @@ export function komutMu(metin) {
     bildir(`${ad} henüz yok (ilgili servis sonraki aşamalarda).`, "uyari");
     return true;
   }
+  if (uzantiKomutuMu(ad, kalan.join(" ").trim())) return true; // kurulu uzanti komutu
+  if (mesajGonder && pluginKomutuMu(ad, kalan.join(" ").trim(), mesajGonder)) return true; // Claude Code plugin komutu
   return false; // bilinmeyen /... normal mesaj gider (or. yol)
 }
+
+uzantiKomutlariniYukle();
