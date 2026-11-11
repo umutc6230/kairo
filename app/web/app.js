@@ -2,7 +2,7 @@
 import { ikon, ikonlariYerlestir } from "./ikonlar.js";
 import { kacir } from "./md.js";
 import { aramaAc, ayarKaydet, ayarlarAc, ayarlarKur, modelYukle, sunucuDurdur } from "./ayarlar.js";
-import { $, $$, api, bildir, durum, el, menuAc, modal, modelAdi, modelProfil, onayla, sayi, sor, turkcelestir } from "./ortak.js";
+import { $, $$, api, bildir, durum, el, menuAc, modal, modelAdi, modelProfil, onayla, oturumBasligi, sayi, sor, turkcelestir } from "./ortak.js";
 import { artifactListesiCiz } from "./inceleme.js";
 import { sayfaModelleriniYenile, sayfalarKur } from "./sayfalar.js";
 import { modelSayfasiYukle, modellerKur } from "./modeller.js";
@@ -10,6 +10,7 @@ import { projeAc, projeDurumu, projeKur } from "./proje.js";
 import { skillSayfasiYukle, skillerKur } from "./skiller.js";
 import { gorevSayfasiYukle, gorevlerKur } from "./gorevler.js";
 import { dikteDurumuYenile, dikteKur } from "./dikte.js";
+import { baglamYenile, sagPanelKur } from "./sagpanel.js";
 import { ajanBloklariniCiz, ajanliOturum, akisVar, durdur, mesajlariCiz, sohbetKur, yeniSohbetEkrani } from "./sohbet.js";
 
 const BASLIKLAR = { karsilastir: "Karşılaştır", ocr: "OCR testi", arac: "Araç testi", paket: "Test paketi", skiller: "Skill'ler ve talimatlar", modeller: "Modeller", gorevler: "Ajan görevleri" };
@@ -43,9 +44,32 @@ function git(hedef, { kaydetme = false } = {}) {
   $("#btn-ileri").disabled = gecmisKonum >= gecmis.length - 1;
 }
 
+// Claude Desktop gibi: basliga tiklaninca etkin sohbetin menusu
+function baslikMenusu(capa) {
+  const o = (durum.oturumlar || []).find((x) => x.id === durum.oturumId);
+  if (!o || durum.gorunum !== "sohbet") return;
+  menuAc(capa, [
+    { metin: "Yeniden adlandır", ikon: "kalem", eylem: () => yenidenAdlandir(o) },
+    { metin: "Çatalla (kopyasından devam)", ikon: "kopyala", eylem: async () => {
+      try { const y = await api(`/api/oturumlar/${o.id}/catal`, { method: "POST" }); await oturumlariYenile(); git({ tur: "oturum", id: y.id }); } catch (e) { bildir(e.message, "hata"); }
+    } },
+    { metin: "Markdown olarak dışa aktar", ikon: "dis", eylem: async () => {
+      try {
+        const r = await fetch(`/api/oturumlar/${o.id}/disa-aktar?bicim=md`, { headers: oturumBasligi() });
+        if (!r.ok) throw new Error(`Dışa aktarılamadı (${r.status})`);
+        await navigator.clipboard.writeText(await r.text());
+        bildir("Sohbet Markdown olarak panoya kopyalandı.", "basari", 1500);
+      } catch (e) { bildir(e.message, "hata"); }
+    } },
+    "ayrac",
+    { metin: "Sil", ikon: "cop", tehlike: true, eylem: () => oturumSil(o) },
+  ]);
+}
+
 function baslikAyarla(metin) {
   $("#sayfa-basligi").textContent = metin || "Yeni sohbet";
   document.title = `${metin || "Yeni sohbet"} - Kairo`;
+  baglamYenile();
 }
 
 async function oturumAc(id, kaydetme = false) {
@@ -313,6 +337,16 @@ async function baslat() {
   gorevlerKur();
   ozellestirSekmeleri();
   $("#sp-proje").onclick = () => projeAc();
+  sagPanelKur({ baglayiciAc: () => ayarlarAc("mcp"), ayarAc: () => ayarlarAc() });
+  $("#btn-gorevler").onclick = () => git({ tur: "gorevler" });
+  $("#btn-artifact").onclick = () => artifactPenceresi();
+  $("#baslik-menu").onclick = (e) => baslikMenusu(e.currentTarget);
+  $("#btn-daha").onclick = (e) => menuAc(e.currentTarget, [
+    { metin: "Özelleştir (skill, plugin)", ikon: "sihir", eylem: () => git({ tur: "skiller" }) },
+    { metin: "Modeller", ikon: "model", eylem: () => git({ tur: "modeller" }) },
+    { metin: "Ayarlar", ikon: "disli", eylem: () => ayarlarAc() },
+    { metin: "Hakkında", ikon: "bilgi", eylem: () => ayarlarAc("hakkinda") },
+  ], { sagaHizali: true });
   dikteKur();
   modellerKur(hepsiniYenile);
 

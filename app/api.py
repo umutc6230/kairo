@@ -25,6 +25,7 @@ from app.agent import review as rv
 from app.agent import worktree as wt
 from app.agent.akis import Akis, AkisDeposu
 from app.agent.checkpoints import CheckpointDeposu
+from app.agent.dosyalar import AjanDosyaAraclari, KokKapsami
 from app.agent.hooks import OLAYLAR as HOOK_OLAYLARI
 from app.agent.hooks import HookDeposu
 from app.agent.izolasyon import adaptor_olustur
@@ -56,7 +57,7 @@ from app.services.openrouter import OpenRouterDeposu
 from app.services.oturumlar import OturumDeposu
 from app.services.pluginler import PluginDeposu
 from app.services.skiller import SkillDeposu
-from app.services.sohbet import VARSAYILAN_ALAN_ID, MesajIstegi, SohbetServisi
+from app.services.sohbet import VARSAYILAN_ALAN_ID, MesajIstegi, SohbetServisi, tahmini_token
 from app.services.talimatlar import TalimatDeposu
 from app.services.testler import (
     ORNEK_SATIRLAR,
@@ -558,6 +559,15 @@ def uygulama_olustur(
     @app.post("/api/oturumlar")
     async def oturum_yeni() -> dict:
         return oturumlar.olustur().model_dump()
+
+    @app.get("/api/oturumlar/{oturum_id}/baglam")
+    async def oturum_baglam(oturum_id: str) -> dict:
+        """Sag panel 'Baglam' gostergesi: mesajlarin tahmini token'i / modelin baglami."""
+        o = oturumlar.getir(oturum_id)
+        kullanilan = sum(tahmini_token(m.metin) + tahmini_token(m.dusunce) for m in o.mesajlar)
+        boyut = model_yetenegi().baglam or 1
+        return {"kullanilan": kullanilan, "boyut": boyut,
+                "yuzde": min(100, round(kullanilan * 100 / boyut))}  # fmt: skip
 
     @app.get("/api/oturumlar/{oturum_id}")
     async def oturum_getir(oturum_id: str) -> dict:
@@ -1087,6 +1097,27 @@ def uygulama_olustur(
             "guvenler": [str(g) for g in Guven],
         }
 
+    # Sag panel dosya gezgini (Claude Code Desktop gibi): yalniz etkin projenin izinli kokleri,
+    # gizli/hassas ve .gitignore'daki dosyalar ajanin okuma araciyla ayni kurala gore elenir.
+    def _okuyucu() -> AjanDosyaAraclari:
+        return AjanDosyaAraclari(KokKapsami(sohbet.aktif_alan().izinli_kokler))
+
+    @app.get("/api/proje/dosyalar")
+    async def proje_dosyalar(yol: str = "") -> dict:
+        r = await asyncio.to_thread(_okuyucu().klasor_listele, yol, 1)
+        if "hata" in r:
+            raise UygulamaHatasi(r["hata"])
+        return {"klasor": r["klasor"], "ogeler": [
+            {"ad": o.removeprefix("[klasor] "), "klasor": o.startswith("[klasor] ")}
+            for o in r["ogeler"]]}  # fmt: skip
+
+    @app.get("/api/proje/dosya")
+    async def proje_dosya(yol: str) -> dict:
+        r = await asyncio.to_thread(_okuyucu().dosya_oku, yol, 1, 2000)
+        if "hata" in r:
+            raise UygulamaHatasi(r["hata"])
+        return r
+
     @app.post("/api/projeler")
     async def proje_ac(istek: ProjeIstegi) -> dict:
         return projeler.ac(istek.yol, istek.ad, istek.guven).model_dump(mode="json")
@@ -1537,6 +1568,10 @@ def uygulama_olustur(
 
     # ---- arayuz ----
     web = web_dizini()
+
+    @app.get("/favicon.ico", include_in_schema=False)
+    async def favicon() -> FileResponse:
+        return FileResponse(web_dizini() / "kairo.ico", media_type="image/x-icon")
 
     @app.get("/")
     async def ana_sayfa(istek: Request) -> Response:

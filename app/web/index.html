@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Kairo</title>
-  <link rel="icon" href="kairo.svg" type="image/svg+xml">
+  <link rel="icon" href="/web/kairo.svg" type="image/svg+xml">
   <link rel="stylesheet" href="/web/app.css">
 </head>
 <body>
@@ -15,17 +15,15 @@
         <button class="ikon-btn" id="btn-geri" title="Geri" data-ikon="sol"></button>
         <button class="ikon-btn" id="btn-ileri" title="Ileri" data-ikon="sag"></button>
       </div>
-      <div class="baslik-orta pywebview-drag-region"><span id="sayfa-basligi" class="pywebview-drag-region">Yeni sohbet</span></div>
+      <div class="baslik-orta pywebview-drag-region"><button id="baslik-menu" class="baslik-dugme"><span id="sayfa-basligi">Yeni sohbet</span><span data-ikon="asagi"></span></button></div>
       <div class="baslik-sag">
-        <button id="sunucu-hapi" class="hap" title="Model sunucusu">
-          <span class="nokta" id="sunucu-nokta"></span><span id="sunucu-metni">Kontrol ediliyor...</span>
-        </button>
-        <button id="proje-hapi" class="hap" title="Proje ve izin kapsami" hidden>
-          <span data-ikon="klasor"></span><span id="proje-metni"></span><span id="proje-mod" class="soluk kucuk"></span>
-        </button>
-        <button id="agecidi-hapi" class="hap" title="Yerel sunucu (Ollama gibi): diğer uygulamalar buradaki modelleri kullanır" hidden>
-          <span class="nokta" id="agecidi-nokta"></span><span id="agecidi-metni"></span></button>
-        <span id="ram-metni" class="soluk kucuk"></span>
+        <div class="arac-cubugu">
+          <button class="ikon-btn" id="btn-sag-panel" title="Oturum paneli" data-ikon="liste"></button>
+          <button class="ikon-btn" id="btn-gorevler" title="Görevler ve zamanlamalar" data-ikon="saat"></button>
+          <button class="ikon-btn" id="btn-artifact" title="Artifact'ler" data-ikon="dosya"></button>
+          <button class="ikon-btn" id="btn-dosyalar" title="Proje dosyaları" data-ikon="klasor"></button>
+          <button class="ikon-btn" id="btn-daha" title="Diğer" data-ikon="daha"></button>
+        </div>
         <div class="pencere-btnleri" id="pencere-btnleri" hidden>
           <button class="pencere-btn" id="btn-kucult" title="Kucult" data-ikon="eksi"></button>
           <button class="pencere-btn" id="btn-buyut" title="Buyut" data-ikon="kare"></button>
@@ -249,13 +247,35 @@
         </section>
       </main>
       <aside id="sag-panel" class="sag-panel" aria-label="Oturum paneli">
-        <div class="sp-baslik">Ortam</div>
-        <div class="sp-satir"><span data-ikon="ekran"></span>Bu bilgisayar</div>
-        <button class="sp-satir bag" id="sp-proje"><span data-ikon="klasor"></span><span id="sp-proje-metni">Proje seç</span></button>
+        <div class="sp-baslik"><span>Ortam</span></div>
+        <div class="sp-satir"><span data-ikon="ekran"></span><span style="flex:1">Bu bilgisayar</span><button class="ikon-btn kucuk-ikon" id="sp-ayar" title="Ayarlar" data-ikon="disli"></button></div>
+        <button class="sp-satir sp-tik" id="sp-proje"><span data-ikon="klasor"></span><span id="sp-proje-metni">Proje seç</span></button>
+        <label class="sp-satir"><span data-ikon="ekran"></span><span style="flex:1">Uzak erişim</span><span class="anahtar"><input type="checkbox" id="sp-uzak"><span></span></span></label>
         <div class="sp-satir" id="sp-model"></div>
+        <div class="sp-ayrac"></div>
+        <button class="sp-satir sp-tik" id="sp-baglam-satir" title="Bağlam ayrıntısı"><span style="flex:1">Bağlam</span><span id="sp-baglam" class="soluk kucuk">-</span><span class="baglam-cubuk"><span id="sp-baglam-dolu"></span></span></button>
         <div id="sag-panel-gorev"></div>
+        <div class="sp-ayrac"></div>
+        <button class="sp-satir sp-tik" id="sp-baglayici-baslik"><span style="flex:1">Bağlayıcılar</span><span id="sp-baglayici" class="soluk kucuk"></span></button>
+        <div class="sp-ayrac"></div>
+        <div class="sp-baslik"><span>Dosyalar</span><button class="ikon-btn kucuk-ikon" id="sp-dosya-yenile" title="Yenile" data-ikon="yenile"></button></div>
+        <div id="sp-agac" class="sp-agac"></div>
       </aside>
     </div>
+    <footer id="durum-cubugu" class="durum-cubugu" aria-label="Durum çubuğu">
+        <button id="sunucu-hapi" class="hap" title="Model sunucusu">
+          <span class="nokta" id="sunucu-nokta"></span><span id="sunucu-metni">Kontrol ediliyor...</span>
+        </button>
+        <button id="proje-hapi" class="hap" title="Proje ve izin kapsami" hidden>
+          <span data-ikon="klasor"></span><span id="proje-metni"></span><span id="proje-mod" class="soluk kucuk"></span>
+        </button>
+        <button id="agecidi-hapi" class="hap" title="Yerel sunucu (Ollama gibi): diğer uygulamalar buradaki modelleri kullanır" hidden>
+          <span class="nokta" id="agecidi-nokta"></span><span id="agecidi-metni"></span></button>
+        <span id="ram-metni" class="soluk kucuk"></span>
+        <span class="dc-bosluk"></span>
+        <span id="dc-baglayici" class="soluk kucuk"></span>
+        <span id="dc-surum" class="soluk kucuk"></span>
+    </footer>
     <div id="modal-kok"></div>
     <div id="bildirimler"></div>
     <div id="menu-kok"></div>

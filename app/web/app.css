@@ -293,6 +293,7 @@ pre.duz { white-space: pre-wrap; font-family: var(--mono); font-size: 13px; marg
 .anahtar input:checked + span { background: var(--turuncu); }
 .anahtar input:checked + span::after { transform: translateX(16px); background: #fff; }
 .arama-kutu { display: flex; align-items: center; gap: 10px; padding: 4px 4px 10px; border-bottom: 1px solid var(--cizgi); }
+.arama-kutu svg { width: 18px; height: 18px; flex-shrink: 0; color: var(--soluk); }
 .arama-kutu input { flex: 1; background: none; border: 0; outline: 0; font-size: 16px; padding: 6px 0; }
 .arama-sonuc { padding: 9px 12px; border-radius: 9px; cursor: pointer; display: flex; justify-content: space-between; gap: 12px; }
 .arama-sonuc:hover, .arama-sonuc.secili { background: var(--yuzey2); }
@@ -430,6 +431,27 @@ pre.duz { white-space: pre-wrap; font-family: var(--mono); font-size: 13px; marg
 .sag-panel[hidden] { display: none; }
 .sp-baslik { font-weight: 600; margin-top: 10px; display: flex; justify-content: space-between; }
 .sp-satir { display: flex; align-items: center; gap: 8px; padding: 4px 0; background: none; border: 0; color: inherit; text-align: left; font: inherit; }
+.arac-cubugu { display: flex; gap: 2px; align-items: center; padding-right: 6px; }
+.baslik-dugme { display: inline-flex; align-items: center; gap: 6px; background: none; border: 0; color: inherit; font: inherit; padding: 4px 8px; border-radius: 8px; cursor: pointer; max-width: 100%; }
+.baslik-dugme:hover { background: var(--yuzey2); }
+.baslik-dugme svg { width: 14px; height: 14px; flex-shrink: 0; }
+.baslik-dugme span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.sp-ayrac { border-top: 1px solid var(--cizgi); margin: 6px 0; }
+.sp-satir.sp-tik { cursor: pointer; width: 100%; border-radius: 6px; }
+.sp-satir.sp-tik:hover { background: var(--yuzey2); }
+.sp-satir svg { width: 16px; height: 16px; flex-shrink: 0; color: var(--soluk); }
+.baglam-cubuk { width: 28px; height: 6px; border-radius: 3px; background: var(--yuzey3); overflow: hidden; display: inline-block; }
+.baglam-cubuk span { display: block; height: 100%; width: 0; background: var(--mavi); }
+.durum-cubugu { height: 28px; flex-shrink: 0; display: flex; align-items: center; gap: 12px; padding: 0 12px; border-top: 1px solid var(--cizgi2); font-size: 12px; background: var(--bg); }
+.durum-cubugu .hap { height: 22px; padding: 0 8px; font-size: 12px; }
+.durum-cubugu .dc-bosluk { flex: 1; }
+.sp-agac { display: flex; flex-direction: column; font-size: 13px; }
+.sp-agac .oge { display: flex; align-items: center; gap: 6px; padding: 3px 4px; border-radius: 6px; background: none; border: 0; color: inherit; font: inherit; text-align: left; cursor: pointer; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.sp-agac .oge:hover { background: var(--yuzey2); }
+.sp-agac .oge svg { width: 15px; height: 15px; flex-shrink: 0; color: var(--soluk); }
+.sp-agac .alt { padding-left: 14px; display: flex; flex-direction: column; }
+.kucuk-ikon svg { width: 14px; height: 14px; }
+.dosya-gorunum { margin: 0; font-family: var(--mono); font-size: 12px; white-space: pre; overflow: auto; max-height: 70vh; background: var(--kod); padding: 12px; border-radius: 8px; }
 .sp-dosyalar { list-style: none; margin: 0; padding: 0; }
 .sp-dosyalar .bag { display: flex; gap: 6px; align-items: center; }
 .ajan-mesaj .gr-detay { display: flex; flex-direction: column; gap: 6px; }

@@ -2,6 +2,7 @@
 guncel: 2026-11-11 | son arac: Claude Code (Opus 5.5) | dal: feature/ajan-katmani
 
 - 2026-11-11: Urun adi Kairo yapildi (URUN_ADI, basliklar, X-Title), yeni piksel baykus karakteri ikonlar.js LOGO + app/web/kairo.svg favicon. Paket/klasor adi degismedi.
+- 2026-11-11: Claude Code Desktop duzeni: ust cubuk (baslik menusu: adlandir/catalla/disa aktar/sil; panel, gorevler, artifact, dosyalar, diger dugmeleri), sag panel (Ortam + ayar, proje, Uzak erisim anahtari, Baglam %, Baglayicilar, Ciktilar, Dosyalar agaci + dosya goruntuleyici), alt durum cubugu (sunucu, proje, RAM, baglayici, surum). Yeni API: /api/proje/dosyalar, /api/proje/dosya, /api/oturumlar/{id}/baglam, /favicon.ico. Gorev cubugu ikonu: AppUserModelID + WinForms Icon (app/web/kairo.ico); exe ikonu paketleme/ikon_uret.py ile baykus. Masaustunde dogrulandi: gorev cubugunda Kairo + baykus.
 - 2026-11-11: Claude Code plugin uyumlulugu tamam: Plugin sekmesi "Claude Code'dan ice aktar", git/marketplace kurulumu, bilesen ozeti, hook/MCP ac-kapa (varsayilan kapali); /plugin:komut sohbette genisletilip mesaj olarak gider. Tarayicida code-review plugin'i ice aktarildi + komut genisledi. Uzanti (Mods) sistemi eklendi (F09). Testler: 331+ gecti.
 
 ## Ne

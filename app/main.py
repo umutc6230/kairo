@@ -5,11 +5,13 @@ from __future__ import annotations
 
 import argparse
 import contextlib
+import ctypes
 import socket
 import sys
 import threading
 import time
 import webbrowser
+from pathlib import Path
 
 import uvicorn
 from loguru import logger
@@ -49,6 +51,31 @@ class PencereApi:
 
     def kapat(self) -> None:
         self._pencere.destroy()
+
+
+IKON = Path(__file__).resolve().parent / "web" / "kairo.ico"
+
+
+def gorev_cubugu_kimligi() -> None:
+    """python.exe ile acilinca gorev cubugunda Python ikonu/grubu yerine Kairo kullanilsin."""
+    if sys.platform == "win32":
+        with contextlib.suppress(OSError, AttributeError):
+            ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID("UmutCelik.Kairo")
+
+
+def pencere_ikonu(pencere) -> None:
+    """WinForms penceresine Kairo ikonunu verir (pywebview 'icon' Windows'ta desteklemiyor)."""
+    if sys.platform != "win32" or not IKON.is_file():
+        return
+    try:
+        from System import Action  # pythonnet, pywebview winforms ile gelir
+        from System.Drawing import Icon
+
+        form = pencere.native
+        ikon = Icon(str(IKON))
+        form.Invoke(Action(lambda: setattr(form, "Icon", ikon)))  # form UI is parcaciginda
+    except Exception as e:  # noqa: BLE001 - ikon yoksa uygulama yine acilir
+        logger.debug("Pencere ikonu ayarlanamadi: {}", e)
 
 
 def pencere_boyutu(ekranlar: list) -> tuple[int, int]:
@@ -136,6 +163,7 @@ def main(argv: list[str] | None = None) -> int:
     else:
         import webview
 
+        gorev_cubugu_kimligi()
         api = PencereApi()
         genislik, yukseklik = pencere_boyutu(webview.screens)
         api._pencere = webview.create_window(
@@ -149,6 +177,7 @@ def main(argv: list[str] | None = None) -> int:
             background_color="#1f1f1e",
             js_api=api,
         )
+        api._pencere.events.shown += lambda: pencere_ikonu(api._pencere)
         webview.start(private_mode=False, storage_path=str(dizin / "webview"))
     sunucu.should_exit = True  # lifespan kapanisi: kendi baslattigimiz model sunucusunu durdurur
     is_parcacigi.join(timeout=15)
