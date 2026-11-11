@@ -727,14 +727,39 @@ gorev(
     cozum={"CEVAP.md": "uygulama/guvenlik/parola.py, sifrele_parola: PBKDF2-HMAC-SHA256 (200000 tur, 16 bayt tuz)\n"},
 )  # fmt: skip
 
+# Kesif cevaplarinin ANLAM denetimi: liste maddeleri + tablo satirlari sayilir; basligi "okunmayan /
+# kullanilan / dahil degil / referans" olan bolum ACIKLAMADIR, sayilmaz. Bicim (tablo/liste) cezalanmaz.
+_MADDE = r'''
+import re
+
+HARIC = re.compile(r"okunmayan|kullan[iı]lan|dahil de[gğ]il|hari[cç]|referans", re.I)
+
+
+def maddeler(metin):
+    out, atla = [], False
+    for s in metin.splitlines():
+        if re.match(r"^\s*#", s):
+            atla = bool(HARIC.search(s))
+            continue
+        if atla:
+            continue
+        m = re.match(r"^\s*(?:[-*+]|\d+[.)])\s+(.*)$", s)
+        if m:
+            out.append(m.group(1))
+        elif s.strip().startswith("|") and not re.fullmatch(r"\s*\|[\s:|-]+\|?\s*", s):
+            out.append(s)
+    return out
+'''
+
 gorev(
     id="kesif-ortam-degiskenleri", kategori="kesif", dil="python",
     hedef="Uygulama yapilandirmayi hangi ortam degiskenlerinden okuyor? CEVAP.md'ye her birini varsayilan degeriyle birlikte listele. Artik okunmayanlari yazma. Kod degistirme.",
     dosyalar=_KESIF,
     korunan=list(_KESIF),
-    gizli={"_gizli/k.py": d("""
+    gizli={"_gizli/madde.py": _MADDE, "_gizli/k.py": d("""
         import pathlib, sys
-        c = pathlib.Path("CEVAP.md").read_text(encoding="utf-8")
+        from madde import maddeler
+        c = " ".join(maddeler(pathlib.Path("CEVAP.md").read_text(encoding="utf-8")))
         ok = all(x in c for x in ("APP_PORT", "APP_DB_URL", "APP_DEBUG", "8000")) and "LEGACY_PORT" not in c
         sys.exit(0 if ok else 1)
     """)},
@@ -784,13 +809,13 @@ gorev(
     hedef="src/ altinda disa aktarilan ama projede hic kullanilmayan fonksiyonlari bul ve adlarini KULLANILMAYAN.md'ye yaz. Kod degistirme.",
     dosyalar=_KULLANILMAYAN,
     korunan=list(_KULLANILMAYAN),
-    gizli={"_gizli/k.py": d("""
+    gizli={"_gizli/madde.py": _MADDE, "_gizli/k.py": d("""
         import pathlib, sys
         import re
+        from madde import maddeler
         c = pathlib.Path("KULLANILMAYAN.md").read_text(encoding="utf-8")
-        # yalniz LISTE maddeleri sayilir (aciklama satirlarinda kullanilanlarin anilmasi serbest)
-        maddeler = [m for m in re.findall(r"^\\s*(?:[-*+]|\\d+[.)])\\s+(.*)$", c, re.M)]
-        adlar = {a for m in maddeler for a in re.findall(r"[A-Za-z_]\\w*", m)}
+        # liste maddesi + tablo satiri sayilir; 'kullanilanlar/referans' bolumu sayilmaz
+        adlar = {a for m in maddeler(c) for a in re.findall(r"[A-Za-z_]\\w*", m)}
         ok = {"eskiFormat", "yedekAl"} <= adlar and not ({"formatla", "geriYukle"} & adlar)
         sys.exit(0 if ok else 1)
     """)},

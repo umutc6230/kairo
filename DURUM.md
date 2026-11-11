@@ -1,5 +1,5 @@
 # DURUM - yerel-ai-studio
-guncel: 2026-11-10 | son arac: Claude Code (Opus 5.5) | dal: feature/ajan-katmani
+guncel: 2026-11-11 | son arac: Claude Code (Opus 5.5) | dal: feature/ajan-katmani
 
 ## Ne
 Yerel sansursuz modelleri (DeepSeek-V4-Pro Qwen3.5 9B, Gemma 4 12B, Gemma 4 E4B heretic) sohbet,
@@ -238,7 +238,11 @@ Python 3.12 + FastAPI + pywebview; arayuz vanilla JS. Paketleme: PORTABLE (kulla
             OLCUM HATASI: review-ts-kullanilmayan kontrolu dogru cevabi aciklama satiri yuzunden reddediyordu
             -> yalniz liste maddeleri sayilir (Claude Code icin de ayni).
             Yeniden olcum (ayni model): kesif 3/12 -> 12/12, todo-filtre 0/3 -> 3/3, tekrar-dene 0/3 (model).
-      - [ ] Tam yeniden olcum 30x3 (yeni surum) + KARSILASTIRMA v2  <- SIRADAKI
+      - [x] Tam yeniden olcum 30x3 (OpenRouter deepseek-v4.1-flash, ucretli): %98.9 (89/90), yanlis basari
+            beyani 0, olculemeyen 0; kesif %25 -> %100. Kalan: uzun-py-buyuk-dosya 1/3 kaldi (ajan kendisi
+            basarisiz dedi), ek 5 kosu 5/5 -> model kararsizligi. OLCUM HATASI duzeltildi: 2 kesif kontrolu
+            tablo bicimini ve aciklama bolumunu cezalandiriyordu. degerlendirme/KARSILASTIRMA-v2-2026-11-11.md
+      - [ ] Hedef >=%99: ayni kosuyu tekrarla ya da kararsiz gorev icin uzun-dosya stratejisini guclendir  <- SIRADAKI
 - 2026-11-10 (16): A6 bitti (hooks + slash + hook UI; tarayicida dogrulandi). DIKKAT: ayni dalda paralel
   bir oturum A6.1/A6.2 commit'ledi (14da54a, 1c791d4); benim skill commit'im (81b748a) onlarla ust uste.
   399 test geciyor.
