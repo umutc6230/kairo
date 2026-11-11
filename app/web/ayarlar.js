@@ -129,7 +129,7 @@ export function ayarlarAc(sekme = "ai") {
         <button class="btn" id="pl-incele">Karantinaya al ve incele</button></div>
       <div class="satir"><input class="alan" id="pl-git" placeholder="Git adresi (https://github.com/..) ya da marketplace klasörü/adresi" style="flex:1">
         <button class="btn" id="pl-git-incele">Git'ten incele</button><button class="btn" id="pl-pazar">Marketplace aç</button></div>
-      <div class="satir"><button class="btn" id="pl-cc">Claude Code'dan içe aktar</button><span class="soluk kucuk">Bu bilgisayardaki Claude Code plugin'leri aynen kurulur.</span></div>
+      <div class="satir"><button class="btn" id="pl-cc">Claude Code'dan içe aktar</button><button class="btn" id="pl-esitle">Şimdi eşitle</button><span class="soluk kucuk">Claude Code'daki plugin'ler açılışta otomatik içe aktarılır; hook ve MCP sen açana kadar kapalı kalır.</span></div>
       <div id="pl-secim"></div>
       <div id="pl-rapor"></div>
       <div id="pl-liste" class="ayar-grup"></div>
@@ -388,7 +388,14 @@ export function ayarlarAc(sekme = "ai") {
   $("#pl-cc", govde).onclick = async () => {
     try {
       const { pluginler } = await api("/api/pluginler/claude-code");
-      secimCiz("Claude Code'da kurulu plugin'ler", pluginler.map((p) => ({ ...p, alt: p.surum })), (p) => api("/api/pluginler/karantina", { method: "POST", govde: { yol: p.yol, ad: p.ad } }));
+      secimCiz("Claude Code'da kurulu plugin'ler", pluginler.map((p) => ({ ...p, alt: `${p.surum} ${p.esitleme === "kuruldu" ? "· kurulu" : p.esitleme === "inceleme" ? "· onay bekliyor" : ""}` })), (p) => api("/api/pluginler/karantina", { method: "POST", govde: { yol: p.yol, ad: p.ad } }));
+    } catch (err) { bildir(err.message, "hata"); }
+  };
+  $("#pl-esitle", govde).onclick = async () => {
+    try {
+      const o = await api("/api/pluginler/claude-code/esitle", { method: "POST" });
+      bildir(`Kuruldu/güncellendi: ${o.kuruldu?.length || 0}, onay bekleyen: ${o.inceleme?.length || 0}${o.hata?.length ? `, hata: ${o.hata.length}` : ""}`, "basari", 2500);
+      pluginCiz(); uzantiKomutlariniYukle();
     } catch (err) { bildir(err.message, "hata"); }
   };
   $("#pl-git-incele", govde).onclick = () => plIncele(() => api("/api/pluginler/git", { method: "POST", govde: { url: $("#pl-git", govde).value.trim() } }));

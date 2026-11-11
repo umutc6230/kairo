@@ -373,6 +373,8 @@ def uygulama_olustur(
         if gecit and a.sunucu_acik:
             await agecidi.baslat(a.sunucu_port)
         zd = asyncio.create_task(_zamanlayici_dongusu()) if gecit else None
+        if gecit:  # Claude Code plugin'lerini arka planda ice aktar (acilisi bekletmez)
+            asyncio.get_running_loop().run_in_executor(None, _cc_esitle)
         yield
         if zd:
             zd.cancel()
@@ -694,6 +696,19 @@ def uygulama_olustur(
         return await asyncio.to_thread(pluginler.katalogdan_karantina, ad)
 
     # ---- Claude Code plugin uyumlulugu ----
+    def _cc_esitle() -> dict:
+        try:
+            o = pluginler.claude_code_esitle()
+            logger.info("Claude Code plugin esitleme: {}", o)
+            return o
+        except Exception as e:  # noqa: BLE001 - acilisi bozmaz
+            logger.warning("Claude Code plugin esitleme basarisiz: {}", e)
+            return {"hata": str(e)}
+
+    @app.post("/api/pluginler/claude-code/esitle")
+    async def plugin_cc_esitle() -> dict:
+        return await asyncio.to_thread(_cc_esitle)
+
     @app.get("/api/pluginler/claude-code")
     async def plugin_claude_code() -> dict:
         """Bu bilgisayardaki Claude Code'un kurulu plugin'leri (ice aktarmak icin)."""

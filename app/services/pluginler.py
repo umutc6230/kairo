@@ -222,7 +222,54 @@ class PluginDeposu:
         return self.git_karantina(k["url"], k["ref"])
 
     def claude_code_pluginleri(self) -> list[dict]:
-        return cc.claude_code_kurulu()
+        durum = json_oku(self.kok / "cc-esitleme.json", {}) or {}
+        return [{**p, "esitleme": durum.get(p["ad"], {}).get("durum", "")}
+                for p in cc.claude_code_kurulu()]  # fmt: skip
+
+    def claude_code_esitle(self) -> dict:
+        """Claude Code'da kurulu plugin'leri otomatik ice aktarir ve guncel tutar.
+        - Ayni kurulum yolu islendiyse atlanir; surum degisince yol degisir ve guncellenir.
+        - Inceleme raporunda risk varsa KURULMAZ, karantinada onay bekler.
+        - Kullanicinin kaldirdigi plugin tekrar kurulmaz. Hook/MCP her zaman kapali baslar.
+        """
+        yol = self.kok / "cc-esitleme.json"
+        durum: dict = json_oku(yol, {}) or {}
+        kayit = self._kayit()
+        ozet = {"kuruldu": [], "inceleme": [], "hata": [], "atlandi": 0}
+        for p in cc.claude_code_kurulu():
+            anahtar, d = p["ad"], durum.get(p["ad"], {})
+            if d.get("durum") == "kuruldu" and d.get("ad") not in kayit:
+                d["durum"] = "kaldirildi"  # kullanici Kairo'dan kaldirdi: zorla geri getirme
+            if (
+                p["bos"]
+                or d.get("durum") == "kaldirildi"
+                or (d.get("yol") == p["yol"] and d.get("durum") in ("kuruldu", "inceleme"))
+            ):
+                ozet["atlandi"] += 1
+                durum[anahtar] = d | ({} if d else {"durum": "bos"})
+                continue
+            try:
+                k = self.karantinaya_al(p["yol"], anahtar)
+                ad = k["manifest"]["name"]
+                # Kullanici bunu Claude Code'a zaten kurmus (guvendigi icerik). Rapordaki desenler
+                # cogunlukla dokumandaki "API_KEY" gibi yanlis alarm; yine de sembolik link
+                # ya da gizli Unicode varsa kurulmaz, onay bekler. Kod calistiran hook/MCP kapali.
+                ciddi = [r for r in k["rapor"]["riskler"]
+                         if r["neden"].startswith(("sembolik", "gizli Unicode"))]  # fmt: skip
+                if ciddi:
+                    durum[anahtar] = {"yol": p["yol"], "ad": ad, "durum": "inceleme",
+                                      "karantina": k["karantina"]}  # fmt: skip
+                    ozet["inceleme"].append(ad)
+                    continue
+                self.kur(k["karantina"])
+                durum[anahtar] = {"yol": p["yol"], "ad": ad, "durum": "kuruldu",
+                                  "uyari": len(k["rapor"]["riskler"])}  # fmt: skip
+                ozet["kuruldu"].append(ad)
+            except (UygulamaHatasi, Bulunamadi, OSError, ValueError) as e:
+                durum[anahtar] = {"yol": p["yol"], "durum": "hata", "hata": str(e)[:200]}
+                ozet["hata"].append(f"{anahtar}: {str(e)[:120]}")
+        json_yaz(yol, durum)
+        return ozet
 
     # ---- katalog (A7.5): data/plugin-katalog.json [{name, version, yol, sha256}] ----
     def katalog(self) -> list[dict]:

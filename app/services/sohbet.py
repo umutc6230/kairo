@@ -12,6 +12,7 @@ import time
 from collections.abc import AsyncIterator, Awaitable, Callable
 from typing import Any
 
+from loguru import logger
 from pydantic import BaseModel, Field
 
 from app.agent.araclar import AjanAracKaydi
@@ -637,8 +638,23 @@ class SohbetServisi:
         """Ayni oturuma eszamanli mesajlarda oku-ekle-yaz yarisini onler (A0.8)."""
         return self._kilitler.setdefault(oturum_id, asyncio.Lock())
 
+    async def skill_sec(self, llm, ayar, istek_metni: str, onceki: list[Mesaj]) -> str | None:
+        """Skill'i model secer (anlamdan); None = karar verilemedi, kelime yontemine dus.
+        "" = model 'hicbiri' dedi."""
+        if not ayar.skiller_acik or not istek_metni.strip():
+            return None
+        kapali = set(ayar.kapali_skiller)
+        etkin = [s for s in self.skiller.kesfet() if s.ad not in kapali]
+        sorgu = " ".join([istek_metni] + [m.metin for m in onceki[-4:] if m.rol == "kullanici"])
+        try:
+            s = await asyncio.wait_for(skl.model_ile_sec(llm, etkin, istek_metni, sorgu), 45)
+        except Exception as e:  # noqa: BLE001 - secim yardimci; sohbet durmaz
+            logger.debug("Model skill secimi basarisiz: {}", e)
+            return None
+        return s.ad if s else ""
+
     def baglam_hazirla(
-        self, ayar, istek_metni: str, onceki: list[Mesaj]
+        self, ayar, istek_metni: str, onceki: list[Mesaj], model_secimi: str | None = None
     ) -> tuple[str, list, dict, str | None]:
         """(sistem metni, araclar, isleyiciler, otomatik yuklenen skill adi).
         Sira onbellek icin: SABIT kisim once (arac notu, talimatlar, sistem istemi), mesaja gore
@@ -752,7 +768,11 @@ class SohbetServisi:
                     skill_listesi = skl.tam_liste_metni(etkin)
                 else:  # 8K: yer yok, yalniz mesaja en uygunlar (degisken)
                     skill_metni = skl.sistem_metni(skl.uygun_skiller(etkin, sorgu))
-                if secilen := skl.otomatik_skill(etkin, istek_metni or sorgu):
+                if model_secimi is not None:  # model karar verdi ("" = hicbiri)
+                    secilen = next((s for s in etkin if s.ad == model_secimi), None)
+                else:
+                    secilen = skl.otomatik_skill(etkin, istek_metni or sorgu)
+                if secilen:
                     otomatik = secilen.ad
                     skill_metni = f"{skill_metni}\n\n{skl.otomatik_metin(secilen)}".strip()
                 araclar += skl.ARACLAR
@@ -882,8 +902,9 @@ class SohbetServisi:
                     icerik = [{"type": "text", "text": istek.metin}] if istek.metin else []
                     icerik += parcalar
                 seviye = istek.dusunme or ayar.dusunme
+                secim = await self.skill_sec(llm, ayar, istek.metin, onceki)
                 sistem, araclar, isleyiciler, otomatik = self.baglam_hazirla(
-                    ayar, istek.metin, onceki
+                    ayar, istek.metin, onceki, secim
                 )
                 if otomatik:  # arayuzde arac adimi olarak gorunsun
                     kayit = {

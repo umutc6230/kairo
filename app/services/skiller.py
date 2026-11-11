@@ -373,6 +373,37 @@ def otomatik_skill(skiller: list[Skill], sorgu: str) -> Skill | None:
     return None
 
 
+MODEL_ADAY = 8  # modele sorulan en fazla aday
+
+
+def secim_istemi(adaylar: list[Skill], mesaj: str) -> str:
+    satirlar = "\n".join(f"{i}. {s.ad}: {s.aciklama[:220]}" for i, s in enumerate(adaylar, 1))
+    return (
+        "Kullanicinin mesaji icin asagidaki skill'lerden biri ACIKCA gerekli mi?\n"
+        f"Mesaj: {mesaj[:1500]}\n\nSkill'ler:\n{satirlar}\n\n"
+        "Yalniz tek bir sayi yaz: uygun skill'in numarasi, hicbiri acikca uymuyorsa 0."
+    )
+
+
+def secim_coz(cevap: str, adaylar: list[Skill]) -> Skill | None:
+    """Modelin cevabindaki ilk sayi; 0 ya da gecersizse None."""
+    m = re.search(r"\d+", cevap or "")
+    i = int(m.group()) if m else 0
+    return adaylar[i - 1] if 1 <= i <= len(adaylar) else None
+
+
+async def model_ile_sec(llm, skiller: list[Skill], mesaj: str, sorgu: str) -> Skill | None:
+    """Kelime eslesmesi yalniz aday listesini daraltir; karari model verir (anlamdan).
+    Aday yoksa model cagrilmaz. Hata olursa cagiran kelime yontemine duser."""
+    adaylar = [s for _, s in puanla([s for s in skiller if not s.hata], sorgu)][:MODEL_ADAY]
+    if not adaylar:
+        return None
+    cevap = await llm.metin(secim_istemi(adaylar, mesaj), max_tokens=8, dusunme="kapali")
+    if not re.search(r"\d", cevap or ""):  # model sayi vermedi: karar yok, kelime yontemi
+        raise ValueError(f"Model skill secimine sayi vermedi: {cevap[:60]!r}")
+    return secim_coz(cevap, adaylar)
+
+
 SINIR = (
     "Not: skill'lerdeki komut ve betikleri SEN CALISTIRAMAZSIN (komut calistirma aracin yok). "
     "Kullaniciya adim adim nasil calistiracagini anlat; gereken programlar (CLI, Python paketi) "

@@ -147,3 +147,39 @@ def test_manifestsiz_ve_marketplace(tmp_path) -> None:
     assert m["pluginler"][1]["kaynak"] == {"tur": "git", "url": "https://github.com/a/b.git",
                                            "ref": ""}  # fmt: skip
     assert d.marketplace_karantina(str(pazar), "ornek")["manifest"]["name"] == "ornek-plugin"
+
+
+def test_claude_code_esitle(tmp_path, monkeypatch) -> None:
+    kaynak = cc_plugin(tmp_path / "cc")
+    giris = {"ad": "ornek@pazar", "yol": str(kaynak), "surum": "2.1", "bos": False}
+    monkeypatch.setattr(cc, "claude_code_kurulu", lambda: [giris])
+    d = PluginDeposu(tmp_path / "veri")
+    assert d.claude_code_esitle()["kuruldu"] == ["ornek-plugin"]
+    assert d.hook_tanimlari() == []  # kod calistiran kisimlar kapali gelir
+    assert d.claude_code_esitle()["atlandi"] == 1  # ayni yol: tekrar kurulmaz
+    d.kaldir("ornek-plugin")
+    assert d.claude_code_esitle()["kuruldu"] == []  # kullanicinin kaldirdigi geri gelmez
+
+
+async def test_model_ile_skill_secimi(tmp_path) -> None:
+    from app.services.skiller import SkillDeposu, model_ile_sec, secim_coz
+
+    for ad, ac in (("x-control", "X Twitter bookmark yonetir"), ("pdf", "PDF dosyasi okur")):
+        (tmp_path / ad).mkdir()
+        (tmp_path / ad / "SKILL.md").write_text(f"---\nname: {ad}\ndescription: {ac}\n---\nx", "utf-8")
+    sk = SkillDeposu(tmp_path, [("claude", tmp_path)]).kesfet()
+
+    class Llm:
+        def __init__(self, cevap: str) -> None:
+            self.cevap, self.istem = cevap, ""
+
+        async def metin(self, istem: str, **_: object) -> str:
+            self.istem = istem
+            return self.cevap
+
+    llm = Llm("1")
+    s = await model_ile_sec(llm, sk, "twitter bookmark cek", "twitter bookmark cek")
+    assert s and s.ad == "x-control" and "x-control" in llm.istem
+    assert await model_ile_sec(Llm("0"), sk, "bookmark", "bookmark") is None
+    assert await model_ile_sec(Llm("1"), sk, "merhaba", "merhaba") is None  # aday yok: model cagrilmaz
+    assert secim_coz("Cevap: 9", sk) is None and secim_coz("", sk) is None
