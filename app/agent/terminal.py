@@ -56,6 +56,25 @@ SPOOL_SATIR = 2000  # arka plan isinde saklanan son satir sayisi
 OLDURME_BEKLEME = 5.0  # A13: yonetilen cocuk surecler 5 sn icinde sonlanmali
 
 
+def windows_bash() -> str | None:
+    """Windows'ta Git Bash yolu (WSL'nin System32\\bash.exe'si DEGIL); yoksa None (cmd.exe)."""
+    if sys.platform != "win32":
+        return None
+    import os
+    import shutil
+
+    adaylar = [
+        Path(os.environ.get("PROGRAMFILES", r"C:\Program Files")) / "Git" / "bin" / "bash.exe",
+        Path(os.environ.get("LOCALAPPDATA", "")) / "Programs" / "Git" / "bin" / "bash.exe",
+    ]
+    if git := shutil.which("git"):
+        adaylar.append(Path(git).resolve().parent.parent / "bin" / "bash.exe")
+    for a in adaylar:
+        if a.is_file() and "system32" not in str(a).lower():
+            return str(a)
+    return None
+
+
 class KomutDurumu(BaseModel):
     id: str = Field(default_factory=lambda: uuid.uuid4().hex[:12])
     komut: str
@@ -171,6 +190,7 @@ class KomutServisi:
         arka_plan: bool = False,
         kok: Path | None = None,
         sahip: str = "",
+        bash: bool = True,
     ) -> KomutIsi:
         if not komut.strip():
             raise UygulamaHatasi("Bos komut calistirilamaz.")
@@ -199,6 +219,10 @@ class KomutServisi:
         try:
             if argv:  # konteyner: argv dogrudan exe'ye gider, cmd.exe tirnak sorunu yok
                 is_.surec = await asyncio.create_subprocess_exec(*argv, **ortak)
+            elif bash and (bash_yolu := windows_bash()):
+                # Git Bash: ; && | heredoc ve cok satirli `python -c` calisir. cmd.exe'de satir
+                # sonu komutu bitiriyor, `;` ayirici degil: canli testte cikti bos donuyordu.
+                is_.surec = await asyncio.create_subprocess_exec(bash_yolu, "-c", komut, **ortak)
             else:  # shell: Windows'ta exec+liste tirnaklari \" diye kacirir, cmd yolu taniyamaz
                 is_.surec = await asyncio.create_subprocess_shell(komut, **ortak)
         except (OSError, ValueError) as e:

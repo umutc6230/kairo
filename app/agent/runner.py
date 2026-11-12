@@ -14,6 +14,7 @@ Kurallar:
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import json
 import re
 import time
@@ -48,7 +49,27 @@ YAN_ETKILI = {
 }
 DEGISTIREN = {"proje_dosya_yaz", "proje_dosya_yama", "proje_dosya_tasi", "proje_dosya_sil"}
 VARSAYILAN_BAGLAM = 16384
-CEVAP_TOKEN = 2048
+CEVAP_TOKEN = 2048  # kucuk baglamli yerel model icin taban
+DONGU_UYAR = 3  # ayni arac+arguman bu kadar ardisik tekrarlanirsa calistirilmaz, model uyarilir
+DONGU_DUR = 6  # ...bu kadar olursa gorev durur
+# Durum yoklayan araclar (arka plan komutu, ekran) ayni argumanla tekrar cagrilabilir
+DONGU_MUAF = {"komut_durumu", "plan_guncelle", "tarayici_ekran", "masaustu_ekran", "git_durum"}
+DONGU_MESAJI = (
+    "Bu cagriyi ayni argumanlarla {} kez yaptin; sonuc degismez. "
+    "Sonucu kullan, FARKLI bir adim at ya da gorevi_bitir'i cagir."
+)
+
+
+def cevap_tokeni(baglam: int) -> int:
+    """Model cevabi (arac argumanlari dahil) icin pay. 2048 sabitken uzun bir rapor/dosya tek
+    proje_dosya_yaz cagrisina sigmiyor, model kesilip arac cagiramadan duruyordu."""
+    if baglam >= 65536:
+        return 16384
+    if baglam >= 32768:
+        return 8192
+    return CEVAP_TOKEN
+
+
 GECICI_HATA_DENEME = 2  # model kesintisinde sinirli yeniden deneme
 BEKLEME_SN = (5.0, 15.0)  # istek siniri (429) icin kisa bekleme yetmiyor
 SONUC_SINIRI = 6000
@@ -86,7 +107,7 @@ class Butce(BaseModel):
     max_adim: int = Field(default=40, ge=1, le=500)
     max_sure_sn: int = Field(default=1800, ge=10, le=24 * 3600)
     # cagri basina gonderilen baglamin TOPLAMI; 32K baglamda ~60 cagri
-    max_token: int = Field(default=2_000_000, ge=1000, le=20_000_000)
+    max_token: int = Field(default=10_000_000, ge=1000, le=20_000_000)
     max_ayni_hata: int = Field(default=2, ge=1, le=10)
     max_ilerlemesiz: int = Field(default=3, ge=1, le=10)
     max_ardisik_ret: int = Field(default=6, ge=2, le=50)  # A13: ret dongusu butceyi yemesin
@@ -147,6 +168,7 @@ class Run(BaseModel):
     ilerlemesiz: int = 0
     baglam: dict = {}  # son model cagrisinin butce dokumu (A4.1)
     ozet_sayisi: int = 0
+    butce_uyarildi: bool = False  # "butce bitiyor, raporla" uyarisi verildi mi
     parent: str = ""  # alt ajan ise ebeveyn run kimligi
     izinli_araclar: list[str] = []  # alt ajanin dar arac seti
     sahip_dosyalar: list[str] = []  # alt ajanin yazabilecegi dosyalar (goreli yol)
@@ -226,7 +248,7 @@ ALT_AJAN_ARACI = _f(
     },
     ["gorev", "araclar"],
 )
-ALT_AJAN_MIN_ADIM = 8
+ALT_AJAN_MIN_ADIM = 15
 YAZAN_ARACLAR = {"proje_dosya_yaz", "proje_dosya_yama", "proje_dosya_tasi", "proje_dosya_sil"}
 
 SISTEM = """Sen kullanicinin bilgisayarinda calisan asistan ajansin (Claude Code gibi): dosya,
@@ -237,6 +259,7 @@ komut, kod, web, GitHub ve baglayicilarla istenen isi ARACLARLA kendin yaparsin.
   yayin gibi geri alinamaz isleri yalniz acikca istendiyse yap.
 Kurallar:
 - Her arac cagrisindan ONCE ayni mesajda tek cumle yaz: ne yapacaksin ve neden. Kullanici gorur.
+  Kullanicinin dilinde yaz (Turkce istendiyse Turkce).
 - Ilk is plan_guncelle ile kisa plan yaz; ilerledikce guncelle.
 - Degistirmeden once oku (yama: beklenen_hash). Yazdigin dosyayi tekrar oku; kodu degistirdiysen
   testi/komutu calistir, test yoksa kucuk betikle calistirip ornek degerleri kontrol et.
@@ -361,6 +384,9 @@ class AgentRunner:
         self._duraklat: set[str] = set()
         self._aracta: set[str] = set()
         self._kilit = asyncio.Lock()  # tek yerel model: run'lar sirayla model kullanir
+        # Uzak saglayicida (OpenRouter) model cagrilari ve ayni mesajdaki alt ajanlar PARALEL
+        # calisir; yerel tek modelde sira korunur (api baglar).
+        self.paralel_model: Callable[[], bool] = lambda: False
 
     # ---------------------------------------------------------------- kontrol
     def calisiyor_mu(self, run_id: str) -> bool:
@@ -539,6 +565,24 @@ class AgentRunner:
                 await self._bitmesini_bekle(run_id, 5.0)
 
     # ---------------------------------------------------------------- dongu
+    @staticmethod
+    def _ayni_cagri_sayisi(run: Run, a: Adim) -> int:
+        """Sondan geriye, bu cagriyla AYNI arac+argumanli adimlarin ardisik sayisi (+1 kendisi).
+        Yalniz BASARILI ayni cagrilar sayilir; araya baska arac girerse sayim biter."""
+        if a.arac in DONGU_MUAF:
+            return 0
+        imza = (a.arac, json.dumps(a.argumanlar, sort_keys=True, ensure_ascii=False))
+        sayi = 1
+        for b in reversed(run.adimlar):
+            if b.arac == "plan_guncelle":
+                continue
+            if (b.arac, json.dumps(b.argumanlar, sort_keys=True, ensure_ascii=False)) != imza:
+                break
+            if b.durum is not AdimDurum.tamam:  # basarisiz tekrar: ayri koruma (hata_sayaci)
+                break
+            sayi += 1
+        return sayi
+
     def _arac_mesaji(self, run: Run, a: Adim, sonuc: Any) -> None:
         if isinstance(sonuc, dict) and isinstance(sonuc.get("cikis_kodu"), int):
             a.cikis_kodu = sonuc["cikis_kodu"]  # kanit kontrolu kirpilmis metne guvenmez
@@ -620,7 +664,19 @@ class AgentRunner:
                     break
                 if neden := self._butce_asildi(run):
                     run.durum, run.hata = RunDurum.basarisiz, neden
+                    if run.parent and not run.sonuc.ozet:
+                        # Alt ajan: eli bos donmesin; son yazdigi notlar ebeveyne kismi sonuc olur
+                        notlar = [g for g in run.guncellemeler if not g.startswith("Kullanici:")]
+                        run.sonuc = Sonuc(ozet="KISMI (butce doldu): " + " | ".join(notlar[-4:]))
                     break
+                kalan = run.butce.max_adim - run.kullanim.adim
+                if kalan == 2 and not run.butce_uyarildi:
+                    # Claude Code alt ajanlari gibi: butce bitmeden bulgulari raporla
+                    run.butce_uyarildi = True
+                    run.mesajlar.append({"role": "user", "content": (
+                        "Adim butcen bitmek uzere (2 adim kaldi). Arastirmayi birak, SIMDI "
+                        "gorevi_bitir ile buldugun her seyi (dosya, satir, sonuc) raporla."
+                    )})  # fmt: skip
                 # 1) bekleyen arac adimlari (onay sonrasi, tekrarla, yarim kalan sira)
                 if await self._bekleyenleri_isle(run, isleyiciler):
                     break  # onay bekleniyor ya da gorev bitti
@@ -644,6 +700,20 @@ class AgentRunner:
                 icerik = (mesaj.get("content") or "").strip()
                 if icerik:
                     run.guncellemeler.append(icerik[:500])
+                if not cagrilar and mesaj.get("_kesildi"):
+                    run.mesajlar.append({"role": "assistant", "content": icerik[:2000]})
+                    run.mesajlar.append({"role": "user", "content": (
+                        "Cevabin uzunluk sinirinda kesildi ve arac cagrisi ulasmadi. Uzun dosyayi "
+                        "parcalara bol: once proje_dosya_yaz ile ilk bolumu yaz, sonra kalanini "
+                        "proje_dosya_yama ile sona ekle. Hemen araci cagir.")})  # fmt: skip
+                    run.guncellemeler.append("Model cevabi kesildi; parcali yazmasi istendi.")
+                    run.ilerlemesiz += 1
+                    if run.ilerlemesiz >= run.butce.max_ilerlemesiz:
+                        run.durum = RunDurum.dogrulanmadi
+                        run.hata = "Model cevabi tekrar tekrar uzunluk sinirinda kesildi."
+                        break
+                    self.depo.kaydet(run)
+                    continue
                 if not cagrilar:
                     run.mesajlar.append({"role": "assistant", "content": icerik})
                     run.ilerlemesiz += 1
@@ -665,11 +735,24 @@ class AgentRunner:
                 run.mesajlar.append(
                     {"role": "assistant", "content": icerik, "tool_calls": cagrilar}
                 )
+                dongu = False
                 for i, c in enumerate(cagrilar):
                     a = self._adim_olustur(run, c)
                     if i == 0 and icerik:  # ayni mesajdaki ilk cagri aciklamayi tasir
                         a.aciklama = icerik[:600]
+                    tekrar = self._ayni_cagri_sayisi(run, a)
                     run.adimlar.append(a)
+                    if tekrar >= DONGU_DUR:
+                        dongu = True
+                    elif tekrar >= DONGU_UYAR and a.durum is AdimDurum.sirada:
+                        # Ayni arac + arguman: calistirma, modeli uyar (canli: 40 kez ayni komut)
+                        a.durum = AdimDurum.atlandi
+                        self._arac_mesaji(run, a, {"hata": DONGU_MESAJI.format(tekrar)})
+                if dongu:
+                    run.durum = RunDurum.dogrulanmadi
+                    run.hata = "Dongu: model ayni araci ayni argumanlarla tekrar tekrar cagirdi."
+                    self.depo.kaydet(run)
+                    break
                 self.depo.kaydet(run)
         except asyncio.CancelledError:
             run.durum, run.hata = RunDurum.iptal, "Kullanici iptal etti."
@@ -720,12 +803,15 @@ class AgentRunner:
             )
         return a
 
+    def _baglam(self) -> int:
+        return self.yetenek().baglam if self.yetenek else VARSAYILAN_BAGLAM
+
     def _baglami_hazirla(self, run: Run, sistem: str, semalar: list[dict]) -> bool:
         """Butceyi hesaplar; gerekirse ozetler, sonra eski arac sonuclarini kisaltir.
         Hala sigmiyorsa istegi KORLEMESINE gondermez: gorev basarisiz olur (A0.6, A4.1)."""
         baglam = self.yetenek().baglam if self.yetenek else VARSAYILAN_BAGLAM
         sabit = tahmini_token(sistem) + tahmini_token(json.dumps(semalar, ensure_ascii=False))
-        mesaj_siniri = baglam - sabit - CEVAP_TOKEN
+        mesaj_siniri = baglam - sabit - cevap_tokeni(baglam)
         if mesaj_siniri <= 0:
             run.durum = RunDurum.basarisiz
             run.hata = f"Baglam ({baglam}) talimat ve arac tanimlarina bile yetmiyor; buyutun."
@@ -743,7 +829,7 @@ class AgentRunner:
                     {"truncated": True, "not": "Eski arac sonucu baglama sigmadi; gerekirse "
                      "araci tekrar cagir."}, ensure_ascii=False,
                 )  # fmt: skip
-        run.baglam = butce_dokumu(sistem, semalar, run.mesajlar, CEVAP_TOKEN, baglam)
+        run.baglam = butce_dokumu(sistem, semalar, run.mesajlar, cevap_tokeni(baglam), baglam)
         if run.baglam["toplam"] > baglam:
             run.durum = RunDurum.basarisiz
             run.hata = f"Baglam yetersiz ({run.baglam['toplam']}/{baglam} token); buyutun."
@@ -759,8 +845,11 @@ class AgentRunner:
         gonderilen = [{"role": "system", "content": sistem_metni}, *run.mesajlar]
         for deneme in range(GECICI_HATA_DENEME + 1):
             try:
-                async with self._kilit, self.llm() as llm:
-                    secim = await llm.sohbet(gonderilen, tools=semalar, max_tokens=CEVAP_TOKEN)
+                kilit = contextlib.nullcontext() if self.paralel_model() else self._kilit
+                async with kilit, self.llm() as llm:
+                    secim = await llm.sohbet(
+                        gonderilen, tools=semalar, max_tokens=cevap_tokeni(self._baglam())
+                    )
                 break
             except (SunucuKapali, ModelCevapHatasi) as e:
                 gecici = (
@@ -776,6 +865,9 @@ class AgentRunner:
                 await asyncio.sleep(self.bekleme[min(deneme, len(self.bekleme) - 1)])
         run.kullanim.model_cagrisi += 1
         mesaj = secim.get("message") or {}
+        if secim.get("finish_reason") == "length" and not mesaj.get("tool_calls"):
+            # Cevap sinirda kesildi (genelde cok uzun dosya icerigi): modele bolmesini soyle
+            mesaj = {**mesaj, "_kesildi": True}
         run.kullanim.token += tahmini_token(json.dumps(gonderilen, ensure_ascii=False)) + (
             tahmini_token(json.dumps(mesaj, ensure_ascii=False))
         )
@@ -807,6 +899,14 @@ class AgentRunner:
                     )
                     self.depo.kaydet(run)
                     continue
+            grup = self._paralel_alt_ajanlar(run, a)
+            if len(grup) > 1:  # ayni mesajdaki alt ajanlar ayni anda (Claude Code Task gibi)
+                for x in grup:
+                    x.argumanlar["_pay"] = len(grup)
+                await asyncio.gather(*(self._adim_calistir(run, x, isleyiciler) for x in grup))
+                if run.durum in BITMIS:
+                    return True
+                continue
             await self._adim_calistir(run, a, isleyiciler)
             if a.durum is AdimDurum.onay_bekliyor:
                 run.durum = RunDurum.onay_bekliyor
@@ -815,6 +915,19 @@ class AgentRunner:
             if run.durum in BITMIS or run.durum is RunDurum.cevap_bekliyor:
                 return True
         return False
+
+    def _paralel_alt_ajanlar(self, run: Run, a: Adim) -> list[Adim]:
+        """a'dan baslayan ardisik, siradaki alt_ajan adimlari (yalniz uzak modelde, ebeveynde)."""
+        if a.arac != "alt_ajan" or run.parent or a.durum is not AdimDurum.sirada:
+            return [a]
+        if not self.paralel_model():
+            return [a]
+        grup: list[Adim] = []
+        for b in run.adimlar[run.adimlar.index(a) :]:
+            if b.arac != "alt_ajan" or b.durum is not AdimDurum.sirada:
+                break
+            grup.append(b)
+        return grup
 
     async def _adim_calistir(self, run: Run, a: Adim, isleyiciler: dict) -> None:
         if a.arac != "plan_guncelle":  # kayit isi butce yemez (canli: alt ajan planla bitiyordu)
@@ -939,7 +1052,8 @@ class AgentRunner:
             gorev = f"{profil['govde'][:6000]}{ayrac}{gorev}" if gorev else ""
             araclar = araclar or profil["araclar"] or ["proje_dosya_oku", "proje_ara", "proje_glob"]
         dosyalar = [str(x) for x in g.get("dosyalar") or []][:50]
-        kalan_adim = run.butce.max_adim - run.kullanim.adim
+        # paralel kardesler kalan butceyi PAYLASIR (toplam ebeveyni asmaz)
+        kalan_adim = (run.butce.max_adim - run.kullanim.adim) // max(1, int(g.get("_pay") or 1))
         kalan_token = run.butce.max_token - run.kullanim.token
         hata = ""
         if not gorev or not araclar:
@@ -954,7 +1068,7 @@ class AgentRunner:
             self.depo.kaydet(run)
             return
         # model cok dusuk butce isteyebiliyor (canli: 5); alt sinir 8, ust sinir ebeveynin kalani
-        istenen = max(int(g.get("max_adim") or 15), ALT_AJAN_MIN_ADIM)
+        istenen = max(int(g.get("max_adim") or 25), ALT_AJAN_MIN_ADIM)
         cocuk = Run(
             hedef=gorev,
             model=run.model,
@@ -982,7 +1096,7 @@ class AgentRunner:
         a.durum = AdimDurum.niyet
         self.depo.kaydet(run)
         try:
-            await self._dongu(cocuk.id)  # tek yerel model: cocuk sirali calisir
+            await self._dongu(cocuk.id)  # uzak modelde kardeslerle paralel (gather)
         finally:
             c = self.depo.getir(cocuk.id)
             run.kullanim.adim += c.kullanim.adim  # cocugun harcamasi ebeveynden duser

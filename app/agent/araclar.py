@@ -108,7 +108,9 @@ KOMUT_SEMALARI = [
     _fonk(
         "komut_calistir",
         "Proje klasorunde bir kabuk komutu calistirir (test, lint, build). Cikti ve GERCEK cikis "
-        "kodu doner. Uzun surecek is icin arka_plan=true kullan, sonra komut_durumu ile bak.",
+        "kodu doner. Uzun surecek is icin arka_plan=true kullan, sonra komut_durumu ile bak. "
+        "Windows'ta Git Bash varsa bash ile calisir (; && | heredoc); yoksa cmd.exe (&& kullan). "
+        "Cok satirli kodu python -c yerine betik dosyasina yazip calistir.",
         {"komut": S, "klasor": S, "timeout": I, "arka_plan": B},
         ["komut"],
     ),
@@ -283,6 +285,8 @@ class AjanAracKaydi:
                 is_ = await self.komutlar.baslat(
                     komut, cwd, timeout=timeout, arka_plan=arka_plan,
                     kok=self.kapsam.kok_of(cwd), sahip=sahip,
+                    # skill scripti list2cmdline (Windows tirnagi) uretir: cmd.exe'de kalir
+                    bash=arac != "skill_scripti",
                 )  # fmt: skip
                 if arka_plan:
                     return {

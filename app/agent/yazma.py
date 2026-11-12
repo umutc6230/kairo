@@ -158,6 +158,11 @@ class YazmaAraclari:
             raise UygulamaHatasi("Bu dosya yamaya uygun degil (ikili ya da cok buyuk).")
         self._hash_kontrol(p, beklenen_hash)
         metin = ham.decode("utf-8", errors="strict")
+        if "\r\n" in metin and "\r\n" not in eski_metin:
+            # Windows CRLF dosya: model metni LF ile verir (okuma araci da LF gosterir); dosyanin
+            # satir sonuna cevirip esle. Canli: TinyDB'de yama 4 kez bu yuzden dustu.
+            eski_metin = eski_metin.replace("\n", "\r\n")
+            yeni_metin = yeni_metin.replace("\r\n", "\n").replace("\n", "\r\n")
         adet = metin.count(eski_metin)
         if adet == 0:
             raise UygulamaHatasi(

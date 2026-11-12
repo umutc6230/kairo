@@ -86,3 +86,31 @@ def test_openrouter_zorunlu_dusunme_yeniden_dener() -> None:
     assert sonuc["message"]["content"] == "ok"
     assert gelen == [{"enabled": False}, {"effort": "low"}]
     assert "test/zorunlu" in ZORUNLU_DUSUNME
+
+
+def test_dongu_ayni_cagri_sayilir_muaflar_sayilmaz() -> None:
+    from app.agent.runner import Adim, AgentRunner, Run, cevap_tokeni
+
+    run = Run(hedef="x")
+    for i in range(3):
+        run.adimlar.append(
+            Adim(no=i + 1, arac="komut_calistir", argumanlar={"komut": "echo 1"}, durum="tamam")
+        )
+    yeni = Adim(no=4, arac="komut_calistir", argumanlar={"komut": "echo 1"})
+    assert AgentRunner._ayni_cagri_sayisi(run, yeni) == 4
+    farkli = Adim(no=4, arac="komut_calistir", argumanlar={"komut": "echo 2"})
+    assert AgentRunner._ayni_cagri_sayisi(run, farkli) == 1
+    yokla = Adim(no=4, arac="komut_durumu", argumanlar={"id": "a"})
+    assert AgentRunner._ayni_cagri_sayisi(run, yokla) == 0
+    assert cevap_tokeni(8192) == 2048 and cevap_tokeni(1_000_000) == 16384
+
+
+def test_listele_dist_klasorunu_gosterir_glob_acik_desenle_bulur(tmp_path: Path) -> None:
+    from app.agent.dosyalar import AjanDosyaAraclari, KokKapsami
+
+    (tmp_path / "dist").mkdir()
+    (tmp_path / "dist" / "app.min.js").write_text("x", "utf-8")
+    ok = AjanDosyaAraclari(KokKapsami([tmp_path]))
+    liste = json.dumps(ok.klasor_listele(".", 3), ensure_ascii=False)
+    assert "dist" in liste
+    assert "app.min.js" in json.dumps(ok.glob_bul("dist/*.js"))

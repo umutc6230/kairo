@@ -329,7 +329,7 @@ async def test_belirsiz_adim_kullanici_isterse_tekrarlanir(tmp_path, proje) -> N
 
 
 async def test_adim_butcesi(tmp_path, proje) -> None:
-    model = SahteModel([cagri("proje_listele") for _ in range(10)])
+    model = SahteModel([cagri("proje_listele", derinlik=i % 3 + 1) for i in range(10)])
     runner, *_ = kur(tmp_path, proje, model)
     run = await runner.baslat("sonsuz", butce=Butce(max_adim=3))
     run = await bitir(runner, run.id)

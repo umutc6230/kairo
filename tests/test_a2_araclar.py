@@ -181,6 +181,18 @@ def test_yama_benzersiz_olmali(ortam, py_proje: Path) -> None:
         kayit.yazma.dosya_yama("tekrar.txt", "x = 1", "x = 1", beklenen_hash=h)
 
 
+def test_yama_crlf_dosyada_lf_metinle_eslesir(ortam, py_proje: Path) -> None:
+    """Canli TinyDB testi: Windows CRLF dosyada LF ile gelen yama 4 kez 'bulunamadi' dustu."""
+    kayit, *_ = ortam
+    hedef = py_proje / "crlf.py"
+    hedef.write_bytes(b"def f():\r\n    return 1\r\n\r\nx = 2\r\n")
+    kayit.yazma.dosya_yama(
+        "crlf.py", "def f():\n    return 1\n", "def f():\n    return 3\n",
+        beklenen_hash=dosya_hashi(hedef),
+    )  # fmt: skip
+    assert hedef.read_bytes() == b"def f():\r\n    return 3\r\n\r\nx = 2\r\n"  # CRLF korunur
+
+
 def test_tasi_ve_sil(ortam, py_proje: Path) -> None:
     kayit, _, cp, _ = ortam
     kayit.yazma.dosya_yaz("tasinacak.txt", "veri\n")

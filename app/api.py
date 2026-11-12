@@ -378,6 +378,7 @@ def uygulama_olustur(
         ),
     )
     ajan.araclar_kok = ajan_baglami_kok
+    ajan.paralel_model = lambda: ayarlar.oku().saglayici == "openrouter"
     ajan.takim = TakimPanosu(veri_dizini)
     ajan.uzantilar = uzantilar
     ajan.ajan_profilleri = pluginler.ajan_profilleri
@@ -1848,7 +1849,12 @@ def uygulama_olustur(
         kokler = sohbet.aktif_alan().izinli_kokler
         cwd = Path(kokler[0]) if kokler else Path.home()
         is_ = await komutlar.baslat(
-            str(veri.get("komut", ""))[:4000], cwd, arka_plan=True, timeout=3600, sahip="terminal"
+            str(veri.get("komut", ""))[:4000],
+            cwd,
+            arka_plan=True,
+            timeout=3600,
+            sahip="terminal",
+            bash=False,  # kullanicinin terminali: Windows komutlari (dir, set) cmd.exe'de kalir
         )
         return komutlar.ozet(is_)
 

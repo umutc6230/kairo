@@ -220,7 +220,10 @@ class AjanDosyaAraclari:
             for p in kok.glob(desen):
                 if len(bulunan) >= MAX_SONUC:
                     break
-                if any(x in ATLANAN for x in p.parts) or yoksay.yok_sayilir(p):
+                if yoksay.yok_sayilir(p):
+                    continue
+                # dist/build gibi klasorler desen ACIKCA icermiyorsa atlanir
+                if any(x in ATLANAN and x not in desen for x in p.relative_to(kok).parts):
                     continue
                 if policy.hassas_mi(p):
                     continue
@@ -260,7 +263,11 @@ class AjanDosyaAraclari:
             except OSError:
                 continue
             for p in ogeler:
-                if p.name in ATLANAN or policy.hassas_mi(p) or yoksay.yok_sayilir(p):
+                if policy.hassas_mi(p) or yoksay.yok_sayilir(p):
+                    continue
+                if p.name in ATLANAN:
+                    if p.is_dir() and p.name != ".git":  # gorunur ama icine inilmez (dist/build)
+                        yield p
                     continue
                 yield p
                 if p.is_dir() and seviye < derinlik:

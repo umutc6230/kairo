@@ -127,3 +127,48 @@ def test_eksik_arguman_ve_cokme_sonrasi_belirsiz(tmp_path) -> None:
     runner, depo, *_ = kur(tmp_path, proje, model)
     run = asyncio.run(_calistir(runner, "x"))
     assert run.adimlar[0].durum is AdimDurum.hata and "gerekli" in run.adimlar[0].sonuc
+
+
+def test_ayni_mesajdaki_alt_ajanlar_uzak_modelde_paralel_calisir(tmp_path) -> None:
+    """Canli testte iki alt ajan sirayla kostu; uzak modelde ayni anda kosmali."""
+    import time
+
+    proje = tmp_path / "proje"
+    (proje / "src").mkdir(parents=True)
+    (proje / "src" / "a.py").write_bytes(b"x = 1\n")
+
+    class Yonlendiren:
+        """Mesaja gore cevap verir (paralel siralamadan bagimsiz); her cagri 0.3 sn surer."""
+
+        async def sohbet(self, mesajlar, **_):
+            await asyncio.sleep(0.3)
+            ilk = mesajlar[1]["content"] if len(mesajlar) > 1 else ""
+            arac_sonucu = [m for m in mesajlar if m.get("role") == "tool"]
+            if "alt ajan" in ilk:  # cocuk: once oku, sonra bitir
+                if not arac_sonucu:
+                    return {
+                        "message": cagri("proje_dosya_oku", yol="src/a.py"),
+                        "finish_reason": "stop",
+                    }
+                return {"message": cagri("gorevi_bitir", ozet="okundu", kanit_adimlari=[1]),
+                        "finish_reason": "stop"}  # fmt: skip
+            if not arac_sonucu:  # ebeveyn: tek mesajda iki alt ajan
+                iki = {"content": "", "tool_calls": [
+                    cagri("alt_ajan", gorev=g, araclar=["proje_dosya_oku"], max_adim=8)["tool_calls"][0]
+                    for g in ("A incele", "B incele")]}  # fmt: skip
+                for i, c in enumerate(iki["tool_calls"]):
+                    c["id"] = f"c{i}"
+                return {"message": iki, "finish_reason": "stop"}
+            return {"message": cagri("gorevi_bitir", ozet="tamam", kanit_adimlari=[1, 2]),
+                    "finish_reason": "stop"}  # fmt: skip
+
+    runner, depo, *_ = kur(tmp_path, proje, Yonlendiren())
+    runner.paralel_model = lambda: True
+    bas = time.monotonic()
+    run = asyncio.run(_calistir(runner, "ikili inceleme"))
+    sure = time.monotonic() - bas
+    assert run.durum is RunDurum.basarili, run.hata
+    cocuklar = [depo.getir(c) for c in run.cocuklar]
+    assert len(cocuklar) == 2 and all(c.durum is RunDurum.basarili for c in cocuklar)
+    # sirali: 2 cocuk x 2 cagri x 0.3 = 1.2 sn (+ebeveyn 0.6); paralel: ~0.6 + 0.6
+    assert sure < 1.6, f"alt ajanlar paralel kosmadi ({sure:.2f} sn)"
