@@ -67,6 +67,7 @@ class Masaustu:
         self.izinli = izinli
         self.ekran_dizini = ekran_dizini or Path("ekran-goruntuleri")
         self.durduruldu = False
+        self.vurgu = True  # eylemden once hedefi ekranda goster (api ayardan baglar)
         self._is = cf.ThreadPoolExecutor(max_workers=1, thread_name_prefix="uia")
         self._uia: Any = None
         self._refler: dict[str, tuple[int, Any]] = {}  # ref -> (pencere hwnd, eleman)
@@ -106,12 +107,15 @@ class Masaustu:
             w = u.GetRootElement().FindAll(2, u.CreateTrueCondition())
             liste = []
             for i in range(w.Length):
-                e = w.GetElement(i)
-                exe = self._izinli_mi(e)
-                if exe and e.CurrentName:
-                    hwnd = int(e.CurrentNativeWindowHandle)
-                    liste.append({"pencere": hwnd, "baslik": e.CurrentName,
-                                  "program": exe})  # fmt: skip
+                try:  # sayim sirasinda kapanan pencere (or. vurgu cercevesi) COMError verir
+                    e = w.GetElement(i)
+                    exe = self._izinli_mi(e)
+                    if exe and e.CurrentName:
+                        hwnd = int(e.CurrentNativeWindowHandle)
+                        liste.append({"pencere": hwnd, "baslik": e.CurrentName,
+                                      "program": exe})  # fmt: skip
+                except Exception:  # noqa: BLE001, S112 - kaybolan pencere atlanir
+                    continue
             return {"pencereler": liste, "izinli_programlar": sorted(self.izinli()),
                     "not": "Yalniz izinli programlarin pencereleri listelenir."}  # fmt: skip
 
@@ -170,7 +174,11 @@ class Masaustu:
             if self.durduruldu:
                 raise UygulamaHatasi("Masaustu kontrolu kullanici tarafindan durduruldu.")
             hwnd, x = self._ref(ref)
-            self._pencere(hwnd)  # yanlis/kapanmis/izinsiz pencereye islem yok
+            pen, _ = self._pencere(hwnd)  # yanlis/kapanmis/izinsiz pencereye islem yok
+            if self.vurgu:  # kullanici neye dokunulacagini gorsun (mavi pencere, turuncu eleman)
+                from app.agent import vurgu
+
+                vurgu.vurgula(vurgu.dikdortgen(pen), vurgu.dikdortgen(x))
             if tur == "yaz":
                 from comtypes.gen.UIAutomationClient import IUIAutomationValuePattern
 

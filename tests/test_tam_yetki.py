@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import sys
 from pathlib import Path
 
 import httpx
@@ -114,3 +115,20 @@ def test_listele_dist_klasorunu_gosterir_glob_acik_desenle_bulur(tmp_path: Path)
     liste = json.dumps(ok.klasor_listele(".", 3), ensure_ascii=False)
     assert "dist" in liste
     assert "app.min.js" in json.dumps(ok.glob_bul("dist/*.js"))
+
+
+@pytest.mark.skipif(sys.platform != "win32", reason="Windows overlay")
+def test_vurgu_cerceveleri_acilir_ve_kapanir() -> None:
+    """Masaustu eylemi oncesi hedef cercevesi: pencere olusur, sure dolunca kapanir."""
+    import ctypes
+    import time
+
+    from app.agent import vurgu
+
+    assert vurgu.vurgula(None, None) is False  # gecersiz kutu: hicbir sey yok
+    assert vurgu.vurgula((100, 100, 400, 300), (150, 150, 200, 180), sure=0.8, bekle=0.3) is True
+    u = ctypes.windll.user32
+    u.FindWindowW.restype = ctypes.c_void_p
+    assert u.FindWindowW(f"KairoVurgu{vurgu.MAVI:06x}", None)  # cerceve ekranda
+    time.sleep(1.0)
+    assert not u.FindWindowW(f"KairoVurgu{vurgu.MAVI:06x}", None)  # sure dolunca kapandi

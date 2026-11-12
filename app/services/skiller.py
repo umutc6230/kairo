@@ -286,8 +286,67 @@ class SkillDeposu:
             raise UygulamaHatasi("Yalniz uygulamada eklenen skill'ler duzenlenebilir.")
         if not aciklama.strip():
             raise UygulamaHatasi("Aciklama zorunlu: model skill'i buna bakarak secer.")
+        self._surum_sakla(s.klasor)
         self._yaz(s.klasor, s.ad, aciklama, icerik, surum, gereken_araclar)
         return self.getir(ad)
+
+    # ---- revizyonlar (openbot'un yerel skill surumlemesinden): her guncellemede eski hal saklanir
+    @staticmethod
+    def _surum_klasoru(klasor: Path) -> Path:
+        return klasor / ".surumler"
+
+    def revizyon(self, ad: str) -> int:
+        """Su anki revizyon numarasi (1 = ilk hal). Ajan guncellerken bunu gondermeli."""
+        s = self.getir(ad)
+        if s.klasor is None:
+            return 1
+        return len(list(self._surum_klasoru(s.klasor).glob("SKILL.r*.md"))) + 1
+
+    def _surum_sakla(self, klasor: Path) -> None:
+        hedef = self._surum_klasoru(klasor)
+        hedef.mkdir(exist_ok=True)
+        n = len(list(hedef.glob("SKILL.r*.md"))) + 1
+        shutil.copy2(klasor / "SKILL.md", hedef / f"SKILL.r{n}.md")
+
+    def revizyonlar(self, ad: str) -> list[dict]:
+        s = self.getir(ad)
+        if s.klasor is None:
+            return []
+        eski = sorted(self._surum_klasoru(s.klasor).glob("SKILL.r*.md"),
+                      key=lambda p: int(p.stem.split(".r")[-1]))  # fmt: skip
+        return [{"revizyon": int(p.stem.split(".r")[-1]), "boyut": p.stat().st_size} for p in eski]
+
+    def geri_al(self, ad: str, revizyon: int) -> Skill:
+        s = self.getir(ad)
+        if s.kaynak != "uygulama" or s.klasor is None:
+            raise UygulamaHatasi("Yalniz uygulamada eklenen skill'ler geri alinabilir.")
+        kaynak = self._surum_klasoru(s.klasor) / f"SKILL.r{int(revizyon)}.md"
+        if not kaynak.is_file():
+            raise UygulamaHatasi(f"Revizyon yok: {revizyon}")
+        self._surum_sakla(s.klasor)  # geri alma da geri alinabilsin
+        shutil.copy2(kaynak, s.klasor / "SKILL.md")
+        return self.getir(ad)
+
+    def ajan_kaydet(self, ad: str, aciklama: str, icerik: str, okunan_revizyon: int = 0) -> dict:
+        """Ajanin skill_kaydet araci: yoksa olusturur, varsa (okunan revizyon guncelse) gunceller.
+        Claude/brain/proje skill'leri DEGISTIRILMEZ; ajan yalniz uygulama skill'i yazar."""
+        ad = ad.strip().lower()
+        mevcut = next((x for x in self.kesfet() if x.ad == ad), None)
+        if mevcut is None:
+            self.olustur(ad, aciklama, icerik)
+            return {"olusturuldu": ad, "revizyon": 1}
+        if mevcut.kaynak != "uygulama":
+            raise UygulamaHatasi(
+                f"'{ad}' {mevcut.kaynak} kaynakli bir skill; ajan degistiremez. Baska ad sec."
+            )
+        simdiki = self.revizyon(ad)
+        if int(okunan_revizyon or 0) != simdiki:
+            raise UygulamaHatasi(
+                f"Skill degismis (su an revizyon {simdiki}). Once skill_kullan ile oku, sonra "
+                f"okunan_revizyon={simdiki} ile tekrar kaydet."
+            )
+        self.guncelle(ad, aciklama, icerik)
+        return {"guncellendi": ad, "revizyon": simdiki + 1, "onceki_saklandi": simdiki}
 
     @staticmethod
     def _yaz(klasor: Path, ad: str, aciklama: str, icerik: str, surum: str = "",
@@ -471,6 +530,8 @@ def arac_isleyicileri(
             return {"hata": f"Skill '{s.ad}' bozuk, yuklenmedi: {s.hata}"}
         _, govde = frontmatter(s.dosya.read_text(encoding="utf-8", errors="replace"))
         sonuc = {"ad": s.ad, "talimat": govde[:MAX_SKILL_KARAKTER]}
+        if s.kaynak == "uygulama":  # ajan guncellerken bu revizyonu gondermeli
+            sonuc["revizyon"] = depo.revizyon(s.ad)
         if s.surum:
             sonuc["surum"] = s.surum
         if s.gereken_araclar:
@@ -564,6 +625,26 @@ ARACLAR: list[dict] = [
         },
     },
 ]
+
+
+SKILL_KAYDET_ARACI: dict = {
+    "type": "function",
+    "function": {
+        "name": "skill_kaydet",
+        "description": "Tekrar kullanilacak is akisini skill olarak kaydet/guncelle "
+        "(guncellemede okunan_revizyon ver).",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "ad": {"type": "string"},
+                "aciklama": {"type": "string"},
+                "icerik": {"type": "string"},
+                "okunan_revizyon": {"type": "integer"},
+            },
+            "required": ["ad", "aciklama", "icerik"],
+        },
+    },
+}
 
 
 # ---- A6.2: script araci (yalniz ajan komut araci acikken sunulur) ----

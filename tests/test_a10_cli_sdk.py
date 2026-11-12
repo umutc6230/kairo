@@ -37,7 +37,9 @@ def ortam(tmp_path):
     veri.mkdir()
     (veri / "ayarlar.json").write_text(json.dumps({
         "adres": f"http://127.0.0.1:{port}", "otomatik_baslat": False, "model": "deepseek-heretic",
-        "sunucu_acik": False, "llm_dizin": str(tmp_path)}), encoding="utf-8")  # fmt: skip
+        "sunucu_acik": False, "llm_dizin": str(tmp_path),
+        # kullanicinin ~/.claude talimat/skill seti testi 16K baglamda tasirmasin (yalitim)
+        "claude_talimatlari": False, "skiller_acik": False}), encoding="utf-8")  # fmt: skip
     proje = tmp_path / "proje"
     (proje / "src").mkdir(parents=True)
     (proje / "tests").mkdir()

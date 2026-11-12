@@ -62,6 +62,8 @@ class Ajan(BaseModel):
     talimat: str = Field(default="", max_length=20000)
     klasor: str = ""  # bos: <veri>/ajanlar/<id>/calisma
     model: str = ""  # bos: uygulamanin aktif modeli
+    saglayici: str = "kairo"  # kairo | claude (Claude Code CLI) | codex (Codex CLI)
+    cli_oturum: str = ""  # CLI saglayicisinda konusma surekliligi (--resume)
     hafiza: list[str] = Field(default_factory=list)  # ajanin kendine yazdigi kalici notlar
     duraklatildi: bool = False
     kuyruk: list[KuyrukOgesi] = Field(default_factory=list)
@@ -125,7 +127,9 @@ class AjanDeposu:
 
     # ---- olustur / duzenle / sil ----
     def olustur(self, veri: dict) -> Ajan:
-        izinli = {"ad", "avatar", "aciklama", "talimat", "klasor", "model"}
+        izinli = {"ad", "avatar", "aciklama", "talimat", "klasor", "model", "saglayici"}
+        if veri.get("saglayici", "kairo") not in ("kairo", "claude", "codex"):
+            raise UygulamaHatasi("Saglayici kairo, claude ya da codex olmali.")
         a = Ajan(**{k: v for k, v in veri.items() if k in izinli})
         if not AD_DESENI.match(a.ad):
             raise UygulamaHatasi("Ajan adi harf, rakam, bosluk, nokta ve tire icerebilir (<=40).")
@@ -143,7 +147,10 @@ class AjanDeposu:
         return a
 
     def duzenle(self, ajan_id: str, veri: dict) -> Ajan:
-        izinli = {"ad", "avatar", "aciklama", "talimat", "klasor", "model", "duraklatildi"}
+        izinli = {"ad", "avatar", "aciklama", "talimat", "klasor", "model", "duraklatildi",
+                  "saglayici", "cli_oturum"}  # fmt: skip
+        if veri.get("saglayici", "kairo") not in ("kairo", "claude", "codex"):
+            raise UygulamaHatasi("Saglayici kairo, claude ya da codex olmali.")
 
         def f(a: Ajan) -> None:
             for k, v in veri.items():

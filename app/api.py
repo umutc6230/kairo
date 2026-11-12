@@ -10,6 +10,7 @@ import secrets
 import shutil
 import subprocess
 import time
+import uuid
 import webbrowser
 from collections.abc import AsyncIterator, Callable
 from contextlib import asynccontextmanager
@@ -27,7 +28,7 @@ from pydantic import BaseModel, Field, ValidationError
 
 from app import URUN_ADI, URUN_SAHIBI, URUN_SAHIBI_GITHUB, URUN_SAHIBI_X, __version__
 from app.agent import akis as akis_mod
-from app.agent import mcp_ice, mcp_oauth
+from app.agent import cli_ajan, mcp_ice, mcp_oauth
 from app.agent import review as rv
 from app.agent import worktree as wt
 from app.agent.ajanlar import AJAN_NOTU_ARACI, AJANA_MESAJ_ARACI, AjanDeposu, KuyrukOgesi
@@ -39,7 +40,7 @@ from app.agent.hooks import HookDeposu
 from app.agent.izolasyon import adaptor_olustur
 from app.agent.masaustu import Masaustu
 from app.agent.mcp import McpYoneticisi
-from app.agent.policy import PolitikaMotoru, yerel_host_mu
+from app.agent.policy import Istek, PolitikaMotoru, YanEtki, yerel_host_mu
 from app.agent.runner import BITMIS as BITMIS_RUN
 from app.agent.runner import AgentRunner, Butce, RunDeposu, RunDurum, olay_akisi
 from app.agent.takim import TakimPanosu
@@ -50,7 +51,14 @@ from app.agent.workspaces import Guven, Mod, WorkspaceDeposu
 from app.agent.yetenek import ModelYetenegi, dogrula, uzak_yetenek, yerel_yetenek
 from app.agent.zamanlayici import Tetik, Zamanlayici
 from app.config import web_dizini
-from app.exceptions import Bulunamadi, GecersizEk, OnayGerekli, UygulamaHatasi, YerelLLMHatasi
+from app.exceptions import (
+    Bulunamadi,
+    GecersizEk,
+    OnayGerekli,
+    UygulamaHatasi,
+    YerelLLMHatasi,
+    YetkiYok,
+)
 from app.services import cc_plugin as ccp
 from app.services import ekler as ekler_modulu
 from app.services import masaustu_ayar as mda
@@ -68,7 +76,7 @@ from app.services.model_yonetici import LLMFabrikasi, ModelYonetici
 from app.services.openrouter import OpenRouterDeposu
 from app.services.oturumlar import Mesaj, OturumDeposu
 from app.services.pluginler import PluginDeposu
-from app.services.skiller import SkillDeposu
+from app.services.skiller import SKILL_KAYDET_ARACI, SkillDeposu
 from app.services.sohbet import VARSAYILAN_ALAN_ID, MesajIstegi, SohbetServisi, tahmini_token
 from app.services.talimatlar import TalimatDeposu
 from app.services.telegram import TelegramKanali
@@ -345,8 +353,24 @@ def uygulama_olustur(
                 return {"hata": e.mesaj}
             return {"artifact": a["id"], "ad": a["ad"], "tur": a["tur"], "boyut": a["boyut"]}
 
-        araclar_ = [*araclar_, ARTIFACT_ARACI]
-        isleyiciler = {**isleyiciler, "artifact_olustur": artifact_olustur}
+        def skill_kaydet(ad: str, aciklama: str, icerik: str, okunan_revizyon: int = 0) -> dict:
+            # Skill sonraki islere talimat olur: yazma gibi izin motorundan gecer (onayli: sorar)
+            try:
+                istek = Istek(arac="skill_kaydet", yan_etki=YanEtki.yaz,
+                              ozet=f"Skill kaydet: {ad}", komut=icerik[:2000])  # fmt: skip
+                politika.uygula(istek, alan)
+                return skiller.ajan_kaydet(ad, aciklama, icerik, okunan_revizyon)
+            except OnayGerekli:
+                raise
+            except (UygulamaHatasi, YetkiYok) as e:
+                return {"hata": getattr(e, "mesaj", str(e))}
+
+        araclar_ = [*araclar_, ARTIFACT_ARACI, SKILL_KAYDET_ARACI]
+        isleyiciler = {
+            **isleyiciler,
+            "artifact_olustur": artifact_olustur,
+            "skill_kaydet": skill_kaydet,
+        }
         return sistem, araclar_, isleyiciler
 
     def model_yetenegi() -> ModelYetenegi:
@@ -415,10 +439,52 @@ def uygulama_olustur(
 
     ajan.ajan_araclari = _ajan_araclari
 
+    cli_isleri: dict[str, asyncio.Task] = {}  # ajan id -> calisan CLI isi (Claude Code / Codex)
+    cli_canli: dict[str, list[str]] = {}  # ajan id -> canli ilerleme satirlari
+
+    async def _cli_baslat(a, oge) -> str:
+        cli_canli[a.id] = []
+        digerleri = [x for x in ajan_deposu.liste() if x.id != a.id]
+        ek = ajan_deposu.sistem_metni(a, digerleri)
+        is_id = f"cli:{uuid.uuid4().hex[:10]}"
+
+        async def calis():
+            return await cli_ajan.calistir(
+                a.saglayici, oge.metin, ajan_deposu.klasor(a), oturum=a.cli_oturum,
+                tam_yetki=ayarlar.oku().tam_yetki, ek_sistem=ek, model=a.model,
+                canli=cli_canli[a.id],
+            )  # fmt: skip
+
+        cli_isleri[a.id] = asyncio.create_task(calis())
+        return is_id
+
+    def _cli_sonucu(a) -> tuple[str, str] | None:
+        """CLI isi bittiyse (durum, ozet); surerse None."""
+        t = cli_isleri.get(a.id)
+        if t is None:
+            return "basarisiz", "CLI isi bulunamadi (uygulama yeniden baslatilmis olabilir)."
+        if not t.done():
+            return None
+        cli_isleri.pop(a.id, None)
+        if t.cancelled():
+            return "iptal", "Iptal edildi."
+        if (e := t.exception()) is not None:
+            return "basarisiz", f"CLI calistirilamadi: {e}"
+        s = t.result()
+        if s.oturum and s.oturum != a.cli_oturum:
+            ajan_deposu.duzenle(a.id, {"cli_oturum": s.oturum})
+        maliyet = f" (CLI maliyet raporu: ${s.maliyet_usd:.4f})" if s.maliyet_usd else ""
+        return s.durum, (s.ozet or s.durum) + maliyet
+
     async def _ajan_dagit() -> None:
         """Biten isi kapatir (cevap gonderene/dinleyicilere), bostaki ajana siradakini verir."""
         for a in ajan_deposu.liste():
-            if a.aktif_run and a.aktif_run != "baslatiliyor":
+            if a.aktif_run and a.aktif_run.startswith("cli:"):
+                bitti = _cli_sonucu(a)
+                if bitti is None:
+                    continue
+                durum, ozet = bitti
+            elif a.aktif_run and a.aktif_run != "baslatiliyor":
                 try:
                     r = run_deposu.getir(a.aktif_run)
                 except Exception:  # noqa: BLE001 - silinmis run bitmis sayilir
@@ -427,6 +493,9 @@ def uygulama_olustur(
                     continue  # calisiyor / onay bekliyor
                 durum = str(r.durum.value) if r else "basarisiz"
                 ozet = ((r.sonuc.ozet or r.hata) if r else "Gorev kaydi bulunamadi.") or durum
+            else:
+                durum = ""
+            if durum:
                 a, is_ = ajan_deposu.bitti(a.id, a.aktif_run, durum, ozet)
                 if is_ and is_.cevap_ajan:  # ajanlar arasi: cevap gonderenin kuyruguna
                     try:
@@ -444,6 +513,12 @@ def uygulama_olustur(
             if alinan is None:
                 continue
             a, oge = alinan
+            if a.saglayici in ("claude", "codex"):
+                try:
+                    ajan_deposu.basladi(a.id, await _cli_baslat(a, oge))
+                except Exception as e:  # noqa: BLE001
+                    ajan_deposu.baslamadi(a.id, str(e))
+                continue
             try:
                 digerleri = [x for x in ajan_deposu.liste() if x.id != a.id]
                 run = await ajan.baslat(
@@ -563,6 +638,7 @@ def uygulama_olustur(
     async def ajan_getir(ajan_id: str) -> dict:
         a = ajan_deposu.getir(ajan_id)
         return {**a.ozet(), "konusma": [m.model_dump() for m in a.konusma],
+                "canli": cli_canli.get(a.id, [])[-40:] if a.aktif_run.startswith("cli:") else [],
                 "kuyruk": [k.model_dump() for k in a.kuyruk],
                 "klasor_yolu": str(ajan_deposu.klasor(a))}  # fmt: skip
 
@@ -573,7 +649,9 @@ def uygulama_olustur(
     @app.delete("/api/ajanlar/{ajan_id}")
     async def ajan_sil(ajan_id: str) -> dict:
         a = ajan_deposu.getir(ajan_id)
-        if a.aktif_run and a.aktif_run != "baslatiliyor":
+        if a.id in cli_isleri:
+            cli_isleri.pop(a.id).cancel()
+        elif a.aktif_run and a.aktif_run != "baslatiliyor":
             with contextlib.suppress(Exception):
                 await ajan.iptal(a.aktif_run)
         ajan_deposu.sil(a.id)
@@ -587,6 +665,28 @@ def uygulama_olustur(
         a = ajan_deposu.kuyruga_ekle(ajan_id, KuyrukOgesi(metin=metin, kimden="kullanici"))
         await _ajan_dagit()  # bostaysa hemen basla
         return ajan_deposu.getir(a.id).ozet()
+
+    @app.get("/api/ajanlar-saglayicilar")
+    async def ajan_saglayicilari() -> dict:
+        return {"saglayicilar": cli_ajan.SAGLAYICILAR, "kurulu": cli_ajan.durum()}
+
+    @app.post("/api/ajanlar/{ajan_id}/iptal")
+    async def ajan_is_iptal(ajan_id: str) -> dict:
+        a = ajan_deposu.getir(ajan_id)
+        if a.id in cli_isleri:
+            cli_isleri[a.id].cancel()
+        elif a.aktif_run and a.aktif_run != "baslatiliyor":
+            await ajan.iptal(a.aktif_run)
+        return {"iptal": True}
+
+    @app.get("/api/skiller/{ad}/revizyonlar")
+    async def skill_revizyonlari(ad: str) -> dict:
+        return {"simdiki": skiller.revizyon(ad), "revizyonlar": skiller.revizyonlar(ad)}
+
+    @app.post("/api/skiller/{ad}/geri-al")
+    async def skill_geri_al(ad: str, veri: dict) -> dict:
+        s = skiller.geri_al(ad, int(veri.get("revizyon") or 0))
+        return {"ad": s.ad, "simdiki": skiller.revizyon(s.ad)}
 
     @app.get("/api/telegram")
     async def telegram_durum() -> dict:

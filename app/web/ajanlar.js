@@ -50,7 +50,7 @@ async function detayCiz() {
   if (yeniIskelet) {
     kap.dataset.aj = a.id;
     kap.innerHTML = `<div class="aj-ust"><span class="aj-avatar buyuk">${kacir(a.avatar)}</span>
-        <div style="flex:1"><h2 style="margin:0">${kacir(a.ad)}</h2><div class="soluk kucuk">Klasör: <code>${kacir(a.klasor_yolu)}</code> · Model: ${kacir(a.model || "uygulamanın aktif modeli")}</div></div>
+        <div style="flex:1"><h2 style="margin:0">${kacir(a.ad)}</h2><div class="soluk kucuk">Klasör: <code>${kacir(a.klasor_yolu)}</code> · ${kacir({ claude: "Claude Code CLI", codex: "Codex CLI" }[a.saglayici] || "Kairo ajanı")} · Model: ${kacir(a.model || "varsayılan")}</div></div>
         <button class="btn" id="aj-duzenle">Düzenle</button>
         <button class="btn" id="aj-durdur"></button>
         <button class="btn tehlike" id="aj-sil">Sil</button></div>
@@ -88,8 +88,14 @@ async function detayCiz() {
 
   const canli = $("#aj-canli");
   const run = a.aktif_run && a.aktif_run !== "baslatiliyor" ? a.aktif_run : "";
+  const cli = run.startsWith("cli:");
   canli.hidden = !run;
-  if (run && run !== sonCanliRun) { sonCanliRun = run; sohbetteGorevGoster(canli.querySelector(".gr-detay"), run); }
+  if (cli) {  // Claude Code / Codex: CLI'nin kendi ilerleme satirlari
+    sonCanliRun = run;
+    canli.querySelector(".gr-detay").innerHTML = `<div class="soluk kucuk">${kacir(a.saglayici === "codex" ? "Codex" : "Claude Code")} çalışıyor… <button class="btn kucuk" id="aj-iptal">İşi durdur</button></div>
+      <ol class="adim-liste sade">${(a.canli || []).map((x) => `<li class="${x.startsWith("🔧") ? "soluk kucuk" : "ajan-aciklama"}">${x.startsWith("🔧") ? kacir(x) : md(x)}</li>`).join("") || '<li class="parilti kucuk">Başlıyor…</li>'}</ol>`;
+    $("#aj-iptal").onclick = async () => { await api(`/api/ajanlar/${a.id}/iptal`, { method: "POST" }); detayCiz(); };
+  } else if (run && run !== sonCanliRun) { sonCanliRun = run; sohbetteGorevGoster(canli.querySelector(".gr-detay"), run); }
   $("#aj-kuyruk").innerHTML = (a.kuyruk || []).length
     ? `<div class="soluk kucuk">Sırada bekleyen ${a.kuyruk.length} iş:</div>${a.kuyruk.map((k) => `<div class="aj-sira"><span>${kacir(k.metin.slice(0, 140))}</span><button class="btn kucuk" data-kuyruk-sil="${kacir(k.id)}">Kaldır</button></div>`).join("")}`
     : "";
@@ -108,14 +114,24 @@ function formAc(on = null) {
     <label class="proje-alan">Kısa açıklama (diğer ajanlar bunu görür)<input class="alan" id="aj-f-aciklama" maxlength="300" value="${kacir(a.aciklama)}" placeholder="ör. Web'de araştırma yapar, kaynaklı rapor yazar"></label>
     <label class="proje-alan">Talimatlar<textarea class="alan" id="aj-f-talimat" rows="6" maxlength="20000" placeholder="Bu ajanın rolü, kuralları, çıktı biçimi…">${kacir(a.talimat)}</textarea></label>
     <label class="proje-alan">Çalışma klasörü (boş: Kairo veri klasöründe kendi klasörü)<input class="alan" id="aj-f-klasor" value="${kacir(a.klasor)}" placeholder="C:\\Users\\...\\proje"></label>
-    <label class="proje-alan">Model (boş: uygulamanın aktif modeli; ör. deepseek/deepseek-v4.1-flash)<input class="alan" id="aj-f-model" value="${kacir(a.model)}"></label>
+    <label class="proje-alan">Sağlayıcı<select class="secim" id="aj-f-saglayici">
+      <option value="kairo" ${(a.saglayici || "kairo") === "kairo" ? "selected" : ""}>Kairo ajanı (OpenRouter / yerel model)</option>
+      <option value="claude" ${a.saglayici === "claude" ? "selected" : ""}>Claude Code CLI (senin Claude aboneliğin)</option>
+      <option value="codex" ${a.saglayici === "codex" ? "selected" : ""}>Codex CLI (senin ChatGPT aboneliğin)</option></select>
+      <span class="ayar-not" id="aj-f-kurulu"></span></label>
+    <label class="proje-alan">Model (boş: varsayılan; Kairo için ör. deepseek/deepseek-v4.1-flash, Claude için ör. sonnet)<input class="alan" id="aj-f-model" value="${kacir(a.model)}"></label>
     <div class="satir"><button class="btn ana" id="aj-f-kaydet">${on ? "Kaydet" : "Oluştur"}</button><button class="btn" id="aj-f-vazgec">Vazgeç</button></div></div>`;
+  api("/api/ajanlar-saglayicilar").then((s) => {
+    const k = s.kurulu || {};
+    $("#aj-f-kurulu").textContent = `Kurulu: Claude Code ${k.claude ? "✓" : "✗"} · Codex ${k.codex ? "✓" : "✗"}. CLI ajanları kendi araçlarıyla çalışır; Kairo'da tam yetki açıksa onaysız çalışırlar.`;
+  }).catch(() => {});
   let avatar = a.avatar;
   $$("[data-av]", kap).forEach((b) => { b.onclick = () => { avatar = b.dataset.av; $$("[data-av]", kap).forEach((x) => x.classList.toggle("secili", x === b)); }; });
   $("#aj-f-vazgec").onclick = () => { kap.hidden = true; kap.innerHTML = ""; };
   $("#aj-f-kaydet").onclick = async () => {
     const govde = { ad: $("#aj-f-ad").value.trim(), avatar, aciklama: $("#aj-f-aciklama").value.trim(),
-      talimat: $("#aj-f-talimat").value, klasor: $("#aj-f-klasor").value.trim(), model: $("#aj-f-model").value.trim() };
+      talimat: $("#aj-f-talimat").value, klasor: $("#aj-f-klasor").value.trim(), model: $("#aj-f-model").value.trim(),
+      saglayici: $("#aj-f-saglayici").value };
     try {
       const r = on ? await api(`/api/ajanlar/${on.id}`, { method: "PUT", govde }) : await api("/api/ajanlar", { method: "POST", govde });
       secili = r.id;

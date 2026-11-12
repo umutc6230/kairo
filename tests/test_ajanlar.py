@@ -141,3 +141,73 @@ async def test_telegram_izinli_sohbet_ajana_gider_izinsize_yalniz_kimlik(tmp_pat
     assert t.durum()["bekleyen_kimlikler"] == [999]
     await t.gonder(42, "x" * 9000)  # uzun cevap parcalanir (Telegram 4096 siniri)
     assert [len(g["text"]) for g in giden[2:]] == [4000, 4000, 1000]
+
+
+def test_cli_komutlari_ve_olay_isleme(tmp_path: Path, monkeypatch) -> None:
+    from app.agent import cli_ajan
+
+    monkeypatch.setattr(cli_ajan, "claude_yolu", lambda: "claude.exe")
+    monkeypatch.setattr(cli_ajan, "codex_komutu", lambda: ["node", "codex.js"])
+    k = cli_ajan.komut_kur(
+        "claude", "selam", tmp_path, oturum="S1", tam_yetki=True, ek_sistem="kim"
+    )
+    assert k[:3] == ["claude.exe", "-p", "selam"] and "bypassPermissions" in k
+    assert k[k.index("--resume") + 1] == "S1" and "--append-system-prompt" in k
+    assert "acceptEdits" in cli_ajan.komut_kur("claude", "x", tmp_path)
+    c = cli_ajan.komut_kur("codex", "selam", tmp_path, oturum="T1")
+    assert c[-3:] == ["resume", "T1", "selam"] and "workspace-write" in c
+    s = cli_ajan.CliSonuc()
+    for e in [
+        {"type": "system", "subtype": "init", "session_id": "abc"},
+        {
+            "type": "assistant",
+            "message": {
+                "content": [{"type": "tool_use", "name": "Write", "input": {"file_path": "a"}}]
+            },
+        },
+        {
+            "type": "result",
+            "result": "Yazdim.",
+            "is_error": False,
+            "total_cost_usd": 0.01,
+            "session_id": "abc",
+        },
+    ]:
+        cli_ajan.olay_isle("claude", e, s)
+    assert (s.oturum, s.ozet, s.durum) == ("abc", "Yazdim.", "basarili") and s.log[0].startswith(
+        "🔧 Write"
+    )
+    x = cli_ajan.CliSonuc()
+    for e in [
+        {"type": "thread.started", "thread_id": "t9"},
+        {"type": "turn.failed", "error": {"message": "usage limit"}},
+    ]:
+        cli_ajan.olay_isle("codex", e, x)
+    assert x.oturum == "t9" and x.durum == "basarisiz" and "usage limit" in x.ozet
+
+
+def test_ajan_skill_olusturur_gunceller_surum_saklar_geri_alir(tmp_path: Path) -> None:
+    from app.services.skiller import SkillDeposu
+
+    claude = tmp_path / "claude"
+    (claude / "hazir").mkdir(parents=True)
+    (claude / "hazir" / "SKILL.md").write_text("---\nname: hazir\ndescription: x\n---\nA", "utf-8")
+    d = SkillDeposu(
+        tmp_path / "veri", [("claude", claude), ("uygulama", tmp_path / "veri" / "skills")]
+    )
+    assert d.ajan_kaydet("fatura-okuma", "Fatura PDF okur", "1. oku")["revizyon"] == 1
+    with pytest.raises(UygulamaHatasi, match="revizyon 1"):  # okumadan guncelleme yok
+        d.ajan_kaydet("fatura-okuma", "Fatura PDF okur", "2. yeni", okunan_revizyon=0)
+    assert (
+        d.ajan_kaydet("fatura-okuma", "Fatura PDF okur", "2. yeni", okunan_revizyon=1)["revizyon"]
+        == 2
+    )
+    assert d.revizyonlar("fatura-okuma") == [
+        {"revizyon": 1, "boyut": d.revizyonlar("fatura-okuma")[0]["boyut"]}
+    ]
+    d.geri_al("fatura-okuma", 1)
+    assert "1. oku" in (tmp_path / "veri" / "skills" / "fatura-okuma" / "SKILL.md").read_text(
+        "utf-8"
+    )
+    with pytest.raises(UygulamaHatasi, match="claude kaynakli"):  # Claude skill'i korunur
+        d.ajan_kaydet("hazir", "x", "ezme")
