@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import json
 import os
 import secrets
@@ -29,6 +30,7 @@ from app.agent import akis as akis_mod
 from app.agent import mcp_ice, mcp_oauth
 from app.agent import review as rv
 from app.agent import worktree as wt
+from app.agent.ajanlar import AJAN_NOTU_ARACI, AJANA_MESAJ_ARACI, AjanDeposu, KuyrukOgesi
 from app.agent.akis import Akis, AkisDeposu
 from app.agent.checkpoints import CheckpointDeposu
 from app.agent.dosyalar import AjanDosyaAraclari, KokKapsami
@@ -38,6 +40,7 @@ from app.agent.izolasyon import adaptor_olustur
 from app.agent.masaustu import Masaustu
 from app.agent.mcp import McpYoneticisi
 from app.agent.policy import PolitikaMotoru, yerel_host_mu
+from app.agent.runner import BITMIS as BITMIS_RUN
 from app.agent.runner import AgentRunner, Butce, RunDeposu, RunDurum, olay_akisi
 from app.agent.takim import TakimPanosu
 from app.agent.tarayici import Tarayici, playwright_var
@@ -47,7 +50,7 @@ from app.agent.workspaces import Guven, Mod, WorkspaceDeposu
 from app.agent.yetenek import ModelYetenegi, dogrula, uzak_yetenek, yerel_yetenek
 from app.agent.zamanlayici import Tetik, Zamanlayici
 from app.config import web_dizini
-from app.exceptions import GecersizEk, OnayGerekli, UygulamaHatasi, YerelLLMHatasi
+from app.exceptions import Bulunamadi, GecersizEk, OnayGerekli, UygulamaHatasi, YerelLLMHatasi
 from app.services import cc_plugin as ccp
 from app.services import ekler as ekler_modulu
 from app.services import masaustu_ayar as mda
@@ -68,6 +71,7 @@ from app.services.pluginler import PluginDeposu
 from app.services.skiller import SkillDeposu
 from app.services.sohbet import VARSAYILAN_ALAN_ID, MesajIstegi, SohbetServisi, tahmini_token
 from app.services.talimatlar import TalimatDeposu
+from app.services.telegram import TelegramKanali
 from app.services.testler import (
     ORNEK_SATIRLAR,
     AracIstegi,
@@ -369,7 +373,7 @@ def uygulama_olustur(
     ajan = AgentRunner(
         run_deposu,
         ajan_baglami,
-        lambda: yonetici.kullan(),
+        lambda model=None: yonetici.kullan(model or None),
         onay_durumu,
         yetenek=model_yetenegi,
         hooks=hooklar,
@@ -379,6 +383,128 @@ def uygulama_olustur(
     )
     ajan.araclar_kok = ajan_baglami_kok
     ajan.paralel_model = lambda: ayarlar.oku().saglayici == "openrouter"
+
+    # ---- kalici ajanlar (openbot tasarimindan): kimlik + kuyruk + ajanlar arasi mesaj ----
+    ajan_deposu = AjanDeposu(veri_dizini)
+    ajan_dinleyicileri: list = []  # (ajan, is, run) -> None; Telegram cevabi vb.
+
+    def _ajan_araclari(run) -> tuple[list, dict]:
+        def ajana_mesaj(ajan: str, mesaj: str) -> dict:
+            try:
+                gonderen = ajan_deposu.getir(run.ajan_id)
+                hedef = ajan_deposu.getir(ajan)
+                if hedef.id == gonderen.id:
+                    return {"hata": "Kendine mesaj atamazsin."}
+                zincir = (gonderen.aktif_is.zincir if gonderen.aktif_is else 0) + 1
+                ajan_deposu.kuyruga_ekle(hedef.id, KuyrukOgesi(
+                    metin=f"[{gonderen.ad} ajanindan] {mesaj}", kimden=f"ajan:{gonderen.id}",
+                    zincir=zincir, cevap_ajan=gonderen.id))  # fmt: skip
+            except (UygulamaHatasi, ValueError) as e:
+                return {"hata": getattr(e, "mesaj", str(e))}
+            return {"gonderildi": hedef.ad, "not": "Cevap bitince sana yeni mesaj olarak gelir."}
+
+        def ajan_notu(**kw) -> dict:
+            try:
+                a = ajan_deposu.hafizaya_ekle(run.ajan_id, str(kw.get("not") or ""))
+            except UygulamaHatasi as e:
+                return {"hata": e.mesaj}
+            return {"kaydedildi": True, "not_sayisi": len(a.hafiza)}
+
+        return [AJANA_MESAJ_ARACI, AJAN_NOTU_ARACI], {
+            "ajana_mesaj": ajana_mesaj, "ajan_notu": ajan_notu}  # fmt: skip
+
+    ajan.ajan_araclari = _ajan_araclari
+
+    async def _ajan_dagit() -> None:
+        """Biten isi kapatir (cevap gonderene/dinleyicilere), bostaki ajana siradakini verir."""
+        for a in ajan_deposu.liste():
+            if a.aktif_run and a.aktif_run != "baslatiliyor":
+                try:
+                    r = run_deposu.getir(a.aktif_run)
+                except Exception:  # noqa: BLE001 - silinmis run bitmis sayilir
+                    r = None
+                if r is not None and r.durum not in BITMIS_RUN:
+                    continue  # calisiyor / onay bekliyor
+                durum = str(r.durum.value) if r else "basarisiz"
+                ozet = ((r.sonuc.ozet or r.hata) if r else "Gorev kaydi bulunamadi.") or durum
+                a, is_ = ajan_deposu.bitti(a.id, a.aktif_run, durum, ozet)
+                if is_ and is_.cevap_ajan:  # ajanlar arasi: cevap gonderenin kuyruguna
+                    try:
+                        ajan_deposu.kuyruga_ekle(is_.cevap_ajan, KuyrukOgesi(
+                            metin=f"[{a.ad} cevabi ({durum})] {ozet}", kimden=f"ajan:{a.id}",
+                            zincir=is_.zincir))  # fmt: skip
+                    except (UygulamaHatasi, Bulunamadi) as e:
+                        logger.warning(f"Ajan cevabi iletilemedi: {e}")
+                for dinle in ajan_dinleyicileri:
+                    try:
+                        await dinle(a, is_, durum, ozet)
+                    except Exception as e:  # noqa: BLE001 - kanal hatasi kuyrugu durdurmaz
+                        logger.warning(f"Ajan dinleyicisi: {e}")
+            alinan = ajan_deposu.al(a.id)
+            if alinan is None:
+                continue
+            a, oge = alinan
+            try:
+                digerleri = [x for x in ajan_deposu.liste() if x.id != a.id]
+                run = await ajan.baslat(
+                    oge.metin, model=a.model or ayarlar.oku().aktif_model,
+                    onceki=a.son_run, ajan_id=a.id,
+                    ek_sistem=ajan_deposu.sistem_metni(a, digerleri),
+                    calisma_koku=str(ajan_deposu.klasor(a)),
+                )  # fmt: skip
+                ajan_deposu.basladi(a.id, run.id)
+            except Exception as e:  # noqa: BLE001
+                ajan_deposu.baslamadi(a.id, getattr(e, "mesaj", str(e)))
+
+    # ---- Telegram kanali: izinli sohbetten ajana mesaj, cevap Telegram'a ----
+    telegram = TelegramKanali(veri_dizini)
+
+    async def _telegram_mesaj(chat: int, metin: str, ad: str) -> str | None:
+        t = telegram.ayar()
+        if metin in ("/start", "/yardim", "/help"):
+            liste = ", ".join(x.ad for x in ajan_deposu.liste()) or "yok"
+            return (f"Kairo'ya bagli. Ajanlar: {liste}\nMesajin varsayilan ajana gider. "
+                    "Baska ajana: '/ajan Ad mesaj'. Durum: /durum")  # fmt: skip
+        if metin == "/durum":
+            return (
+                "\n".join(
+                    f"{x.avatar} {x.ad}: {x.ozet()['durum']}, {len(x.kuyruk)} sirada"
+                    for x in ajan_deposu.liste()
+                )
+                or "Ajan yok."
+            )
+        hedef = t.get("ajan", "")
+        if metin.startswith("/ajan "):
+            parca = metin[6:].strip().split(" ", 1)
+            hedef, metin = parca[0], (parca[1] if len(parca) > 1 else "")
+            if not metin:
+                return "Kullanim: /ajan Ad mesaj"
+        if not hedef:
+            ilk = next(iter(ajan_deposu.liste()), None)
+            if ilk is None:
+                return "Kairo'da hic ajan yok; once Ajanlar sayfasindan olustur."
+            hedef = ilk.id
+        a = ajan_deposu.kuyruga_ekle(hedef, KuyrukOgesi(
+            metin=metin, kimden=f"telegram:{chat}"))  # fmt: skip
+        await _ajan_dagit()
+        sira = len(ajan_deposu.getir(a.id).kuyruk)
+        return f"{a.avatar} {a.ad} ise aldi" + (f" ({sira} is sirada)." if sira else ".")
+
+    async def _telegram_cevap(a, is_, durum: str, ozet: str) -> None:
+        if is_ and is_.kimden.startswith("telegram:"):
+            chat = int(is_.kimden.split(":", 1)[1])
+            await telegram.gonder(chat, f"{a.avatar} {a.ad} ({durum}):\n{ozet}")
+
+    ajan_dinleyicileri.append(_telegram_cevap)
+
+    async def _ajan_dongusu() -> None:
+        while True:
+            try:
+                await _ajan_dagit()
+            except Exception as e:  # noqa: BLE001
+                logger.warning(f"Ajan kuyrugu: {e}")
+            await asyncio.sleep(2)
+
     ajan.takim = TakimPanosu(veri_dizini)
     ajan.uzantilar = uzantilar
     ajan.ajan_profilleri = pluginler.ajan_profilleri
@@ -394,6 +520,9 @@ def uygulama_olustur(
         if gecit and a.sunucu_acik:
             await agecidi.baslat(a.sunucu_port)
         zd = asyncio.create_task(_zamanlayici_dongusu()) if gecit else None
+        ad_ = asyncio.create_task(_ajan_dongusu())  # kalici ajan kuyruklari
+        if gecit:
+            telegram.baslat(_telegram_mesaj)
         if gecit:  # genel "hizli ac" kisayolu (Claude Desktop Quick Entry)
             kisayol.ayarla(a.hizli_kisayol)
         if gecit:  # Claude Code plugin'lerini arka planda ice aktar (acilisi bekletmez)
@@ -401,6 +530,8 @@ def uygulama_olustur(
         yield
         if zd:
             zd.cancel()
+        ad_.cancel()
+        telegram.durdur()
         await uzak_sunucu.kapat()  # A12: uzak erisim uygulamayla birlikte kapanir
         await ajan.kapat()  # calisan gorevler guvenli sinirda duraklatilir
         mcp.kapat()  # MCP sunucu surecleri yetim kalmasin
@@ -416,6 +547,70 @@ def uygulama_olustur(
         await magaza.kapat()
 
     app = FastAPI(title=URUN_ADI, version=__version__, lifespan=omur)
+    app.state.ajan_deposu = ajan_deposu
+    app.state.ajan_dagit = _ajan_dagit
+    app.state.ajan_runner = ajan
+
+    @app.get("/api/ajanlar")
+    async def ajan_listesi() -> dict:
+        return {"ajanlar": [a.ozet() for a in ajan_deposu.liste()]}
+
+    @app.post("/api/ajanlar")
+    async def ajan_olustur(veri: dict) -> dict:
+        return ajan_deposu.olustur(veri).ozet()
+
+    @app.get("/api/ajanlar/{ajan_id}")
+    async def ajan_getir(ajan_id: str) -> dict:
+        a = ajan_deposu.getir(ajan_id)
+        return {**a.ozet(), "konusma": [m.model_dump() for m in a.konusma],
+                "kuyruk": [k.model_dump() for k in a.kuyruk],
+                "klasor_yolu": str(ajan_deposu.klasor(a))}  # fmt: skip
+
+    @app.put("/api/ajanlar/{ajan_id}")
+    async def ajan_duzenle(ajan_id: str, veri: dict) -> dict:
+        return ajan_deposu.duzenle(ajan_id, veri).ozet()
+
+    @app.delete("/api/ajanlar/{ajan_id}")
+    async def ajan_sil(ajan_id: str) -> dict:
+        a = ajan_deposu.getir(ajan_id)
+        if a.aktif_run and a.aktif_run != "baslatiliyor":
+            with contextlib.suppress(Exception):
+                await ajan.iptal(a.aktif_run)
+        ajan_deposu.sil(a.id)
+        return {"silindi": a.id}
+
+    @app.post("/api/ajanlar/{ajan_id}/mesaj")
+    async def ajana_yaz(ajan_id: str, veri: dict) -> dict:
+        metin = str(veri.get("metin") or "").strip()
+        if not metin:
+            raise UygulamaHatasi("Mesaj bos olamaz.")
+        a = ajan_deposu.kuyruga_ekle(ajan_id, KuyrukOgesi(metin=metin, kimden="kullanici"))
+        await _ajan_dagit()  # bostaysa hemen basla
+        return ajan_deposu.getir(a.id).ozet()
+
+    @app.get("/api/telegram")
+    async def telegram_durum() -> dict:
+        return telegram.durum()
+
+    @app.put("/api/telegram")
+    async def telegram_kaydet(veri: dict) -> dict:
+        d = telegram.kaydet(veri)
+        if d["aktif"] and d["token_var"]:
+            telegram.baslat(_telegram_mesaj)
+        return d
+
+    @app.post("/api/telegram/dene")
+    async def telegram_dene(veri: dict) -> dict:
+        chat = int(veri.get("chat") or 0)
+        if chat not in telegram.ayar().get("izinli", []):
+            raise UygulamaHatasi("Bu sohbet izin listesinde degil.")
+        await telegram.gonder(chat, "Kairo baglantisi calisiyor.")
+        return {"gonderildi": True}
+
+    @app.delete("/api/ajanlar/{ajan_id}/kuyruk/{oge_id}")
+    async def ajan_kuyruk_sil(ajan_id: str, oge_id: str) -> dict:
+        return ajan_deposu.kuyruktan_sil(ajan_deposu.getir(ajan_id).id, oge_id).ozet()
+
     app.state.yonetici = yonetici
     app.state.sohbet = sohbet
     app.state.agecidi = agecidi
@@ -1526,6 +1721,15 @@ def uygulama_olustur(
         """Onceki calisma bitmisse siradaki olayi baslatir; donus: durum."""
         async with webhook_kilidi:
             w = webhooklar.getir(wid)
+            if w.ajan:  # kalici ajana: olay ajanin FIFO kuyruguna, sirasi gelince calisir
+                sira = webhooklar.siradaki(wid)
+                if sira is None:
+                    return "bos"
+                w, olay = sira
+                a = ajan_deposu.kuyruga_ekle(w.ajan, KuyrukOgesi(
+                    metin=hedef_olustur(w, olay["olay"]), kimden=f"webhook:{w.id}"))  # fmt: skip
+                await _ajan_dagit()
+                return f"ajan kuyrugunda: {a.ad}"
             if w.son_run and _run_durumu(w.son_run) not in BITMIS_DURUMLAR:
                 return "kuyrukta"
             alan = sohbet.projeler.aktif() if sohbet.projeler else None
@@ -1567,7 +1771,9 @@ def uygulama_olustur(
 
     @app.post("/api/webhooklar")
     async def webhook_ekle(veri: dict) -> dict:
-        if not veri.get("proje_kok"):
+        if veri.get("ajan"):  # kalici ajana giden webhook: proje gerekmez
+            veri["ajan"] = ajan_deposu.getir(str(veri["ajan"])).id  # yoksa Turkce hata
+        elif not veri.get("proje_kok"):
             alan = sohbet.projeler.aktif() if sohbet.projeler else None
             if alan is None or not alan.kokler:
                 raise UygulamaHatasi("Webhook icin once bir proje acin.")

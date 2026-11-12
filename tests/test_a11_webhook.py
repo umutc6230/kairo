@@ -87,6 +87,29 @@ async def test_api_imzasiz_ret_imzali_kuyruk_ve_maske(app, tmp_path) -> None:
         assert (await dis.post(w["adres"], content=g, headers=b)).status_code == 409
 
 
+async def test_webhook_kalici_ajanin_kuyruguna_duser(app, monkeypatch) -> None:
+    """Ajan hedefli webhook: proje acik olmasa da olay ajanin kuyruguna (veri olarak) girer."""
+    depo = app.state.ajan_deposu
+
+    async def baslatma(**_):  # dagitim calismasin: kuyrukta kalsin
+        return None
+
+    monkeypatch.setattr(app.state, "ajan_dagit", baslatma)
+    a = depo.olustur({"ad": "Nobetci"})
+    depo.duzenle(a.id, {"duraklatildi": True})  # isi almasin, kuyrukta gorelim
+    async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app),
+                                 base_url="http://127.0.0.1") as dis:  # fmt: skip
+        anahtarli = {"X-YAS-Oturum": app.state.oturum_anahtari}
+        govde = {"ad": "alarm", "hedef": "Alarmi incele", "ajan": "Nobetci"}
+        w = (await dis.post("/api/webhooklar", headers=anahtarli, json=govde)).json()
+        assert w.get("ajan") == a.id, w
+        g = b"CPU %99"
+        r = await dis.post(w["adres"], content=g, headers=_basliklar(w["sir"], g))
+        assert r.status_code == 202 and "Nobetci" in r.json()["durum"]
+    k = depo.getir(a.id).kuyruk
+    assert len(k) == 1 and k[0].kimden == f"webhook:{w['id']}" and "DIS OLAY VERISI" in k[0].metin
+
+
 def test_ci_anahtari_ortamdan_diske_ve_alt_surece_gitmez(tmp_path, monkeypatch) -> None:
     from app.agent.dosyalar import ortam_allowlist
     from app.services.openrouter import OpenRouterDeposu

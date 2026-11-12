@@ -14,9 +14,10 @@ import { baglamYenile, sagPanelKur } from "./sagpanel.js";
 import { dockAcKapa, dockKur, degisiklikYenile } from "./dock.js";
 import { gorunumUygula, kisayolEslesir } from "./ayarlar2.js";
 import { rutinleriYukle, rutinlerKur } from "./rutinler.js";
+import { ajanlarKur, ajanlarYukle } from "./ajanlar.js";
 import { ajanBloklariniCiz, ajanliOturum, akisVar, durdur, mesajlariCiz, sohbetKur, yeniSohbetEkrani } from "./sohbet.js";
 
-const BASLIKLAR = { karsilastir: "Karşılaştır", ocr: "OCR testi", arac: "Araç testi", paket: "Test paketi", skiller: "Skill'ler ve talimatlar", modeller: "Modeller", gorevler: "Ajan görevleri", rutinler: "Rutinler" };
+const BASLIKLAR = { karsilastir: "Karşılaştır", ocr: "OCR testi", arac: "Araç testi", paket: "Test paketi", skiller: "Skill'ler ve talimatlar", modeller: "Modeller", gorevler: "Ajan görevleri", rutinler: "Rutinler", ajanlar: "Ajanlar" };
 const gecmis = [];
 let gecmisKonum = -1;
 
@@ -42,6 +43,7 @@ function git(hedef, { kaydetme = false } = {}) {
     if (hedef.tur === "skiller") skillSayfasiYukle();
     if (hedef.tur === "gorevler") gorevSayfasiYukle();
     if (hedef.tur === "rutinler") rutinleriYukle();
+    if (hedef.tur === "ajanlar") ajanlarYukle();
     if (hedef.tur === "modeller") modelSayfasiYukle();
   }
   $("#btn-geri").disabled = gecmisKonum <= 0;
@@ -365,6 +367,7 @@ async function baslat() {
   sagPanelKur({ baglayiciAc: () => ayarlarAc("mcp"), ayarAc: () => ayarlarAc() });
   dockKur();
   rutinlerKur();
+  ajanlarKur();
   document.addEventListener("oturumlar-degisti", degisiklikYenile);
   $("#baslik-menu").onclick = (e) => baslikMenusu(e.currentTarget);
   $("#btn-daha").onclick = (e) => menuAc(e.currentTarget, [

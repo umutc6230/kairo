@@ -41,7 +41,8 @@ class Webhook(BaseModel):
     id: str = Field(default_factory=lambda: uuid.uuid4().hex[:12])
     ad: str = Field(min_length=1, max_length=80)
     hedef: str = Field(min_length=1, max_length=4000)
-    proje_kok: str = Field(min_length=1)
+    proje_kok: str = ""  # ajan verilmediyse zorunlu (api denetler)
+    ajan: str = ""  # kalici ajan: olay onun kuyruguna duser (proje acik olmasi gerekmez)
     max_adim: int = Field(default=30, ge=1, le=200)
     aktif: bool = True
     sir: str = Field(default_factory=lambda: secrets.token_urlsafe(32))

@@ -602,3 +602,27 @@ pre.duz { white-space: pre-wrap; font-family: var(--mono); font-size: 13px; marg
 .ajan-rapor { display: block; }
 .ajan-rapor .rapor-baslik { font-weight: 600; margin-bottom: 4px; display: flex; gap: 6px; align-items: center; }
 .ajan-rapor .md ul { margin: 4px 0; padding-left: 20px; }
+
+/* ---- Kalici ajanlar ---- */
+.aj-duzen { display: grid; grid-template-columns: minmax(220px, 280px) 1fr; gap: 16px; align-items: start; }
+@media (max-width: 900px) { .aj-duzen { grid-template-columns: 1fr; } }
+.aj-liste { display: flex; flex-direction: column; gap: 6px; }
+.aj-kart { display: flex; align-items: center; gap: 10px; padding: 10px; border-radius: var(--yaricap);
+  border: 1px solid var(--cizgi); background: var(--yuzey); color: inherit; cursor: pointer; text-align: left; font: inherit; }
+.aj-kart.secili { border-color: var(--vurgu); background: var(--yuzey2); }
+.aj-bilgi { flex: 1; display: flex; flex-direction: column; min-width: 0; }
+.aj-bilgi .kucuk { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.aj-avatar { font-size: 22px; width: 34px; height: 34px; display: grid; place-items: center; border-radius: 50%; background: var(--yuzey3); flex-shrink: 0; }
+.aj-avatar.buyuk { font-size: 30px; width: 52px; height: 52px; }
+.aj-detay { display: flex; flex-direction: column; gap: 10px; min-width: 0; }
+.aj-ust { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; }
+.aj-konusma { display: flex; flex-direction: column; gap: 8px; max-height: 50vh; overflow-y: auto; }
+.aj-msj { padding: 8px 12px; border-radius: 12px; max-width: 92%; }
+.aj-msj.gelen { align-self: flex-end; background: var(--yuzey3); }
+.aj-msj.cevap { align-self: flex-start; background: var(--yuzey2); border: 1px solid var(--cizgi); }
+.aj-msj.bilgi { align-self: center; padding: 2px 8px; }
+.aj-msj p { margin: 4px 0; }
+.aj-sira { display: flex; gap: 8px; align-items: center; justify-content: space-between; padding: 4px 0; border-bottom: 1px solid var(--cizgi); }
+.aj-avatar-sec { display: flex; flex-wrap: wrap; gap: 4px; }
+.aj-avatar-sec .ornek.secili { outline: 2px solid var(--vurgu); }
+.aj-yaz textarea { resize: vertical; }

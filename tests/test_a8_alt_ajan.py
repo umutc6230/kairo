@@ -153,9 +153,12 @@ def test_ayni_mesajdaki_alt_ajanlar_uzak_modelde_paralel_calisir(tmp_path) -> No
                 return {"message": cagri("gorevi_bitir", ozet="okundu", kanit_adimlari=[1]),
                         "finish_reason": "stop"}  # fmt: skip
             if not arac_sonucu:  # ebeveyn: tek mesajda iki alt ajan
+
+                def alt(g):
+                    return cagri("alt_ajan", gorev=g, araclar=["proje_dosya_oku"], max_adim=8)
+
                 iki = {"content": "", "tool_calls": [
-                    cagri("alt_ajan", gorev=g, araclar=["proje_dosya_oku"], max_adim=8)["tool_calls"][0]
-                    for g in ("A incele", "B incele")]}  # fmt: skip
+                    alt(g)["tool_calls"][0] for g in ("A incele", "B incele")]}  # fmt: skip
                 for i, c in enumerate(iki["tool_calls"]):
                     c["id"] = f"c{i}"
                 return {"message": iki, "finish_reason": "stop"}

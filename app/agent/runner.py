@@ -176,8 +176,10 @@ class Run(BaseModel):
     onceki: str = ""  # ayni sohbetteki onceki gorev (konusma surekliligi)
     gecmis: str = ""  # onceki turlarin ozeti; sonraki tura aynen tasinir
     etkilesimli: bool = False  # sohbetten baslatildi: soru_sor araci sunulur
-    calisma_koku: str = ""  # izole worktree (A8.3); bos = proje kokunde
+    calisma_koku: str = ""  # izole worktree (A8.3) ya da kalici ajanin klasoru; bos = proje kokunde
     dal: str = ""
+    ajan_id: str = ""  # kalici ajanin isi (ajanlar.py): kimlik/talimat ek_sistem'de
+    ek_sistem: str = ""
     hata_sayaci: dict[str, int] = {}
     olusturma: str = Field(default_factory=lambda: datetime.now().isoformat(timespec="seconds"))
     guncelleme: str = ""
@@ -376,6 +378,8 @@ class AgentRunner:
         self.hafiza = hafiza or (lambda: "")
         self.hooks = hooks
         self.araclar_kok: Callable[[str, str], tuple] | None = None
+        # kalici ajan araclari (api baglar): run -> (semalar, isleyiciler)
+        self.ajan_araclari: Callable[[Any], tuple[list, dict]] | None = None
         self.takim: Any = None  # TakimPanosu (api baglar)
         self.uzantilar: Any = None  # UzantiYoneticisi (api baglar)
         self.ajan_profilleri: Callable[[], dict] = lambda: {}  # plugin agents/*.md
@@ -402,6 +406,9 @@ class AgentRunner:
         izole_kur: Callable[[str], tuple[str, str]] | None = None,
         onceki: str = "",
         etkilesimli: bool = False,
+        ajan_id: str = "",
+        ek_sistem: str = "",
+        calisma_koku: str = "",
     ) -> Run:
         if self.yetenek is not None:  # aracsiz modelle gorev baslamaz (acik hata)
             dogrula(self.yetenek(), araclar_gerekli=True)
@@ -409,7 +416,8 @@ class AgentRunner:
             raise UygulamaHatasi("Gorev hedefi bos olamaz.")
         run = Run(
             hedef=hedef.strip(), kabul=kabul or [], butce=butce or Butce(), model=model,
-            etkilesimli=etkilesimli,
+            etkilesimli=etkilesimli, ajan_id=ajan_id, ek_sistem=ek_sistem,
+            calisma_koku=calisma_koku,
         )  # fmt: skip
         kabul_metni = "\n".join(f"- {k}" for k in run.kabul) or "- (belirtilmedi: hedefi kanitla)"
         gorev_metni = f"GOREV: {run.hedef}\n\nKABUL KOSULLARI:\n{kabul_metni}"
@@ -626,6 +634,11 @@ class AgentRunner:
                 sistem, semalar, isleyiciler = self.araclar(run.hedef)
             if hafiza := self.hafiza():
                 sistem = f"{sistem}\n\n{hafiza}".strip()
+            if run.ek_sistem:  # kalici ajan kimligi + talimati + notlari
+                sistem = f"{run.ek_sistem}\n\n{sistem}".strip()
+            if run.ajan_id and self.ajan_araclari is not None:  # ajana_mesaj, ajan_notu
+                ek_sema, ek_isl = self.ajan_araclari(run)
+                semalar, isleyiciler = [*semalar, *ek_sema], {**isleyiciler, **ek_isl}
             semalar = [*semalar, *RUNNER_ARACLARI]
             if self.takim is not None:  # A8.2: lider + alt ajanlar ortak panoyu paylasir
                 kok = run.parent or run.id
@@ -846,7 +859,9 @@ class AgentRunner:
         for deneme in range(GECICI_HATA_DENEME + 1):
             try:
                 kilit = contextlib.nullcontext() if self.paralel_model() else self._kilit
-                async with kilit, self.llm() as llm:
+                # kalici ajanin kendi modeli olabilir; digerleri uygulamanin aktif modeli
+                baglanti = self.llm(run.model) if run.ajan_id and run.model else self.llm()
+                async with kilit, baglanti as llm:
                     secim = await llm.sohbet(
                         gonderilen, tools=semalar, max_tokens=cevap_tokeni(self._baglam())
                     )
