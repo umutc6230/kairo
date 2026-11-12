@@ -1,7 +1,7 @@
 // Ajan gorevleri ekrani (A5): gorev baslat, canli adimlar, kontroller, onay, diff ve geri alma.
 // GUVENLIK: model metni, dosya icerigi ve komut ciktisi DAIMA kacir() ile basilir; ham HTML yok.
 import { ikonlariYerlestir } from "./ikonlar.js";
-import { kacir } from "./md.js";
+import { kacir, md } from "./md.js";
 import { artifactListesiCiz, diffGoster, reviewYap } from "./inceleme.js";
 import { $, $$, api, bildir, durum, el, modal, onayla, sayi } from "./ortak.js";
 import { masaustuBildirimi } from "./ayarlar2.js";
@@ -162,15 +162,21 @@ function bekleyenKartlari(r) {
 function sohbetCiz(r) {
   const kap = detayKabi();
   const basari = r.durum === "basarili" && r.sonuc?.dogrulandi;
-  const notlar = (r.guncellemeler || []).filter((g) => !g.startsWith("Kullanici:") && !g.startsWith("Onay bekleniyor")).slice(-3);
+  // Claude Code gibi: modelin "ne ve neden" cumlesi, ait oldugu aracin USTUNDE akar
+  const aciklamalar = new Set(r.adimlar.map((a) => a.aciklama).filter(Boolean));
+  const notlar = (r.guncellemeler || [])
+    .filter((g) => !g.startsWith("Kullanici:") && !g.startsWith("Onay bekleniyor") && ![...aciklamalar].some((x) => x.startsWith(g.slice(0, 200))))
+    .slice(-2);
   const calisiyor = !BITMIS.has(r.durum);
+  const akis = r.adimlar.filter((a) => a.arac !== "plan_guncelle" && a.arac !== "gorevi_bitir").map((a) =>
+    `${a.aciklama ? `<li class="ajan-aciklama">${md(a.aciklama)}</li>` : ""}${adimSatiri(a)}`).join("");
   kap.innerHTML = `
+    <ol class="adim-liste sade">${akis}</ol>
     ${notlar.map((g) => `<p class="ajan-not">${kacir(g)}</p>`).join("")}
-    <ol class="adim-liste sade">${r.adimlar.filter((a) => a.arac !== "plan_guncelle").map(adimSatiri).join("")}</ol>
     ${calisiyor && r.durum === "calisiyor" ? '<div class="parilti kucuk">Çalışıyor…</div>' : ""}
     ${bekleyenKartlari(r)}
     ${r.hata ? `<div class="uyari-kutu kucuk">${kacir(r.hata)}</div>` : ""}
-    ${r.sonuc?.ozet ? `<div class="ajan-sonuc">${basari ? '<span data-ikon="tik" class="yesil-ikon" aria-label="doğrulandı"></span>' : ""}${kacir(r.sonuc.ozet)}${r.sonuc.kanit?.length ? ` <span class="soluk kucuk">(kanıt: adım ${kacir(r.sonuc.kanit.join(", "))})</span>` : ' <span class="rozet sari">doğrulanmadı</span>'}</div>` : ""}
+    ${r.sonuc?.ozet ? `<div class="ajan-sonuc ajan-rapor"><div class="rapor-baslik">${basari ? '<span data-ikon="tik" class="yesil-ikon" aria-label="doğrulandı"></span> Tamamlandı' : "Sonuç"}${r.sonuc.kanit?.length ? ` <span class="soluk kucuk">(kanıt: adım ${kacir(r.sonuc.kanit.join(", "))})</span>` : ' <span class="rozet sari">doğrulanmadı</span>'}</div><div class="md">${md(r.sonuc.ozet)}</div></div>` : ""}
     ${r.calisma_koku ? `<div class="ajan-izole soluk kucuk">Ayrı dalda çalıştı: <code>${kacir(r.dal)}</code>${["basarili", "dogrulanmadi"].includes(r.durum) ? `
       <div class="satir"><input class="alan" data-entegre-test placeholder="Birleştirmeden önce test komutu (isteğe bağlı)" style="flex:1">
       <button class="btn ana" data-entegre>Ana dala birleştir</button><button class="btn tehlike" data-at>Değişiklikleri at</button></div>` : ""}</div>` : ""}

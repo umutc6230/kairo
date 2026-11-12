@@ -75,6 +75,9 @@ def test_cli_onayda_durur_devam_eder_ve_biter(ortam) -> None:
     assert kod == 0 and o[-1]["durum"] == "basarili" and o[-1]["kanit"]
     assert b"a + b" in (proje / "src" / "hesap.py").read_bytes()
     assert any(x["tur"] == "run" for x in o)  # JSON olay akisi
+    kayit = json.loads((veri / "runs" / f"{run}.json").read_text(encoding="utf-8"))
+    aciklamali = {a["arac"]: a["aciklama"] for a in kayit["adimlar"] if a.get("aciklama")}
+    assert aciklamali["proje_dosya_yama"] == "proje_dosya_yama adimini calistiriyorum."
 
 
 def test_cli_hatali_kullanim(ortam) -> None:

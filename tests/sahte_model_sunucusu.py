@@ -13,7 +13,8 @@ PYTEST = sys.argv[2]
 def cagri(ad, **arg):
     return {
         "role": "assistant",
-        "content": "",
+        # Claude Code gibi: her aractan once "ne ve neden" cumlesi (arayuzde adimin ustunde)
+        "content": f"{ad} adimini calistiriyorum.",
         "tool_calls": [
             {
                 "id": uuid.uuid4().hex[:8],
