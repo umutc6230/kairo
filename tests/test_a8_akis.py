@@ -89,9 +89,7 @@ async def test_api_proje_yok_ve_gecersiz(istemci) -> None:
         "/api/akislar", json={"ad": "x", "adimlar": [{"id": "a", "tur": "ajan"}]}
     )
     assert r.status_code >= 400 and "hedef zorunlu" in r.json()["hata"]
-    r = await istemci.post("/api/akislar", json={"ad": "x", "adimlar": [
-        {"id": "a", "tur": "komut", "komut": "echo 1"}]})  # fmt: skip
-    assert r.status_code >= 400 and "proje" in r.json()["hata"]
+    # proje yokken komut adimi artik kisisel klasorlerde (onayli modda) kurulabilir
     assert (await istemci.get("/api/akislar/" + "0" * 12)).status_code == 404
 
 

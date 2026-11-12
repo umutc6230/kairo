@@ -6,6 +6,8 @@ import asyncio
 import json
 import os
 import secrets
+import shutil
+import subprocess
 import time
 import webbrowser
 from collections.abc import AsyncIterator, Callable
@@ -275,6 +277,7 @@ def uygulama_olustur(
 
     politika = PolitikaMotoru(veri_dizini, izolasyon=izolasyon)
     politika.kullanici_ag = lambda: ayarlar.oku().ag_acik
+    politika.tam_yetki = lambda: ayarlar.oku().tam_yetki
     checkpointler = CheckpointDeposu(veri_dizini)
     komutlar = KomutServisi(izolasyon=izolasyon)
     sohbet = SohbetServisi(
@@ -317,7 +320,7 @@ def uygulama_olustur(
     def ajan_baglami(hedef: str) -> tuple[str, list, dict]:
         alan = sohbet.aktif_alan()
         if sohbet.ajan_araclari(alan) is None:
-            raise UygulamaHatasi("Ajan gorevi icin once bir proje acin.")
+            raise UygulamaHatasi("Ajan araclari hazir degil.")
         a = ayarlar.oku()
         sistem, araclar_, isleyiciler, _ = sohbet.baglam_hazirla(a, hedef, [])
         if a.otomatik_ogrenme:  # kullanici actiysa ajan kalici not ekleyebilir (dusuk guven)
@@ -999,6 +1002,46 @@ def uygulama_olustur(
     @app.get("/api/mcp")
     async def mcp_listesi() -> dict:
         return {"sunucular": [s.disari() for s in mcp.liste()]}
+
+    @app.post("/api/github/baglan")
+    async def github_baglan(kontrol: bool = False) -> dict:
+        """GitHub'a token yapistirmadan baglanir (openbot'un cihaz kodu girisi gibi).
+
+        GitHub CLI'nin kendi tarayici/cihaz kodu girisi kullanilir; token yalniz backend'de
+        MCP basligina yazilir, arayuze ve modele gitmez."""
+        gh = shutil.which("gh") or next(
+            (str(p) for p in [Path(os.environ.get("PROGRAMFILES", "")) / "GitHub CLI" / "gh.exe"]
+             if p.is_file()), None,
+        )  # fmt: skip
+        if not gh:
+            return {"durum": "gh_yok", "komut": "winget install --id GitHub.cli -e"}
+
+        def _token() -> str:
+            r = subprocess.run(
+                [gh, "auth", "token", "-h", "github.com"],
+                capture_output=True, text=True, timeout=20,
+                creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
+            )  # fmt: skip
+            return r.stdout.strip() if r.returncode == 0 else ""
+
+        token = await asyncio.to_thread(_token)
+        if not token and kontrol:  # bekleme dongusu: yeni pencere acma
+            return {"durum": "giris_bekliyor"}
+        if not token:
+            # Giris penceresi: tek seferlik kod gosterir ve tarayiciyi acar; kullanici tamamlar
+            subprocess.Popen(
+                [gh, "auth", "login", "-h", "github.com", "-p", "https", "-w", "-s",
+                 "repo,read:org,gist"],
+                creationflags=getattr(subprocess, "CREATE_NEW_CONSOLE", 0),
+            )  # fmt: skip
+            return {"durum": "giris_bekliyor"}
+        veri = {"ad": "github", "url": "https://api.githubcopilot.com/mcp/",
+                "basliklar": {"Authorization": f"Bearer {token}"}}  # fmt: skip
+        if any(x.ad == "github" for x in mcp.liste()):
+            mcp.guncelle("github", veri)
+        else:
+            mcp.ekle(veri)
+        return {"durum": "bagli"}
 
     @app.post("/api/mcp")
     async def mcp_ekle(veri: dict) -> dict:

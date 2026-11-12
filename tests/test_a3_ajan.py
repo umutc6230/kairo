@@ -440,10 +440,8 @@ async def test_bos_hedef_ve_gecersiz_karar(tmp_path, proje) -> None:
 # --------------------------------------------------- API
 
 
-async def test_api_proje_yokken_gorev_baslamaz(istemci) -> None:
-    r = await istemci.post("/api/gorevler", json={"hedef": "x"})
-    assert r.status_code >= 400 and "proje" in r.json()["hata"]
-    assert (await istemci.get("/api/gorevler")).json() == {"gorevler": []}
+async def test_api_gorev_hatali_istekler(istemci) -> None:
+    # Proje yokken de ajan calisir (kisisel klasorler, onayli mod); burada yalniz hatali istekler
     r = await istemci.post("/api/gorevler/" + "0" * 12 + "/bilinmeyen")
     assert r.status_code == 400 and "duraklat" in r.json()["hata"]
     assert (await istemci.get("/api/gorevler/" + "0" * 12)).status_code == 404

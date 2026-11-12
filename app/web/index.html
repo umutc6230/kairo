@@ -11,9 +11,9 @@
   <div id="kok">
     <header class="baslik">
       <div class="baslik-sol">
-        <button class="ikon-btn" id="btn-kenar" title="Kenar cubugunu ac/kapat (Ctrl+B)" data-ikon="panel"></button>
+        <button class="ikon-btn" id="btn-kenar" title="Kenar çubuğunu aç/kapat (Ctrl+B)" aria-label="Kenar çubuğunu aç/kapat" data-ikon="panel"></button>
         <button class="ikon-btn" id="btn-geri" title="Geri" data-ikon="sol"></button>
-        <button class="ikon-btn" id="btn-ileri" title="Ileri" data-ikon="sag"></button>
+        <button class="ikon-btn" id="btn-ileri" title="İleri" data-ikon="sag"></button>
       </div>
       <div class="baslik-orta pywebview-drag-region"><button id="baslik-menu" class="baslik-dugme"><span id="sayfa-basligi">Yeni sohbet</span><span data-ikon="asagi"></span></button></div>
       <div class="baslik-sag">
@@ -26,8 +26,8 @@
           <button class="ikon-btn" id="btn-daha" title="Diğer" data-ikon="daha"></button>
         </div>
         <div class="pencere-btnleri" id="pencere-btnleri" hidden>
-          <button class="pencere-btn" id="btn-kucult" title="Kucult" data-ikon="eksi"></button>
-          <button class="pencere-btn" id="btn-buyut" title="Buyut" data-ikon="kare"></button>
+          <button class="pencere-btn" id="btn-kucult" title="Küçült" data-ikon="eksi"></button>
+          <button class="pencere-btn" id="btn-buyut" title="Büyüt" data-ikon="kare"></button>
           <button class="pencere-btn kapat" id="btn-kapat" title="Kapat" data-ikon="x"></button>
         </div>
       </div>
@@ -44,10 +44,10 @@
         </nav>
         <div class="kenar-oturumlar" id="oturum-listesi"></div>
         <div class="kenar-alt">
-          <button class="kullanici" id="btn-hakkinda" title="Hakkinda">
+          <button class="kullanici" id="btn-hakkinda" title="Hakkında">
             <span class="avatar">U</span><span>umut</span><span class="soluk">· Yerel</span>
           </button>
-          <button class="ikon-btn" id="btn-ayarlar" title="AI Ayarlari" data-ikon="disli"></button>
+          <button class="ikon-btn" id="btn-ayarlar" title="Ayarlar" aria-label="Ayarlar" data-ikon="disli"></button>
         </div>
       </aside>
 
@@ -58,7 +58,7 @@
             <div class="bos-durum" id="bos-durum">
               <div class="logo" data-ikon="logo"></div>
               <div class="kart-liste" id="model-kartlari"></div>
-              <button class="kart-satir" id="klasor-satiri"><span data-ikon="klasor"></span><span id="klasor-metni">Model klasoru</span></button>
+              <button class="kart-satir" id="klasor-satiri"><span data-ikon="klasor"></span><span id="klasor-metni">Model klasörü</span></button>
             </div>
           </div>
           <div class="yazma-kap">
@@ -308,7 +308,7 @@
         <button id="sunucu-hapi" class="hap" title="Model sunucusu">
           <span class="nokta" id="sunucu-nokta"></span><span id="sunucu-metni">Kontrol ediliyor...</span>
         </button>
-        <button id="proje-hapi" class="hap" title="Proje ve izin kapsami" hidden>
+        <button id="proje-hapi" class="hap" title="Proje ve izin kapsamı" hidden>
           <span data-ikon="klasor"></span><span id="proje-metni"></span><span id="proje-mod" class="soluk kucuk"></span>
         </button>
         <button id="agecidi-hapi" class="hap" title="Yerel sunucu (Ollama gibi): diğer uygulamalar buradaki modelleri kullanır" hidden>

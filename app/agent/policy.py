@@ -118,6 +118,19 @@ class Karar(StrEnum):
 OKUMA_DISI = {YanEtki.yaz, YanEtki.sil, YanEtki.komut, YanEtki.ag, YanEtki.dis, YanEtki.git}
 HER_ZAMAN_SOR = {YanEtki.dis, YanEtki.git}  # otomatik mod da sorar (A2.6: acik yetki)
 
+# Tam yetkide bile sorulan, geri alinamaz ve genis etkili komutlar (claw-code
+# "blast radius" ilkesi): disk/dizin silme, bicimlendirme, kapatma, zorla push.
+TEHLIKELI_KOMUT = re.compile(
+    r"(rm\s+-[a-z]*r[a-z]*f?\s+(/|~|[a-z]:[\\/]?)\s*$|rm\s+-rf\s+(/|~)(\s|$)"
+    r"|\bformat(\.com)?\s+[a-z]:|\bdiskpart\b|\bmkfs\b|\bdd\s+if="
+    r"|Remove-Item\b[^\n]*-Recurse[^\n]*\s[a-z]:[\\/]?\s*$|\brd\s+/s\s+/q\s+[a-z]:[\\/]?\s*$"
+    r"|\bdel\s+/[sfq][^\n]*\s[a-z]:\\\*"
+    r"|\bshutdown\b|\bStop-Computer\b|\bRestart-Computer\b"
+    r"|git\s+push\b[^\n]*(--force|-f\b)|\breg\s+delete\s+HKLM"
+    r"|\bbcdedit\b|\bcipher\s+/w)",
+    re.I,
+)
+
 
 class Istek(BaseModel):
     """Izin sorusu. Her giris yolu (UI, CLI, SDK, MCP, alt ajan) ayni istegi uretir."""
@@ -325,6 +338,8 @@ class PolitikaMotoru:
         self.onaylar = OnayDeposu(veri_dizini)
         self.izolasyon = izolasyon
         self.kullanici_ag: Callable[[], bool] = lambda: False  # api: ayarlardaki ag_acik
+        # api: ayarlardaki tam_yetki (kullanici bir kez onaylar; openbot ilk acilis onayi gibi)
+        self.tam_yetki: Callable[[], bool] = lambda: False
 
     # ---- yardimcilar ----
     def mod(self, alan: CalismaAlani) -> Mod:
@@ -386,10 +401,34 @@ class PolitikaMotoru:
                     neden=f"Yerel olmayan ag hedefi kapali: {istek.host}",
                     kural="ag_kapali",
                 )
+            if self.tam_yetki():
+                return Sonuc(karar=Karar.izin, neden="Tam yetki: web istegi.", kural="tam_yetki")
+            from app.agent.web import ARAMA_HOSTLARI
+
+            if (istek.host or "").lower() in ARAMA_HOSTLARI:
+                return Sonuc(karar=Karar.izin, neden="Web aramasi (salt okuma).", kural="web_arama")
             return Sonuc(karar=Karar.sor, neden="Dis ag hedefi onay ister.", kural="ag_onay")
 
         mod = self.mod(alan)
         yol_metni = str(cozulmus) if cozulmus else None
+
+        # 3b) TAM YETKI: Claude Code "bypass" / openbot danger-full-access gibi. Yonetilen politika,
+        # hassas dosya ve kok kapsami yukarida zaten uygulandi; burada yalniz Planla (kullanicinin
+        # sectigi salt okunur mod) ve geri alinamaz genis komutlar sorulur.
+        if self.tam_yetki() and mod is not Mod.planla and alan.guven is not Guven.guvenilmeyen:
+            if istek.yan_etki is YanEtki.komut and TEHLIKELI_KOMUT.search(istek.komut or ""):
+                return Sonuc(
+                    karar=Karar.sor,
+                    neden="Geri alinamaz, genis etkili komut: tam yetkide de onay ister.",
+                    kural="tehlikeli_komut",
+                    cozulmus_yol=yol_metni,
+                )
+            return Sonuc(
+                karar=Karar.izin,
+                neden="Tam yetki: kullanici onaylamadan uygulanir.",
+                kural="tam_yetki",
+                cozulmus_yol=yol_metni,
+            )
 
         # 4) salt okunur haller
         if istek.yan_etki in OKUMA_DISI:

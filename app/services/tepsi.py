@@ -79,6 +79,16 @@ class Tepsi:
         u.TrackPopupMenu.argtypes = [wintypes.HMENU, wintypes.UINT, ctypes.c_int, ctypes.c_int,
                                      ctypes.c_int, wintypes.HWND, wintypes.LPVOID]  # fmt: skip
         u.AppendMenuW.argtypes = [wintypes.HMENU, wintypes.UINT, ctypes.c_size_t, wintypes.LPCWSTR]
+        # Tipsiz cagri 64-bit tutamaci c_int'e kesiyordu: RegisterClassW erisim ihlali veriyordu
+        k.GetModuleHandleW.argtypes = [wintypes.LPCWSTR]
+        k.GetModuleHandleW.restype = wintypes.HMODULE
+        u.RegisterClassW.argtypes = [ctypes.POINTER(WNDCLASSW)]
+        u.RegisterClassW.restype = wintypes.ATOM
+        u.LoadImageW.argtypes = [wintypes.HINSTANCE, wintypes.LPCWSTR, wintypes.UINT, ctypes.c_int,
+                                 ctypes.c_int, wintypes.UINT]  # fmt: skip
+        u.DestroyWindow.argtypes = [wintypes.HWND]
+        s.Shell_NotifyIconW.argtypes = [wintypes.DWORD, ctypes.POINTER(NOTIFYICONDATAW)]
+        s.Shell_NotifyIconW.restype = wintypes.BOOL
 
         def proc(hwnd, msg, wp, lp):  # noqa: ANN001, ANN202 - Win32 geri cagrisi
             if msg == WM_APP_TEPSI:
@@ -144,5 +154,12 @@ class Tepsi:
 
     def kapat(self) -> None:
         if self._hwnd:
-            ctypes.windll.user32.PostMessageW(self._hwnd, WM_CLOSE, 0, 0)
+            u = ctypes.windll.user32
+            u.PostMessageW.argtypes = [
+                wintypes.HWND,
+                wintypes.UINT,
+                wintypes.WPARAM,
+                wintypes.LPARAM,
+            ]
+            u.PostMessageW(self._hwnd, WM_CLOSE, 0, 0)
             self._hwnd = None

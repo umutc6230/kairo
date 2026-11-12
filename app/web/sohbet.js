@@ -312,11 +312,11 @@ export function mesajlariCiz(oturum) {
   sonaKaydir(true);
 }
 
-export function yeniSohbetEkrani() {
+export function yeniSohbetEkrani({ girdiyiKoru = false } = {}) {
   durdur();
   durum.oturumId = null;
   mesajlariCiz(null);
-  $("#girdi").value = "";
+  if (!girdiyiKoru) $("#girdi").value = ""; // acilista kullanicinin o ana dek yazdigi silinmesin
   boyutla();
   gonderDurumu();
   setTimeout(() => $("#girdi").focus(), 0);
@@ -517,7 +517,9 @@ function ajanKaydet(oturumId, kayit) {
   try { localStorage.setItem(AJAN_ANAHTAR, JSON.stringify(t)); } catch { /* depolama kapali */ }
 }
 function ajanModu() {
-  return Boolean(projeDurumu.aktif) && projeDurumu.izin?.mod !== "sohbet";
+  // Proje acik olmasa da (kisisel klasorler) ajan calisir; yalniz 'sohbet' modu duz sohbettir
+  const mod = projeDurumu.izin?.mod;
+  return Boolean(mod) && mod !== "sohbet";
 }
 function ajanBlogu(kayit) {
   const kap = el(`<div class="mesaj asistan ajan-mesaj"><div class="gr-detay" aria-live="polite"><div class="parilti">Ajan başlıyor…</div></div></div>`);

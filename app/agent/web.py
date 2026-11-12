@@ -162,6 +162,9 @@ WEB_ARACI = {
 
 
 ARAMA_ADRESI = "https://html.duckduckgo.com/html/?q="
+YEDEK_ARAMA_ADRESI = "https://lite.duckduckgo.com/lite/?q="
+# Yalniz arama motoru sorgusu: sonuc listesi okunur, hicbir yere veri yazilmaz -> onaysiz
+ARAMA_HOSTLARI = {"html.duckduckgo.com", "lite.duckduckgo.com"}
 MAX_SONUC = 8
 
 
@@ -193,6 +196,21 @@ class _Sonuclar(HTMLParser):
             self.sonuclar[-1][self._alan] += data
 
 
+class _LiteSonuclar(_Sonuclar):
+    """lite.duckduckgo.com: a.result-link (baslik+link), td.result-snippet (ozet)."""
+
+    def handle_starttag(self, tag, attrs):  # noqa: ANN001
+        a = dict(attrs)
+        sinif = a.get("class") or ""
+        if tag == "a" and "result-link" in sinif:
+            self.sonuclar.append(
+                {"baslik": "", "url": _gercek_url(a.get("href") or ""), "ozet": ""}
+            )
+            self._alan = "baslik"
+        elif "result-snippet" in sinif and self.sonuclar:
+            self._alan = "ozet"
+
+
 def _gercek_url(href: str) -> str:
     """DDG yonlendirme linki (//duckduckgo.com/l/?uddg=...) -> hedef adres."""
     u = urlsplit(href if "//" in href else "https:" + href)
@@ -210,6 +228,14 @@ def web_ara(sorgu: str, izin, transport: Any = None, yerel_kontrol=yerel_hedef_m
         return h
     p = _Sonuclar()
     p.feed(h["govde"])
+    if not p.sonuclar:  # DDG bot dogrulamasi (HTTP 202) ya da bos sayfa: lite surumu dene
+        y = _ham_getir(YEDEK_ARAMA_ADRESI + quote_plus(sorgu), izin, transport, yerel_kontrol)
+        if "hata" not in y:
+            p = _LiteSonuclar()
+            p.feed(y["govde"])
+        if not p.sonuclar and h.get("durum") == 202:
+            return {"hata": "Arama motoru bot dogrulamasi istedi (HTTP 202); biraz sonra tekrar "
+                    "dene ya da web_getir ile bilinen bir siteyi oku."}  # fmt: skip
     sonuclar = [
         {"baslik": " ".join(x["baslik"].split())[:200], "url": x["url"],
          "ozet": maskele(" ".join(x["ozet"].split())[:400])}

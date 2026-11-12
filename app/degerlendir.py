@@ -451,5 +451,7 @@ def _claude_code_degerlendir(args: Any, surum: str, gorevler: list[dict], calism
     )
     (rapor_dizin / f"rapor-claude-code-{damga}.md").write_text(markdown(rapor), encoding="utf-8")
     print(json.dumps(rapor["ozet"], ensure_ascii=False, indent=1))
-    sil(calisma / "projeler") if (calisma / "projeler").exists() else None
+    if (calisma / "projeler").exists():
+        sil(calisma / "projeler")
+    return 0
     return 0

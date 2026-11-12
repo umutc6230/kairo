@@ -75,7 +75,9 @@ def sunucular(tmp_path):
     loop.call_soon_threadsafe(loop.stop)
 
 
-HAZIR = "document.querySelector('#sunucu-metni')?.textContent !== 'Kontrol ediliyor...'"
+# Acilis bitti: tum isleyiciler bagli, ilk 'yeni sohbet' ekrani cizildi. Eskiden durum
+# cubuguna bakiliyordu; o an Enter isleyicisi yoktu, yazilan girdi sonra siliniyordu.
+HAZIR = "document.documentElement.dataset.hazir === '1'"
 
 
 def _tarayici(p):

@@ -36,7 +36,7 @@ function git(hedef, { kaydetme = false } = {}) {
     gecmisKonum = gecmis.length - 1;
   }
   if (hedef.tur === "oturum") oturumAc(hedef.id, true);
-  else if (hedef.tur === "yeni") { yeniSohbetEkrani(); gorunumGoster("sohbet"); baslikAyarla("Yeni sohbet"); oturumListesiCiz(); }
+  else if (hedef.tur === "yeni") { yeniSohbetEkrani({ girdiyiKoru: !!hedef.acilis }); gorunumGoster("sohbet"); baslikAyarla("Yeni sohbet"); oturumListesiCiz(); }
   else {
     gorunumGoster(hedef.tur);
     if (hedef.tur === "skiller") skillSayfasiYukle();
@@ -236,7 +236,7 @@ async function durumYenile() {
   $("#sunucu-metni").textContent = s.durum === "kapali" ? "Model kapalı" : `${modelAdi(aktif)} · ${DURUM_METNI[s.durum] || s.durum}`;
   const b = s.bellek || {};
   $("#ram-metni").textContent = b.bos_gb != null ? `RAM ${sayi(b.bos_gb)}/${sayi(b.toplam_gb, 0)} GB boş` : "";
-  $("#hap-model-metni").textContent = modelAdi(a.model);
+  $("#hap-model-metni").textContent = a.saglayici === "openrouter" && a.or_model ? a.or_model : modelAdi(a.model);
   const dus = durum.bilgi.dusunme_secenekleri.find((d) => d.deger === a.dusunme);
   $("#hap-dusunme-metni").textContent = dus ? dus.kisa : a.dusunme;
   $("#klasor-metni").textContent = `Model klasörü: ${a.llm_dizin}`;
@@ -262,7 +262,9 @@ function bantGuncelle() {
   const bant = $("#uyari-bandi");
   let html = "";
   const bos = s.bellek?.bos_gb;
-  if (!s.motor_var) {
+  if (a.saglayici === "openrouter" && a.or_model) {
+    // Uzak model: yerel RAM/dosya/llama.cpp uyarilari ilgisiz; bant onay kartini da ortuyordu
+  } else if (!s.motor_var) {
     html = `<span class="vurgu">${ikon("uyari")}llama.cpp bulunamadı</span><span>${kacir(a.llm_dizin)} içinde llama.cpp\\llama-server.exe yok.</span><button class="btn kucuk" data-eylem="ayar">Ayarlar</button>`;
   } else if (p && !p.dosya_var) {
     html = `<span class="vurgu">${ikon("uyari")}Model dosyası yok</span><span>${kacir(p.ad)} indirilmemiş. Başka model seç.</span><button class="btn kucuk" data-eylem="ayar">Model seç</button>`;
@@ -416,8 +418,9 @@ async function baslat() {
   });
 
   await oturumlariYenile();
-  git({ tur: "yeni" });
+  git({ tur: "yeni", acilis: true });
   setInterval(() => { if (!document.hidden) durumYenile(); }, 3000);
+  document.documentElement.dataset.hazir = "1"; // tum isleyiciler bagli (E2E ve otomasyon bunu bekler)
 }
 
 // Cercevesiz pencere: kendi kucult/buyut/kapat butonlarimiz (yalniz pywebview icinde).

@@ -40,9 +40,11 @@ function modelKartlari(arama, yalnizIndirilen) {
 export function ayarlarAc(sekme = "ai") {
   const a = durum.ayarlar;
   const s = durum.sunucu || {};
-  const govde = el(`<div>
-    <div class="sekmeler"><button class="sekme" data-sekme="ai">AI Ayarları</button><button class="sekme" data-sekme="hafiza">Hafıza</button><button class="sekme" data-sekme="mcp">Bağlayıcılar</button><button class="sekme" data-sekme="plugin">Plugin'ler</button><button class="sekme" data-sekme="uzanti">Uzantılar</button><button class="sekme" data-sekme="hooks">Hook'lar</button>${EK_SEKMELER}<button class="sekme" data-sekme="hakkinda">Hakkında</button></div>
+  const govde = el(`<div class="ayar-pencere">
+    <div class="sekmeler" role="tablist" aria-label="Ayar bölümleri"><button class="sekme" data-sekme="ai">AI Ayarları</button><button class="sekme" data-sekme="hafiza">Hafıza</button><button class="sekme" data-sekme="mcp">Bağlayıcılar</button><button class="sekme" data-sekme="plugin">Plugin'ler</button><button class="sekme" data-sekme="uzanti">Uzantılar</button><button class="sekme" data-sekme="hooks">Hook'lar</button>${EK_SEKMELER}<button class="sekme" data-sekme="hakkinda">Hakkında</button></div>
     <div class="modal-govde" data-panel="ai">
+      <nav class="ay-atla" aria-label="AI ayar bölümleri"><button type="button" data-atla="ay-b-model">Model</button><button type="button" data-atla="ay-b-dusunme">Düşünme</button><button type="button" data-atla="ay-b-yetki">Yetkiler</button><button type="button" data-atla="ay-b-cevap">Cevap</button><button type="button" data-atla="ay-b-yerel" data-yerel>Yerel motor</button></nav>
+      <h3 class="ay-bolum" id="ay-b-model">Model</h3>
       <div class="ayar-grup"><label>Sağlayıcı</label>
         <label class="secenek-kart ${a.saglayici !== "openrouter" ? "secili" : ""}"><input type="radio" name="ay-sag" value="yerel" ${a.saglayici !== "openrouter" ? "checked" : ""}><div><div class="ust">Yerel (llama.cpp) <span class="rozet yesil">internetsiz</span></div>
         <div class="alt">Modeller bu bilgisayarda çalışır, veri dışarı çıkmaz. API anahtarı gerekmez.</div></div></label>
@@ -58,41 +60,50 @@ export function ayarlarAc(sekme = "ai") {
         <div id="ay-or-uyari" class="ayar-not"></div>
         <div id="ay-or-modeller" class="ayar-grup" style="max-height:320px;overflow:auto"></div>
         <div class="satir"><button class="btn" id="ay-or-test"><span data-ikon="oynat"></span>Seçili OpenRouter modelini test et</button><span id="ay-or-test-sonuc" class="ayar-not">Araç tanımlı kısa bir istek atar; süre ve maliyet gösterilir.</span></div></div>
-      <div class="ayar-grup"><label>Model</label>
+      <div class="ayar-grup" data-yerel><label>Yerel model</label>
         <div class="satir"><input class="alan" id="ay-ara" placeholder="Model ara..."><label class="onay"><input type="checkbox" id="ay-indirilen"> Yalnız indirilenler</label>
         <label class="onay" title="Yerel modellerin hepsi ücretsizdir"><input type="checkbox" checked disabled> Yalnız ücretsiz</label></div>
         <div id="ay-modeller" class="ayar-grup"></div></div>
-      <div class="ayar-grup"><label>Düşünme seviyesi</label><div id="ay-dusunme" class="ayar-grup"></div></div>
-      <div class="ayar-grup"><label>Test</label>
+      <div class="ayar-grup" data-yerel><label>Test</label>
         <div class="satir"><button class="btn" id="ay-test"><span data-ikon="oynat"></span>Seçili modeli test et</button><span id="ay-test-sonuc" class="ayar-not">Uygulamanın kullandığı biçimde (JSON şema) kısa bir istek atar.</span></div></div>
-      <div class="ayar-grup"><label>Model klasörü</label><input class="alan" id="ay-dizin" value="${kacir(a.llm_dizin)}">
-        <div class="ayar-not">llama.cpp\\llama-server.exe ve models\\*.gguf bu klasörde olmalı. ${s.motor_var ? "✓ llama.cpp bulundu" : "✗ llama.cpp bulunamadı"}</div></div>
-      <div class="ayar-grup"><label>Bağlam boyutu</label>
-        <select class="secim" id="ay-baglam"><option value="8192">8K token (en az RAM)</option><option value="16384">16K token (önerilen; talimatlar ~3K yer)</option><option value="32768">32K token (daha çok RAM)</option></select>
-        <div class="ayar-not">Değişince model bir sonraki mesajda yeni bağlamla yeniden açılır. Talimat ve skill ayarları: Skill'ler ve talimatlar sayfası.</div></div>
-      <div class="ayar-grup"><label>Sunucu adresi</label><input class="alan" id="ay-adres" value="${kacir(a.adres)}"></div>
-      <div class="anahtar-satir"><div><div>Otomatik başlat</div><div class="ayar-not">Model kapalıysa ilk mesajda arka planda açılır; uygulama kapanınca kapanır.</div></div>
-        <label class="anahtar"><input type="checkbox" id="ay-oto" ${a.otomatik_baslat ? "checked" : ""}><span></span></label></div>
-      <div class="anahtar-satir"><div><div>Sohbette araçlar</div><div class="ayar-not">Model gerektiğinde bu bilgisayardaki dosya ve klasörleri <b>yalnız okuyabilir</b> (listeleme, okuma, arama), hesap yapabilir, saati öğrenebilir. Silme/yazma aracı yoktur; .env, ssh anahtarı, parola dosyaları okunmaz.</div></div>
+      <h3 class="ay-bolum" id="ay-b-dusunme">Düşünme (effort)</h3>
+      <div id="ay-dusunme-not" class="ayar-not"></div>
+      <div id="ay-dusunme" class="ayar-grup secenek-sira"></div>
+      <h3 class="ay-bolum" id="ay-b-yetki">Yetkiler</h3>
+      <div class="ayar-not">Proje açık olmasa da model Claude Code gibi iş yapar. Okuma serbesttir; dosya yazma, komut, bağlayıcı (GitHub vb.) ve web, <b>Tam yetki</b> kapalıyken senin onayınla çalışır.</div>
+      <div class="anahtar-satir tam-yetki"><div><div>Tam yetki <span class="rozet sari">onaysız</span></div><div class="ayar-not">Açıkken ajan dosya yazar, komut çalıştırır, bağlayıcıları (GitHub, MCP) ve web'i <b>sormadan</b> kullanır. Yine de sorulanlar: disk/sürücü silme, biçimlendirme, bilgisayarı kapatma, zorla git push gibi geri alınamaz komutlar. Gizli dosyalar (.env, ssh anahtarı) hiç okunmaz. Planla modu salt okunur kalır.</div></div>
+        <label class="anahtar"><input type="checkbox" id="ay-tam-yetki" ${a.tam_yetki ? "checked" : ""}><span></span></label></div>
+      <div class="anahtar-satir"><div><div>Sohbette araçlar</div><div class="ayar-not">Model dosyaları listeleyip okuyabilir ve arayabilir; yazma, silme ve komut Tam yetki kapalıyken onay ister. .env, ssh anahtarı, parola dosyaları hiç okunmaz.</div></div>
         <label class="anahtar"><input type="checkbox" id="ay-araclar" ${a.sohbet_araclari ? "checked" : ""}><span></span></label></div>
-      <div class="anahtar-satir"><div><div>İnternet erişimi</div><div class="ayar-not">Açıkken model web'de arama yapabilir ve sayfa okuyabilir (<code>web_ara</code>, <code>web_getir</code>). Her istek yine onay ister; yerel ağ adresleri okunmaz. Kurum politikası kapattıysa açılamaz.</div></div>
+      <div class="anahtar-satir"><div><div>İnternet erişimi</div><div class="ayar-not">Açıkken model web'de arama yapabilir ve sayfa okuyabilir (<code>web_ara</code>, <code>web_getir</code>). Tam yetki kapalıyken her istek onay ister; yerel ağ adresleri okunmaz. Kurum politikası kapattıysa açılamaz.</div></div>
         <label class="anahtar"><input type="checkbox" id="ay-ag" ${a.ag_acik ? "checked" : ""}><span></span></label></div>
-      <div class="anahtar-satir"><div><div>Tarayıcı kontrolü</div><div class="ayar-not">Proje açıkken ajan ayrı bir tarayıcı profiliyle (senin Chrome profilin, çerezlerin ve şifrelerin değil) sayfa açabilir, form doldurabilir, tıklayabilir, ekran görüntüsü alabilir. Dış sitelerde her tıklama ve yazma ayrıca onay ister. Acil durdurma: sohbette <code>/browser kapat</code>.</div></div>
+      <div class="anahtar-satir"><div><div>Tarayıcı kontrolü</div><div class="ayar-not">Ajan ayrı bir tarayıcı profiliyle (senin Chrome profilin, çerezlerin ve şifrelerin değil) sayfa açabilir, form doldurabilir, tıklayabilir, ekran görüntüsü alabilir. Dış sitelerde her tıklama ve yazma ayrıca onay ister. Acil durdurma: sohbette <code>/browser kapat</code>.</div></div>
         <label class="anahtar"><input type="checkbox" id="ay-tarayici" ${a.tarayici_acik ? "checked" : ""}><span></span></label></div>
-      <div class="ayar-grup"><label>Masaüstü kontrolü: izinli programlar</label>
-        <input class="alan" id="ay-masaustu" placeholder="ör. notepad.exe, calc.exe (boş: kapalı)" value="${kacir((a.masaustu_izinli || []).join(", "))}">
-        <div class="ayar-not">Ajan yalnız bu programların pencerelerini görebilir; her tıklama ve yazma onay ister. Yönetici onayı (UAC) ve kilit ekranı kontrol edilemez. Acil durdurma: sohbette <code>/masaustu durdur</code>.</div></div>
+      <div class="anahtar-satir"><div><div>Bilgisayar kullanımı (tüm programlar)</div><div class="ayar-not">Açıkken ajan bilgisayardaki tüm program pencerelerini görebilir, tıklayabilir ve yazabilir. Tam yetki kapalıyken her eylem onay ister. Yönetici onayı (UAC), kilit ekranı, Windows Güvenliği ve parola pencereleri hiçbir zaman kontrol edilmez. Acil durdurma: sohbette <code>/masaustu durdur</code>.</div></div>
+        <label class="anahtar"><input type="checkbox" id="ay-masaustu-hepsi" ${(a.masaustu_izinli || []).includes("*") ? "checked" : ""}><span></span></label></div>
+      <div class="ayar-grup" id="ay-masaustu-liste" ${(a.masaustu_izinli || []).includes("*") ? "hidden" : ""}><label>Ya da yalnız şu programlar</label>
+        <input class="alan" id="ay-masaustu" placeholder="ör. notepad.exe, calc.exe (boş: kapalı)" value="${kacir((a.masaustu_izinli || []).filter((x) => x !== "*").join(", "))}"></div>
+      <h3 class="ay-bolum" id="ay-b-cevap">Cevap</h3>
       <div class="ayar-grup"><label>Sistem istemi (isteğe bağlı)</label><textarea class="alan" id="ay-sistem" rows="3" placeholder="Örn: Her zaman Türkçe ve kısa cevap ver.">${kacir(a.sistem_istemi)}</textarea></div>
       <div class="satir"><div class="ayar-grup" style="flex:1"><label>Sıcaklık (${a.sicaklik})</label><input type="range" id="ay-sicaklik" min="0" max="1.5" step="0.1" value="${a.sicaklik}"></div>
         <div class="ayar-grup" style="flex:1"><label>En fazla cevap token</label><input class="alan" id="ay-max" type="number" min="16" max="8192" value="${a.max_tokens}"></div></div>
-      <div class="ayar-grup" id="ay-agecidi"><label>Yerel sunucu (Ollama gibi): modelleri diğer uygulamalar kullansın</label>
+      <h3 class="ay-bolum" id="ay-b-yerel" data-yerel>Yerel motor (llama.cpp)</h3>
+      <div class="ayar-grup" data-yerel><label>Model klasörü</label><input class="alan" id="ay-dizin" value="${kacir(a.llm_dizin)}">
+        <div class="ayar-not">llama.cpp\\llama-server.exe ve models\\*.gguf bu klasörde olmalı. ${s.motor_var ? "✓ llama.cpp bulundu" : "✗ llama.cpp bulunamadı"}</div></div>
+      <div class="ayar-grup" data-yerel><label>Bağlam boyutu</label>
+        <select class="secim" id="ay-baglam"><option value="8192">8K token (en az RAM)</option><option value="16384">16K token (önerilen; talimatlar ~3K yer)</option><option value="32768">32K token (daha çok RAM)</option></select>
+        <div class="ayar-not">Değişince model bir sonraki mesajda yeni bağlamla yeniden açılır. Talimat ve skill ayarları: Skill'ler ve talimatlar sayfası.</div></div>
+      <div class="ayar-grup" data-yerel><label>Sunucu adresi</label><input class="alan" id="ay-adres" value="${kacir(a.adres)}"></div>
+      <div class="anahtar-satir" data-yerel><div><div>Otomatik başlat</div><div class="ayar-not">Model kapalıysa ilk mesajda arka planda açılır; uygulama kapanınca kapanır.</div></div>
+        <label class="anahtar"><input type="checkbox" id="ay-oto" ${a.otomatik_baslat ? "checked" : ""}><span></span></label></div>
+      <div class="ayar-grup" id="ay-agecidi" data-yerel><label>Yerel sunucu (Ollama gibi): modelleri diğer uygulamalar kullansın</label>
         <div class="anahtar-satir"><div><div>Sunucuyu aç</div><div class="ayar-not">Studio açıkken buradaki modeller <b>Ollama uyumlu</b> ve <b>OpenAI uyumlu</b> adresten diğer uygulamalara sunulur. İstenen model kapalıysa Studio açar; ayrı bir Ollama gerekmez. Yalnız bu bilgisayardan erişilir.</div></div>
           <label class="anahtar"><input type="checkbox" id="ay-sunucu-acik" ${a.sunucu_acik ? "checked" : ""}><span></span></label></div>
         <div class="satir"><label class="soluk kucuk" for="ay-sunucu-port">Port</label><input class="alan" id="ay-sunucu-port" type="number" min="1024" max="65535" value="${a.sunucu_port}" style="max-width:140px">
           <span class="ayar-not">11434 = Ollama'nın portu (Ollama destekli uygulamalar ayar değiştirmeden bağlanır)</span></div>
         <div id="ay-sunucu-durum"></div>
       </div>
-      <div class="ayar-grup"><label>Sunucu</label><div class="satir">
+      <div class="ayar-grup" data-yerel><label>Sunucu</label><div class="satir">
         <button class="btn" id="ay-yukle"><span data-ikon="guc"></span>Modeli şimdi yükle</button>
         <button class="btn" id="ay-durdur"><span data-ikon="durdur"></span>Sunucuyu durdur</button>
         <button class="btn tehlike" id="ay-harici" ${s.sunucu_acik && !s.bizim_sunucu ? "" : "hidden"}>Dışarıdan açılmış sunucuyu kapat</button></div></div>
@@ -156,14 +167,41 @@ export function ayarlarAc(sekme = "ai") {
       <div class="ayar-not">Veri klasörü: ${kacir(durum.bilgi.veri_dizini)}</div>
     </div></div>`);
   const m = modal({ baslik: "Ayarlar", icerik: govde, genis: true });
-  m.govde.style.padding = "0";
+  $(".modal", m.arka).classList.add("ayarlar"); // sol dikey sekme + sabit boy (app.css)
   const sekmeAc = (ad) => {
-    $$(".sekme", govde).forEach((b) => b.classList.toggle("aktif", b.dataset.sekme === ad));
-    $$("[data-panel]", govde).forEach((p) => { p.hidden = p.dataset.panel !== ad; });
+    $$(".sekme", govde).forEach((b) => {
+      const secili = b.dataset.sekme === ad;
+      b.classList.toggle("aktif", secili);
+      b.setAttribute("role", "tab");
+      b.setAttribute("aria-selected", String(secili));
+    });
+    $$("[data-panel]", govde).forEach((p) => { p.hidden = p.dataset.panel !== ad; p.scrollTop = 0; });
   };
   $$(".sekme", govde).forEach((b) => { b.onclick = () => sekmeAc(b.dataset.sekme); });
   sekmeAc(sekme);
   ekSekmeKur(govde, kaydet);
+
+  // Ayar aramasi (openbot gibi): eslesmeyen satirlar ve sekmeler gizlenir, ilk eslesen sekme acilir
+  const ara = el(`<input class="alan ayar-ara" type="search" placeholder="Ayarlarda ara…" aria-label="Ayarlarda ara">`);
+  $(".sekmeler", govde).prepend(ara);
+  const SATIR = ":scope > .anahtar-satir, :scope > .ayar-grup, :scope > .ay-bolum, :scope > .ayar-not, :scope > .satir";
+  ara.oninput = () => {
+    const q = ara.value.trim().toLocaleLowerCase("tr-TR");
+    let ilk = null;
+    $$("[data-panel]", govde).forEach((p) => {
+      let var_ = false;
+      p.querySelectorAll(SATIR).forEach((r) => {
+        if (r.matches("[data-yerel]") && durum.ayarlar.saglayici === "openrouter") return;
+        const uy = !q || r.textContent.toLocaleLowerCase("tr-TR").includes(q);
+        r.classList.toggle("arama-gizli", !uy);
+        if (uy && q && !r.classList.contains("ay-bolum")) var_ = true;
+      });
+      const b = $(`.sekme[data-sekme="${p.dataset.panel}"]`, govde);
+      if (b) b.hidden = Boolean(q) && !var_;
+      if (var_ && !ilk) ilk = p.dataset.panel;
+    });
+    if (ilk && $(`[data-panel="${ilk}"]`, govde).hidden) sekmeAc(ilk);
+  };
 
   // ---- Hafıza ----
   const hafizaCiz = async () => {
@@ -457,7 +495,7 @@ export function ayarlarAc(sekme = "ai") {
         <div class="alt"><code>${kacir(m.id)}</code>${m.araclar ? "" : " · sohbet araçları bu modelde çalışmaz"}</div></div></label>`).join("")
       || '<div class="ayar-not">Eşleşen model yok.</div>';
     $$("input[name=ay-or-model]", govde).forEach((r) => {
-      r.onchange = async () => { await kaydet({ or_model: r.value }); orModelleriCiz(); };
+      r.onchange = async () => { await kaydet({ or_model: r.value }); orModelleriCiz(); dusunmeCiz(); };
     });
   };
   const orListeYukle = async (yenile = false) => {
@@ -470,11 +508,14 @@ export function ayarlarAc(sekme = "ai") {
       $("#ay-or-uyari", govde).innerHTML = `<span class="rozet kirmizi">hata</span> ${kacir(err.message)}`;
     }
     orModelleriCiz();
+    dusunmeCiz();
   };
   let orYuklendi = false;
   const orPanel = () => {
     const acik = durum.ayarlar.saglayici === "openrouter";
     $("#ay-or", govde).hidden = !acik;
+    $$("[data-yerel]", govde).forEach((x) => { x.hidden = acik; });
+    dusunmeCiz();
     if (acik && !orYuklendi) { orYuklendi = true; orAnahtarCiz(); orListeYukle(); }
   };
   $$("input[name=ay-sag]", govde).forEach((r) => {
@@ -515,12 +556,31 @@ export function ayarlarAc(sekme = "ai") {
   };
   orPanel();
 
-  const dusunmeCiz = () => {
-    $("#ay-dusunme", govde).innerHTML = durum.bilgi.dusunme_secenekleri.map((d) => `<label class="secenek-kart ${d.deger === durum.ayarlar.dusunme ? "secili" : ""}">
-      <input type="radio" name="ay-dus" value="${d.deger}" ${d.deger === durum.ayarlar.dusunme ? "checked" : ""}>
+  // Bolum kisayollari: adres cubugu (#) degismez, yalniz panel kayar
+  $$("[data-atla]", govde).forEach((b) => {
+    b.onclick = () => $(`#${b.dataset.atla}`, govde)?.scrollIntoView({ behavior: "smooth", block: "start" });
+  });
+  function dusunmeCiz() {
+    const kutu = $("#ay-dusunme", govde);
+    if (!kutu) return;
+    // Modelin yetenegine gore: desteklemiyorsa kapali ve kilitli; destekliyorsa secilebilir
+    let destek = true;
+    let not = "";
+    if (durum.ayarlar.saglayici === "openrouter") {
+      const m = orListe.find((x) => x.id === durum.ayarlar.or_model);
+      if (!m) not = orListe.length ? "Seçili OpenRouter modeli listede yok; seviye yine gönderilir." : "Model listesi yükleniyor…";
+      else if (!m.dusunme) { destek = false; not = `<b>${kacir(m.ad)}</b> düşünmeyi desteklemiyor; seviye kapalı ve değiştirilemez.`; }
+      else not = `<b>${kacir(m.ad)}</b> düşünmeyi destekliyor. Dengeli = düşük efor, Derin = yüksek efor. Düşünmesi zorunlu modellerde "Kapalı" en düşük eforla çalışır.`;
+    } else {
+      not = "Yerel model: Dengeli en fazla 1024 düşünme token'ı, Derin sınırsız.";
+    }
+    $("#ay-dusunme-not", govde).innerHTML = not;
+    const secili = destek ? durum.ayarlar.dusunme : "kapali";
+    kutu.innerHTML = durum.bilgi.dusunme_secenekleri.map((d) => `<label class="secenek-kart ${d.deger === secili ? "secili" : ""} ${!destek && d.deger !== "kapali" ? "kilitli" : ""}">
+      <input type="radio" name="ay-dus" value="${d.deger}" ${d.deger === secili ? "checked" : ""} ${!destek ? "disabled" : ""}>
       <div><div class="ust">${kacir(d.ad)} <span class="rozet">${kacir(d.sure)}</span></div><div class="alt">${kacir(d.aciklama)}</div></div></label>`).join("");
     $$("input[name=ay-dus]", govde).forEach((r) => { r.onchange = async () => { await kaydet({ dusunme: r.value }); dusunmeCiz(); }; });
-  };
+  }
   dusunmeCiz();
 
   const alanKaydet = (sec, anahtar, donustur = (v) => v) => {
@@ -531,8 +591,27 @@ export function ayarlarAc(sekme = "ai") {
   alanKaydet("#ay-oto", "otomatik_baslat");
   alanKaydet("#ay-araclar", "sohbet_araclari");
   alanKaydet("#ay-ag", "ag_acik");
+  // Tam yetki: acarken tek seferlik onay (openbot ilk acilis onayi gibi); kapatmak serbest
+  $("#ay-tam-yetki", govde).onchange = async (e) => {
+    const g = e.target;
+    if (g.checked && !(await onayla(
+      "Tam yetki açılsın mı?",
+      "Ajan dosya yazma, komut çalıştırma, GitHub/MCP bağlayıcıları ve web işlemlerini sana sormadan yapacak. Yalnız disk silme, biçimlendirme, kapatma ve zorla push gibi geri alınamaz komutlar yine onay ister. Önemli dosyalarının yedeği olduğundan emin ol.",
+      { evet: "Aç", tehlike: true },
+    ))) { g.checked = false; return; }
+    // Tam yetki web'i de acar (eski kurulumlarda kayitli ag_acik=false kalmis olabilir)
+    await kaydet(g.checked ? { tam_yetki: true, ag_acik: true } : { tam_yetki: false });
+    if (g.checked) $("#ay-ag", govde).checked = true;
+    import("./proje.js").then((m) => m.projeYenile()).catch(() => {});
+  };
   alanKaydet("#ay-tarayici", "tarayici_acik");
   alanKaydet("#ay-masaustu", "masaustu_izinli", (v) => v.split(",").map((x) => x.trim()).filter(Boolean));
+  $("#ay-masaustu-hepsi", govde).onchange = async (e) => {
+    const hepsi = e.target.checked;
+    $("#ay-masaustu-liste", govde).hidden = hepsi;
+    const liste = $("#ay-masaustu", govde).value.split(",").map((x) => x.trim()).filter(Boolean);
+    await kaydet({ masaustu_izinli: hepsi ? ["*"] : liste });
+  };
   const sunucuKaydet = async (degisiklik) => { await kaydet(degisiklik); sunucuDurumuCiz(govde); };
   $("#ay-sunucu-acik", govde).onchange = (e) => sunucuKaydet({ sunucu_acik: e.target.checked });
   $("#ay-sunucu-port", govde).onchange = (e) => sunucuKaydet({ sunucu_port: Number(e.target.value) });

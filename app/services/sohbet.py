@@ -25,13 +25,14 @@ from app.services import skiller as skl
 from app.services.ekler import Ek, EkDeposu
 from app.services.model_yonetici import ModelYonetici
 from app.services.oturumlar import EkOzet, Mesaj, OturumDeposu, baslik_uret
-from app.services.sohbet_araclari import ARACLAR as SOHBET_ARACLARI
 from app.services.sohbet_araclari import (
+    AJAN_NOTU,
     SISTEM_NOTU,
     DosyaAraclari,
     sonuc_ozeti,
     varsayilan_kokler,
 )
+from app.services.sohbet_araclari import ARACLAR as SOHBET_ARACLARI
 from app.services.talimatlar import TalimatDeposu
 from app.services.yerel_llm import (
     DENGELI_BUTCE,
@@ -57,10 +58,19 @@ PROJE_TALIMAT_KARAKTER = 8000
 VARSAYILAN_ALAN_ID = "0" * 12  # proje acilmadiginda kullanilan kisisel kapsam
 
 
-def kapsam_notu(alan: CalismaAlani) -> str:
+PROJEYE_OZGU = ("proje_listele", "proje_glob", "proje_ara", "git_")
+
+
+def kapsam_notu(alan: CalismaAlani, ajan: bool = False) -> str:
     """Modele GERCEK kapsami bildirir. Kisa tutulur: her istekte giden sabit onektir ve
     dahili GPU'da girdi isleme yavastir (bkz. PROJE-REHBER bulgular)."""
     kokler = ", ".join(str(k) for k in alan.izinli_kokler) or "yok"
+    if ajan:
+        return (
+            f"Calisma alani ({alan.ad}): {kokler}. Bu klasorlerde dosya islemleri araclarla "
+            "yapilir; "
+            "komutlar ve baglayicilar ise tum bilgisayarda calisir. Gizli dosyalar okunmaz."
+        )
     return (
         f"Kapsam ({alan.ad}, mod {alan.mod}): yalniz su klasorlerin icini okuyabilirsin: {kokler}. "
         "Disi, gizli dosyalar ve ag yollari reddedilir."
@@ -640,7 +650,8 @@ class SohbetServisi:
             ad="Kisisel klasorler",
             kokler=[str(k) for k in varsayilan_kokler()],
             guven=Guven.sinirli,
-            mod=Mod.sohbet,
+            # Claude Code gibi: proje acik olmasa da ajan calisir; yan etkili her islem onay ister
+            mod=Mod.onayli,
         )
 
     def _oturum_kilidi(self, oturum_id: str) -> asyncio.Lock:
@@ -672,8 +683,23 @@ class SohbetServisi:
         araclar: list = list(SOHBET_ARACLARI) if ayar.sohbet_araclari else []
         # Isleyiciler AKTIF PROJENIN kokleriyle baglanir: model arguman olarak kapsamı genisletemez
         isleyiciler: dict = DosyaAraclari(alan.izinli_kokler).isleyiciler()
-        ajan_kaydi = self.ajan_araclari(alan)
-        if ajan_kaydi is not None:  # A2: proje aciksa zengin dosya/komut/git araclari
+        ajan_kaydi = (
+            self.ajan_araclari(alan)
+            if ayar.sohbet_araclari or alan.id != VARSAYILAN_ALAN_ID
+            else None
+        )
+        kisisel = alan.id == VARSAYILAN_ALAN_ID
+        if ajan_kaydi is not None and kisisel:
+            # Kisisel klasorler: yalniz yazma + komut (okuma sohbet araclarinda zaten var). Git ve
+            # kod zekasi projeye ozgu; 8K baglamli yerel modelde ~900 token kazandirir.
+            hafif = [
+                x for x in ajan_kaydi.semalar()
+                if not x["function"]["name"].startswith(PROJEYE_OZGU)
+            ]  # fmt: skip
+            araclar += hafif
+            adlar_ = {x["function"]["name"] for x in hafif}
+            isleyiciler |= {k: v for k, v in ajan_kaydi.isleyiciler().items() if k in adlar_}
+        elif ajan_kaydi is not None:  # A2: proje aciksa zengin dosya/komut/git araclari
             araclar += ajan_kaydi.semalar()
             isleyiciler |= ajan_kaydi.isleyiciler()
             from app.agent import lsp  # A10.1: sunucu yoksa metin aramasi yedegi
@@ -788,13 +814,16 @@ class SohbetServisi:
                 if "komut_calistir" in isleyiciler and ajan_kaydi is not None:  # A6.2
                     araclar.append(skl.SCRIPT_ARACI)
                     isleyiciler |= skl.script_isleyicisi(self.skiller, kapali, ajan_kaydi)
-                    skill_metni = f"{skill_metni}\n\n{skl.SCRIPT_NOTU}".strip()
                 mevcut = {a["function"]["name"] for a in araclar}
                 isleyiciler |= skl.arac_isleyicileri(self.skiller, kapali, lambda: mevcut)
         talimat = self.talimatlar.sistem_metni(
             claude=ayar.claude_talimatlari, uygulama=ayar.uygulama_talimati
         )
-        not_ = f"{SISTEM_NOTU}\n{kapsam_notu(alan)}" if ayar.sohbet_araclari else ""
+        if ajan_kaydi is not None:  # ajan araclari var: kisitlayan notlar yerine ajan notu
+            not_ = f"{AJAN_NOTU}\n{kapsam_notu(alan, ajan=True)}"
+            skill_metni = skill_metni.replace(skl.SINIR, skl.SINIR_AJAN)
+        else:
+            not_ = f"{SISTEM_NOTU}\n{kapsam_notu(alan)}" if ayar.sohbet_araclari else ""
         proje_talimati = self.proje_talimat_metni(alan)
         hafiza = (
             self.hafiza.sistem_metni(alan.id)
@@ -812,6 +841,8 @@ class SohbetServisi:
             skill_metni,
         )  # sabit -> degisken
         sistem = "\n\n".join(s for s in parcalar if s)
+        if not ayar.sohbet_araclari and alan.id == VARSAYILAN_ALAN_ID:
+            return sistem, [], {}, otomatik  # kullanici sohbette araclari kapatti
         return sistem, araclar, isleyiciler, otomatik
 
     def ajan_araclari(self, alan: CalismaAlani) -> AjanAracKaydi | None:
@@ -820,7 +851,7 @@ class SohbetServisi:
         Yazma ve komut araclari, politika onlari reddedecekse modele hic sunulmaz
         (`AjanAracKaydi.semalar`), ama sunulan her arac yine izin motorundan gecer.
         """
-        if self.politika is None or self.checkpointler is None or alan.id == VARSAYILAN_ALAN_ID:
+        if self.politika is None or self.checkpointler is None:
             return None
         return AjanAracKaydi(alan, self.politika, self.checkpointler, self.komutlar)
 

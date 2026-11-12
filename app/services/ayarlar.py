@@ -81,7 +81,10 @@ class KullaniciAyarlari(BaseModel):
     or_model: str = Field(default="", max_length=200)  # OpenRouter model id (or. x/y:free)
     izolasyon: Literal["yok", "konteyner"] = "yok"  # A1.8: komutlar nerede calisir
     hafiza_acik: bool = True  # kayitli notlar sisteme eklenir
-    ag_acik: bool = False  # A9: model internete cikabilir (her istek yine onay ister)
+    ag_acik: bool = True  # web_ara/web_getir; tam yetkide onaysiz, degilse istek basina onay
+    tam_yetki: bool = (
+        False  # tek seferlik onayla: dosya/komut/MCP/git/web onaysiz (tehlikeli komut haric)
+    )
     tarayici_acik: bool = False  # A9.2: izole profilli tarayici araclari (proje acikken)
     masaustu_izinli: list[str] = Field(default=[], max_length=20)  # A9.5: exe adlari; bos=kapali
     uzak_ag: Literal["tailscale", "yerel_ag"] = "tailscale"  # A12: varsayilan yalniz tailnet

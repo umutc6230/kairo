@@ -33,6 +33,19 @@ def destekli() -> bool:
     return sys.platform == "win32"
 
 
+# "Tum programlar" secilse bile kontrol edilmeyen pencereler: yonetici onayi (UAC), oturum/kilit
+# ekrani, Windows Guvenligi ve kimlik bilgisi pencereleri.
+ASLA_KONTROL = {
+    "consent.exe",
+    "logonui.exe",
+    "lockapp.exe",
+    "credentialuibroker.exe",
+    "securityhealthui.exe",
+    "securityhealthsystray.exe",
+    "secHealthui.exe".lower(),
+}
+
+
 def _exe_adi(pid: int) -> str:
     k32 = ctypes.WinDLL("kernel32", use_last_error=True)
     h = k32.OpenProcess(0x1000, False, pid)  # PROCESS_QUERY_LIMITED_INFORMATION
@@ -81,7 +94,10 @@ class Masaustu:
     def _izinli_mi(self, eleman: Any) -> str:
         exe = _exe_adi(eleman.CurrentProcessId)
         izinli = {x.strip().lower() for x in self.izinli() if x.strip()}
-        return exe if exe and exe in izinli else ""
+        if not exe or exe in ASLA_KONTROL:
+            return ""
+        # "*" = tum programlar (openbot gibi tum masaustu); guvenlik/oturum pencereleri haric
+        return exe if "*" in izinli or exe in izinli else ""
 
     # ---- okuma ----
     def pencereler(self) -> dict:

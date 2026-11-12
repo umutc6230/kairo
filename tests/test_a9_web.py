@@ -70,7 +70,8 @@ def test_ag_kapaliyken_kapali_aciksa_sunulur(app) -> None:
     s = app.state.sohbet
     ayar = s.yonetici.ayarlar.oku()
     adlar = lambda: {a["function"]["name"] for a in s.baglam_hazirla(ayar, "", [])[1]}  # noqa: E731
-    assert "web_getir" not in adlar()  # varsayilan: ag kapali, arac modele sunulmaz
+    s.politika.kullanici_ag = lambda: False  # varsayilan artik acik; kapali hali sinanir
+    assert "web_getir" not in adlar()  # ag kapali: arac modele sunulmaz
     s.politika.yonetilen.ag_izinli = True
     s.web_transport = T
     assert "web_getir" in adlar()
@@ -120,6 +121,8 @@ def test_kullanici_ag_ayari_ve_kurum_yasagi(tmp_path) -> None:
 
 
 async def test_api_ag_ayari(istemci) -> None:
+    assert (await istemci.get("/api/izinler")).json()["ag_izinli"] is True  # varsayilan acik
+    await istemci.put("/api/ayarlar", json={"ag_acik": False})
     assert (await istemci.get("/api/izinler")).json()["ag_izinli"] is False
     await istemci.put("/api/ayarlar", json={"ag_acik": True})
     assert (await istemci.get("/api/izinler")).json()["ag_izinli"] is True

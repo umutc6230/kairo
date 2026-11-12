@@ -127,7 +127,8 @@ async def test_sohbette_yalniz_ayar_acik_ve_projede(istemci, app, tmp_path) -> N
         return {a["function"]["name"] for a in sohbet.baglam_hazirla(ayar, "", [])[1]}
 
     await istemci.put("/api/ayarlar", json={"tarayici_acik": True})
-    assert "tarayici_git" not in adlar()  # proje yok: kisisel klasorde tarayici yok
+    # proje yok: kisisel klasorlerde de ajan calisir (Claude Code gibi); tarayici sunulur
+    assert "tarayici_git" in adlar()
     (tmp_path / "p").mkdir()
     await istemci.post("/api/projeler", json={"yol": str(tmp_path / "p"), "guven": "guvenilir"})
     assert {"tarayici_git", "tarayici_tikla", "tarayici_ekran"} <= adlar()

@@ -411,6 +411,12 @@ SINIR = (
 )
 
 
+SINIR_AJAN = (
+    "Not: skill'lerdeki komut ve betikleri komut_calistir ile KENDIN calistir; gereken program "
+    "kurulu degilse kurulum komutunu da sen calistir. Onay gerekiyorsa sistem kullaniciya sorar."
+)
+
+
 SCRIPT_NOTU = (
     "Guncelleme: bu projede skill'in manifestinde (scripts:) ILAN EDILEN scriptleri "
     "skill_scripti_calistir ile calistirabilirsin; kullanici onayi gerekebilir. Ilan edilmemis "

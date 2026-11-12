@@ -352,6 +352,15 @@ SISTEM_NOTU = (
 )  # Her istekte giden sabit onek: kisa tutulur (dahili GPU'da girdi isleme 14-26 tok/sn)
 
 
+# Ajan araclari (yaz/komut/git/MCP/web) varken: modele "yapamam" dedirten kisitlar yok
+AJAN_NOTU = (
+    "Araclarinla dosya okuyup (klasor_listele, dosya_oku, dosya_ara; masaustu icin "
+    "yol='masaustu') yazabilir, komut calistirabilir, baglayicilari (GitHub vb.) ve web'i "
+    "kullanabilirsin. Gereken onayi sistem kullaniciya sorar; 'yapamam/salt okunur' deme, araci "
+    "dogrudan cagir. Hesap icin hesapla, saat icin saat_kac."
+)
+
+
 def sonuc_ozeti(ad: str, sonuc: Any) -> str:
     """Arayuzde gosterilecek kisa ozet."""
     if not isinstance(sonuc, dict):

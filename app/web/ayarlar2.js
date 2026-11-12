@@ -42,6 +42,25 @@ export const EK_PANELLER = `
   ${satir("Bilgisayarı uyanık tut", "Kairo açıkken uyku moduna geçmez (rutinler çalışabilsin).", `<label class="anahtar"><input type="checkbox" id="kd-uyanik"><span></span></label>`)}
 </div>`;
 
+// GitHub: token yapistirmadan, GitHub CLI'nin tarayici girisiyle baglanir (openbot cihaz kodu gibi)
+async function githubBaglan() {
+  try {
+    let r = await api("/api/github/baglan", { method: "POST" });
+    if (r.durum === "gh_yok") {
+      bildir(`GitHub CLI kurulu değil. Ajandan "${r.komut}" komutunu çalıştırmasını iste ya da kendin çalıştır, sonra tekrar Bağlan'a bas.`, "uyari", 9000);
+      return;
+    }
+    if (r.durum === "giris_bekliyor") {
+      bildir("Açılan pencerede tek seferlik kodu kopyala; tarayıcıda GitHub girişini tamamla. Bitince bağlantı otomatik kurulur.", "bilgi", 9000);
+      for (let i = 0; i < 60 && r.durum !== "bagli"; i++) {
+        await new Promise((ok) => setTimeout(ok, 5000));
+        r = await api("/api/github/baglan?kontrol=true", { method: "POST" }).catch(() => r);
+      }
+    }
+    if (r.durum === "bagli") bildir("GitHub bağlandı; ajan artık depolarını, issue ve PR'larını kullanabilir.", "basari", 4000);
+  } catch (e) { bildir(e.message, "hata"); }
+}
+
 export function ekSekmeKur(govde, kaydet) {
   const a = durum.ayarlar;
   $$("[data-ayar]", govde).forEach((e) => {
@@ -174,6 +193,7 @@ export async function baglayiciIceAktarCiz(govde, yenile) {
       $$("[data-dz]", kap).forEach((b) => {
         b.onclick = async () => {
           const d = dizin[+b.dataset.dz];
+          if (d.ad === "github") { await githubBaglan(); ciz(); yenile(); return; }
           const veri = { ad: d.ad };
           if (d.url) veri.url = d.url;
           else {

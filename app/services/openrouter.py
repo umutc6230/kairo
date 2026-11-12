@@ -34,6 +34,42 @@ def maskele(anahtar: str) -> str:
     return f"{anahtar[:6]}...{anahtar[-4:]}" if len(anahtar) > 12 else "****"
 
 
+# Dusunmeyi kapatmaya izin vermeyen modeller (OpenRouter 400 "Reasoning is mandatory");
+# ilk hatada ogrenilir, istek en dusuk eforla yeniden gonderilir.
+ZORUNLU_DUSUNME: set[str] = set()
+EFOR = {"dengeli": "low", "derin": "high"}
+
+
+class _DusunmeDuzelten(httpx.AsyncBaseTransport):
+    """400 "reasoning is mandatory" gelirse istegi en dusuk eforla bir kez yeniden atar."""
+
+    def __init__(self, ic: httpx.AsyncBaseTransport) -> None:
+        self.ic = ic
+
+    async def handle_async_request(self, istek: httpx.Request) -> httpx.Response:
+        cevap = await self.ic.handle_async_request(istek)
+        if cevap.status_code != 400 or not istek.url.path.endswith("/chat/completions"):
+            return cevap
+        govde = await cevap.aread()
+        if b"easoning is mandatory" not in govde:
+            return httpx.Response(400, headers=cevap.headers, content=govde, request=istek)
+        import json as _json
+
+        veri = _json.loads(istek.content or b"{}")
+        if veri.get("model"):
+            ZORUNLU_DUSUNME.add(veri["model"])
+        veri["reasoning"] = {"effort": "low"}
+        yeni = httpx.Request(
+            istek.method, istek.url,
+            headers={k: v for k, v in istek.headers.items() if k.lower() != "content-length"},
+            content=_json.dumps(veri).encode(), extensions=istek.extensions,
+        )  # fmt: skip
+        return await self.ic.handle_async_request(yeni)
+
+    async def aclose(self) -> None:
+        await self.ic.aclose()
+
+
 class OpenRouterLLM(YerelLLM):
     """Sunucu sureci yok; hazirla/durdur bos, govdede llama.cpp'ye ozel alanlar yok."""
 
@@ -42,6 +78,7 @@ class OpenRouterLLM(YerelLLM):
         if not anahtar:
             raise OpenRouterHatasi("OpenRouter API anahtari girilmemis (AI Ayarlari).")
         self._istemci.headers.update({"Authorization": f"Bearer {anahtar}", **OR_BASLIK})
+        self._istemci._transport = _DusunmeDuzelten(self._istemci._transport)  # noqa: SLF001 - kucuk sarmalayici
 
     async def saglikli(self) -> bool:
         return True
@@ -62,7 +99,14 @@ class OpenRouterLLM(YerelLLM):
         govde = super()._govde(mesajlar, seviye, max_tokens, **ek)
         govde.pop("chat_template_kwargs", None)
         govde.pop("thinking_budget_tokens", None)
-        govde["reasoning"] = {"enabled": seviye != "kapali"}  # desteklemeyen model yok sayar
+        # Effort gercekten gonderilir: dengeli=low, derin=high. Kapali: dusunmeyi kapatmaya
+        # izin vermeyen modelde (ZORUNLU_DUSUNME) en dusuk efor; digerlerinde kapat.
+        if seviye == "kapali":
+            govde["reasoning"] = (
+                {"effort": "low"} if self.model in ZORUNLU_DUSUNME else {"enabled": False}
+            )
+        else:
+            govde["reasoning"] = {"effort": EFOR.get(str(seviye), "medium")}
         govde["usage"] = {"include": True}  # cevapta maliyet (usage.cost)
         return govde
 

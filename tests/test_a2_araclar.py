@@ -477,8 +477,8 @@ def test_kapsam_ve_yardimcilar(ortam, py_proje: Path) -> None:
         bos.coz("x.txt")
 
 
-def test_ajan_araclari_yalniz_projede_acilir(tmp_path: Path, py_proje: Path) -> None:
-    """Kisisel kapsamda (proje yok) kod araclari VERILMEZ."""
+def test_ajan_araclari_kisisel_alanda_da_acilir(tmp_path: Path, py_proje: Path) -> None:
+    """Proje yokken de (kisisel klasorler) ajan araclari verilir; yan etkiler onayla gecer."""
     from app.services.sohbet import VARSAYILAN_ALAN_ID, SohbetServisi
 
     veri = tmp_path / "v5"
@@ -488,7 +488,7 @@ def test_ajan_araclari_yalniz_projede_acilir(tmp_path: Path, py_proje: Path) -> 
     servis.checkpointler = CheckpointDeposu(veri)
     servis.komutlar = KomutServisi()
     kisisel = CalismaAlani(id=VARSAYILAN_ALAN_ID, kokler=[str(py_proje)])
-    assert servis.ajan_araclari(kisisel) is None
+    assert servis.ajan_araclari(kisisel) is not None
     proje = CalismaAlani(id="e" * 12, kokler=[str(py_proje)])
     assert servis.ajan_araclari(proje) is not None
 

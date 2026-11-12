@@ -325,7 +325,10 @@ async def test_sohbet_baglama_sigmayan_eski_resim_uyarisi(istemci, sunucu):
         (await istemci.post("/api/ekler", files={"dosya": (f"r{i}.png", png(), "x")})).json()
         for i in range(5)
     ]
-    await istemci.put("/api/ayarlar", json={"max_tokens": 4096, "baglam_token": 8192})
+    await istemci.put(
+        "/api/ayarlar",
+        json={"max_tokens": 4096, "baglam_token": 8192, "sohbet_araclari": False},
+    )
     o = await yeni_oturum(istemci)
     for ek in ekler:
         await istemci.post(f"/api/oturumlar/{o}/mesaj", json={"metin": "bak", "ekler": [ek["id"]]})

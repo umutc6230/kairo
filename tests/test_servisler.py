@@ -196,6 +196,7 @@ def test_sistem_bellek_ve_dosyalar(tmp_path, monkeypatch):
 
 
 def test_config_veri_dizini_portable(tmp_path, monkeypatch):
+    monkeypatch.delenv("YAS_VERI_DIZINI", raising=False)  # baska testten sizan ortam
     hedef = tmp_path / "ozel"
     assert config.veri_dizini(config.OrtamAyarlari(veri_dizini=hedef)) == hedef and hedef.exists()
     exe = tmp_path / "Portable" / "YerelAIStudio.exe"
