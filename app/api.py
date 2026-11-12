@@ -46,11 +46,13 @@ from app.agent.yetenek import ModelYetenegi, dogrula, uzak_yetenek, yerel_yetene
 from app.agent.zamanlayici import Tetik, Zamanlayici
 from app.config import web_dizini
 from app.exceptions import GecersizEk, OnayGerekli, UygulamaHatasi, YerelLLMHatasi
+from app.services import cc_plugin as ccp
 from app.services import ekler as ekler_modulu
 from app.services import masaustu_ayar as mda
 from app.services import sistem
 from app.services import skiller as skl
 from app.services.agecidi import AgGecidi, agecidi_uygulamasi
+from app.services.arac_paketleri import AracPaketleri
 from app.services.araclar import ARACLAR, ORNEK_ISTEMLER
 from app.services.artifactler import ARTIFACT_ARACI, ONIZLEME_CSP, ArtifactDeposu
 from app.services.ayarlar import AyarDeposu
@@ -59,7 +61,7 @@ from app.services.hafiza import HafizaDeposu
 from app.services.model_magaza import Indirici, Magaza, ModelKaydi, uyumluluk
 from app.services.model_yonetici import LLMFabrikasi, ModelYonetici
 from app.services.openrouter import OpenRouterDeposu
-from app.services.oturumlar import OturumDeposu
+from app.services.oturumlar import Mesaj, OturumDeposu
 from app.services.pluginler import PluginDeposu
 from app.services.skiller import SkillDeposu
 from app.services.sohbet import VARSAYILAN_ALAN_ID, MesajIstegi, SohbetServisi, tahmini_token
@@ -109,6 +111,8 @@ class GorevIstegi(BaseModel):
     kabul: list[str] = Field(default=[], max_length=20)
     butce: Butce = Field(default_factory=Butce)
     izole: bool = False  # ayri git worktree'de calis (A8.3)
+    onceki: str = Field(default="", max_length=12)  # ayni sohbetteki onceki gorev (sureklilik)
+    etkilesimli: bool = False  # sohbetten: ajan soru_sor ile kullaniciya soru sorabilir
 
 
 class EntegreIstegi(BaseModel):
@@ -118,6 +122,13 @@ class EntegreIstegi(BaseModel):
 class GorevMesaji(BaseModel):
     metin: str = Field(min_length=1, max_length=4000)
 
+
+OZET_TALIMATI = (
+    "Asagidaki sohbeti, devam edilebilmesi icin ozetle. Su basliklari kullan: Amac, Alinan "
+    "kararlar, Onemli bilgiler (dosya yolu, ad, sayi, kod parcasi gibi birebir gerekenler), Acik "
+    "kalan isler. Uydurma; yalniz sohbette geceni yaz. Kisa ve maddeli yaz."
+)
+OZET_ONAY = "Anlaşıldı; bu özet üzerinden devam ediyorum."
 
 HAFIZA_ARACI = {
     "type": "function",
@@ -291,6 +302,7 @@ def uygulama_olustur(
     hooklar = HookDeposu(veri_dizini)
     mcp = McpYoneticisi(veri_dizini)
     uzantilar = UzantiYoneticisi(veri_dizini)
+    arac_paketleri = AracPaketleri(veri_dizini, mcp)
     hooklar.ek_kaynak = pluginler.hook_tanimlari  # Claude Code plugin hook'lari (acilirsa)
     mcp.ek_kaynak = pluginler.mcp_tanimlari  # Claude Code plugin .mcp.json (acilirsa)
     sohbet.uzantilar = uzantilar
@@ -616,6 +628,37 @@ def uygulama_olustur(
             headers={"Content-Disposition": f'attachment; filename="sohbet-{oturum_id}.json"'},
         )
 
+    # /compact (sohbet): eski mesajlar model ozetiyle degistirilir; son soru-cevap ham kalir.
+    # Ozet uretilemezse sohbet DEGISMEZ. Rol sirasi korunur (kullanici/asistan donusumlu).
+    @app.post("/api/oturumlar/{oturum_id}/ozetle")
+    async def oturum_ozetle(oturum_id: str) -> dict:
+        o = oturumlar.getir(oturum_id)
+        son_kullanici = max(
+            (i for i, m in enumerate(o.mesajlar) if m.rol == "kullanici"), default=0
+        )
+        eski = o.mesajlar[:son_kullanici]
+        if len(eski) < 2:
+            raise UygulamaHatasi("Ozetlenecek kadar eski mesaj yok.")
+        dokum = "\n\n".join(f"{m.rol.upper()}: {m.metin[:4000]}" for m in eski if m.metin)
+        try:
+            async with yonetici.kullan() as llm:
+                ozet = await llm.metin(
+                    dokum[-48000:], sistem=OZET_TALIMATI, max_tokens=1200, dusunme="kapali"
+                )
+        except YerelLLMHatasi as e:
+            raise UygulamaHatasi(f"Ozet uretilemedi: {e}") from e
+        ozet = (ozet or "").strip()
+        if not ozet:
+            raise UygulamaHatasi("Model ozet uretmedi; sohbet degismedi.")
+        guncel = oturumlar.getir(oturum_id)  # ozet surerken eklenen mesaj kaybolmasin
+        guncel.mesajlar = [
+            Mesaj(rol="kullanici", metin=f"[Önceki konuşmanın özeti]\n\n{ozet}"),
+            Mesaj(rol="asistan", metin=OZET_ONAY),
+            *guncel.mesajlar[son_kullanici:],
+        ]
+        oturumlar.kaydet(guncel)
+        return {"ozetlenen": len(eski), "kalan": len(guncel.mesajlar), "ozet": ozet}
+
     # ---- hafiza (A4.4) ----
     @app.get("/api/hafiza")
     async def hafiza_listesi(kapsam: str | None = None) -> dict:
@@ -748,13 +791,43 @@ def uygulama_olustur(
             pluginler.git_karantina, str(veri.get("url", "")), str(veri.get("ref", ""))
         )
 
+    # Claude Code ozel slash komutlari: proje .claude/commands (YALNIZ guvenilir projede; proje
+    # ayni adli kullanici komutunu ezer) + kullanici ~/.claude/commands. Govde modele MESAJ olarak
+    # gider; komut dosyasi yetki vermez, '!`...`' kabuk on-calistirmasi yapilmaz.
+    app.state.kullanici_komut_dizini = lambda: Path.home() / ".claude" / "commands"
+
+    def ozel_komutlar() -> list[dict]:
+        kaynaklar: list[tuple[str, Path]] = []
+        alan = sohbet.aktif_alan()
+        if alan.id != VARSAYILAN_ALAN_ID and alan.talimat_okunur_mu():
+            kaynaklar += [("proje", Path(k) / ".claude" / "commands") for k in alan.kokler]
+        kaynaklar.append(("kullanici", app.state.kullanici_komut_dizini()))
+        out: list[dict] = []
+        gorulen: set[str] = set()
+        for kaynak, dizin in kaynaklar:
+            for k in ccp.komut_dosyalari(dizin):
+                if k["ad"] not in gorulen:
+                    gorulen.add(k["ad"])
+                    out.append({**k, "kaynak": kaynak, "kok": dizin})
+        return out
+
     @app.get("/api/pluginler/komutlar")
     async def plugin_komutlari() -> dict:
-        return {"komutlar": pluginler.komutlar()}
+        ozel = [
+            {"komut": k["ad"], "kisa": k["ad"], "plugin": "", "kaynak": k["kaynak"],
+             "aciklama": k["aciklama"], "ipucu": k["ipucu"]}
+            for k in await asyncio.to_thread(ozel_komutlar)
+        ]  # fmt: skip
+        return {"komutlar": [*ozel, *pluginler.komutlar()]}
 
     @app.post("/api/pluginler/komut")
     async def plugin_komut(veri: dict) -> dict:
-        return pluginler.komut_genislet(str(veri.get("komut", "")), str(veri.get("arg", ""))[:4000])
+        komut, arg = str(veri.get("komut", "")), str(veri.get("arg", ""))[:4000]
+        for k in await asyncio.to_thread(ozel_komutlar):
+            if k["ad"] == komut:
+                istem = ccp.komut_genislet(k["govde"], arg, k["kok"])
+                return {"plugin": "", "kaynak": k["kaynak"], "komut": komut, "istem": istem}
+        return pluginler.komut_genislet(komut, arg)
 
     @app.put("/api/pluginler/{ad}/bilesen")
     async def plugin_bilesen(ad: str, veri: dict) -> dict:
@@ -906,6 +979,22 @@ def uygulama_olustur(
             except (UygulamaHatasi, ValueError) as e:
                 hatalar.append(f"{b['ad']}: {str(e)[:120]}")
         return {"eklenen": eklenen, "hatalar": hatalar}
+
+    # ---- arac paketleri: surumu/ozeti sabit hazir arac setleri (REA, Craft Anything) ----
+    # Kurulum YALNIZ oturumlu arayuzden; adres/surum istekten ALINMAZ (tablo sabit).
+    app.state.arac_paketleri = arac_paketleri  # testler sahte kurucu baglar
+
+    @app.get("/api/arac-paketleri")
+    async def arac_paketi_listesi() -> dict:
+        return {"paketler": await asyncio.to_thread(app.state.arac_paketleri.liste)}
+
+    @app.post("/api/arac-paketleri/{ad}/kur")
+    async def arac_paketi_kur(ad: str) -> dict:
+        return await asyncio.to_thread(app.state.arac_paketleri.kur, ad)
+
+    @app.delete("/api/arac-paketleri/{ad}")
+    async def arac_paketi_kaldir(ad: str) -> dict:
+        return await asyncio.to_thread(app.state.arac_paketleri.kaldir, ad)
 
     @app.get("/api/mcp")
     async def mcp_listesi() -> dict:
@@ -1284,7 +1373,7 @@ def uygulama_olustur(
 
         run = await ajan.baslat(
             istek.hedef, istek.kabul, istek.butce, model=ayarlar.oku().aktif_model,
-            izole_kur=izole_kur,
+            izole_kur=izole_kur, onceki=istek.onceki, etkilesimli=istek.etkilesimli,
         )  # fmt: skip
         return run.ozet()
 

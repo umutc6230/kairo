@@ -56,6 +56,7 @@ def cc_plugin(kok: Path) -> Path:
                         }
                     ],
                     "Notification": [{"hooks": [{"type": "command", "command": "x"}]}],
+                    "SessionEnd": [{"hooks": [{"type": "command", "command": "x"}]}],
                 }
             }
         ),  # fmt: skip
@@ -86,7 +87,9 @@ def test_bilesenler_ve_donusumler(tmp_path) -> None:
     ajan = b["ajanlar"][0]
     assert ajan["araclar"] == ["proje_dosya_oku", "proje_ara", "komut_calistir"]
     assert b["hooks"][0]["olay"] == "pre_tool" and b["hooks"][0]["eslesen"] == "Bash"
-    assert "hook olayi Notification" in b["desteklenmeyen"]
+    assert "hook olayi SessionEnd" in b["desteklenmeyen"]  # karsiligi olmayan olay raporlanir
+    assert "hook olayi Notification" not in b["desteklenmeyen"]  # 2026-11-12: bildirim
+    assert {h["olay"] for h in b["hooks"]} == {"pre_tool", "bildirim"}
     selam = next(k for k in b["komutlar"] if k["ad"] == "selam")
     assert cc.komut_genislet(selam["govde"], "Umut Celik", p) == (
         f"Merhaba Umut, tum: Umut Celik kok={p}"

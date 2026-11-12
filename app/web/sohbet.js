@@ -1,7 +1,8 @@
 // Sohbet gorunumu: mesajlar, dusunce blogu, yazma alani, ekler, akis ve durdurma.
 import { sohbetteGorevGoster } from "./gorevler.js";
 import { masaustuBildirimi } from "./ayarlar2.js";
-import { komutMu } from "./komutlar.js";
+import { girdiYardimKur, oneriTusu } from "./girdi.js";
+import { komutListesi, komutMu } from "./komutlar.js";
 import { projeDurumu } from "./proje.js";
 import { ikon, ikonlariYerlestir } from "./ikonlar.js";
 import { kacir, md } from "./md.js";
@@ -18,8 +19,10 @@ export function sohbetKur(cb) {
   const girdi = $("#girdi");
   girdi.addEventListener("input", () => { boyutla(); gonderDurumu(); });
   girdi.addEventListener("keydown", (e) => {
+    if (oneriTusu(e)) return; // "/" ve "@" onerileri acikken ok/Enter/Tab onlara gider
     if (e.key === "Enter" && !e.shiftKey && !e.isComposing) { e.preventDefault(); gonder(); }
   });
+  girdiYardimKur(komutListesi);
   girdi.addEventListener("paste", (e) => {
     const dosyalar = [...(e.clipboardData?.files || [])];
     if (dosyalar.length) { e.preventDefault(); dosyalar.forEach(ekYukle); }
@@ -329,6 +332,11 @@ export async function gonder() {
     return;
   }
   if (akisKontrol || (!metin && !bekleyenEkler.length) || bekleyenEkler.some((e) => e.yukleniyor)) return;
+  // Claude Code kisayollari (tek satir, eksiz): "!komut" kabukta calisir, "#not" hafizaya yazilir
+  if (!bekleyenEkler.length && !metin.includes("\n")) {
+    if (/^!\s*\S/.test(metin)) { girdi.value = ""; boyutla(); gonderDurumu(); kabukCalistir(metin.slice(1).trim()); return; }
+    if (/^#\s*[^#\s]/.test(metin)) { girdi.value = ""; boyutla(); gonderDurumu(); hafizaNotu(metin.slice(1).trim()); return; }
+  }
   const ekler = bekleyenEkler.splice(0);
   girdi.value = "";
   boyutla();
@@ -417,6 +425,64 @@ export function durdur() {
   akisKontrol?.abort();
 }
 
+// "!komut": kullanicinin KENDI komutu (Terminal paneliyle ayni uc). Model calistirmadigi icin onay
+// sorulmaz; cikti modele kendiliginden gitmez, istenirse "Mesaja ekle" ile girdiye alinir.
+async function kabukCalistir(komut) {
+  const s = sutun();
+  bosDurum(false);
+  const kap = el(`<div class="mesaj asistan"><pre class="adim-cikti kabuk-cikti">çalışıyor…</pre>
+    <div class="kabuk-alt soluk kucuk"><span class="kabuk-durum parilti">çalışıyor…</span>
+    <button class="btn" data-durdur>Durdur</button><button class="btn" data-ekle hidden>Mesaja ekle</button></div></div>`);
+  s.append(kullaniciMesaji({ metin: `!${komut}`, ekler: [] }), kap);
+  ikonlariYerlestir(s);
+  sonaKaydir(true);
+  const cikti = kap.querySelector(".kabuk-cikti");
+  const durumEl = kap.querySelector(".kabuk-durum");
+  try {
+    let is = await api("/api/terminal", { method: "POST", govde: { komut } });
+    kap.querySelector("[data-durdur]").onclick = () => api(`/api/komutlar/${is.id}/durdur`, { method: "POST" }).catch((e) => bildir(e.message, "hata"));
+    while (is.durum === "calisiyor") {
+      await new Promise((r) => setTimeout(r, 600));
+      if (!kap.isConnected) return; // baska sohbete gecildi; komut Arka plan islerinde gorunur
+      is = await api(`/api/komutlar/${is.id}`);
+      cikti.textContent = is.cikti || "çalışıyor…";
+      sonaKaydir();
+    }
+    cikti.textContent = is.cikti || "(çıktı yok)";
+    durumEl.classList.remove("parilti");
+    durumEl.textContent = `${is.durum}${is.cikis_kodu == null ? "" : ` · çıkış ${is.cikis_kodu}`}${is.sure_sn == null ? "" : ` · ${sayi(is.sure_sn)} sn`}`;
+    kap.querySelector("[data-durdur]").hidden = true;
+    const ekle = kap.querySelector("[data-ekle]");
+    ekle.hidden = false;
+    ekle.onclick = () => {
+      const g = $("#girdi");
+      g.value = `${g.value}${g.value ? "\n" : ""}\`${komut}\` çıktısı (çıkış ${is.cikis_kodu}):\n\`\`\`\n${(is.cikti || "").slice(-6000)}\n\`\`\`\n`;
+      boyutla();
+      gonderDurumu();
+      g.focus();
+    };
+  } catch (e) {
+    cikti.textContent = "";
+    durumEl.classList.remove("parilti");
+    durumEl.textContent = "";
+    kap.append(el(`<div class="hata-kutu">${kacir(e.message)}</div>`));
+    kap.querySelector("[data-durdur]").hidden = true;
+  }
+}
+
+// "#not": kalici hafizaya (acik projenin kapsaminda) not ekler; modele mesaj gitmez.
+async function hafizaNotu(not) {
+  try {
+    await api("/api/hafiza", { method: "POST", govde: { metin: not, kapsam: projeDurumu.aktif?.id || "genel" } });
+    bildir(`Hafızaya eklendi${projeDurumu.aktif ? ` (${projeDurumu.aktif.ad})` : ""}. /memory ile yönetebilirsin.`, "basari", 3000);
+  } catch (e) {
+    bildir(e.message, "hata");
+    $("#girdi").value = `#${not}`; // yazilan kaybolmasin
+    boyutla();
+    gonderDurumu();
+  }
+}
+
 export function akisVar() {
   return !!akisKontrol;
 }
@@ -476,7 +542,8 @@ async function ajanaGonder(oturumId, metin) {
       }
     }
     const izole = document.getElementById("hap-izole")?.getAttribute("aria-pressed") === "true";
-    const r = await api("/api/gorevler", { method: "POST", govde: { hedef: metin, izole } });
+    // onceki: ayni sohbetin son gorevi -> ajan onceki turlarin ozetini gorur (konusma surekliligi)
+    const r = await api("/api/gorevler", { method: "POST", govde: { hedef: metin, izole, onceki: son?.run || "", etkilesimli: true } });
     ajanKaydet(oturumId, { run: r.id, metin });
     if (!kayitlar.length) await api(`/api/oturumlar/${oturumId}`, { method: "PATCH", govde: { baslik: metin.slice(0, 60) } }).catch(() => {});
     document.dispatchEvent(new Event("oturumlar-degisti")); // baslik kaydedildikten SONRA
@@ -507,3 +574,5 @@ export function ajanBloklariniCiz(oturumId) {
 }
 
 export const ajanliOturum = (id) => Boolean(ajanKayitlari()[id]?.length);
+/** Bu sohbete bagli ajan gorevleri ({run, metin}); /cost, /todos, /export icin. */
+export const sohbetRunlari = (id) => ajanKayitlari()[id] || [];

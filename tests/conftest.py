@@ -204,6 +204,8 @@ def app(veri: Path, sunucu: SahteSunucu, llm_dizin: Path, skill_klasoru: Path):
 
     depo = SkillDeposu(veri, [("claude", skill_klasoru), ("uygulama", veri / "skills")])
     uyg = uygulama_olustur(veri, fabrika, depo)
+    # testler kullanicinin gercek ~/.claude/commands komutlarini okumasin
+    uyg.state.kullanici_komut_dizini = lambda: skill_klasoru.parent / "claude_commands"
     from app.services.ayarlar import AyarDeposu
 
     AyarDeposu(veri).guncelle({"llm_dizin": str(llm_dizin)})

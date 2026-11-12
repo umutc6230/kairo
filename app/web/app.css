@@ -522,3 +522,17 @@ pre.duz { white-space: pre-wrap; font-family: var(--mono); font-size: 13px; marg
 .yan-mesajlar { display: flex; flex-direction: column; gap: 10px; }
 .yan-k { align-self: flex-end; background: var(--yuzey2); padding: 6px 12px; border-radius: 14px; max-width: 85%; white-space: pre-wrap; }
 .yan-a { font-size: 13.5px; }
+
+/* girdi yardimi: "/" komut ve "@" dosya onerileri; ajan soru karti; "!komut" ciktisi */
+.yazma { position: relative; }
+.oneri-kutu { position: absolute; left: 0; right: 0; bottom: calc(100% + 6px); z-index: 40; max-height: 280px; overflow-y: auto; background: var(--yuzey); border: 1px solid var(--cizgi2); border-radius: 12px; padding: 5px; box-shadow: 0 12px 40px #0009; }
+.oneri { width: 100%; display: flex; align-items: baseline; gap: 12px; padding: 6px 10px; border-radius: 8px; text-align: left; font-size: 13.5px; }
+.oneri:hover, .oneri.secili { background: var(--yuzey2); }
+.oneri-ad { font-family: var(--mono, ui-monospace, Consolas, monospace); white-space: nowrap; }
+.oneri-aciklama { color: var(--soluk); font-size: 12.5px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
+.soru-kart { display: flex; flex-direction: column; gap: 8px; }
+.soru-kart .soru-metin { white-space: pre-wrap; }
+.kabuk-cikti { max-height: 320px; overflow: auto; white-space: pre-wrap; }
+.kabuk-alt { display: flex; align-items: center; gap: 10px; margin-top: 4px; }
+.komut-liste { display: flex; flex-direction: column; gap: 4px; }
+.komut-liste .btn { justify-content: flex-start; text-align: left; }

@@ -1,6 +1,6 @@
 // AI Ayarlari, Hakkinda ve Arama pencereleri.
 import { uzantiKomutlariniYukle, uzantiSekmesiKur } from "./uzantilar.js";
-import { baglayiciIceAktarCiz, EK_PANELLER, EK_SEKMELER, ekSekmeKur } from "./ayarlar2.js";
+import { aracPaketleriCiz, baglayiciIceAktarCiz, EK_PANELLER, EK_SEKMELER, ekSekmeKur } from "./ayarlar2.js";
 import { ikon, ikonlariYerlestir } from "./ikonlar.js";
 import { kacir } from "./md.js";
 import { $, $$, api, bildir, durum, el, modal, onayla, sayi, sor } from "./ortak.js";
@@ -330,6 +330,7 @@ export function ayarlarAc(sekme = "ai") {
   };
   mcpCiz();
   baglayiciIceAktarCiz(govde, mcpCiz);
+  aracPaketleriCiz(govde, mcpCiz); // prepend: ice aktarmanin USTUNDE gorunur
 
   // ---- Plugin'ler ----
   const bilesenOzet = (b) => {

@@ -108,4 +108,7 @@ async def test_slash_komut_dosyasi_ve_html(istemci) -> None:
     js = (await istemci.get("/web/komutlar.js")).text
     for k in ("/help", "/status", "/hooks", "/goal", "/clear", "/memory"):
         assert f'"{k}"' in js
-    assert "henüz yok" in js  # hazir olmayan komut sahte cevap vermez
+    # 2026-11-12: "henuz yok" listesi kalkti; o komutlarin hepsi artik gercek is yapar
+    for k in ("/compact", "/cost", "/todos", "/export", "/rewind", "/resume", "/init"):
+        assert f'"{k}"' in js
+    assert "HENUZ_YOK" not in js

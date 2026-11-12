@@ -32,10 +32,14 @@ from app.services.depo import json_oku, json_yaz
 SOZLESME_SURUMU = 1
 OLAYLAR = (
     "run_baslangic", "run_bitis", "prompt", "pre_tool", "post_tool", "izin", "compact",
+    "alt_ajan_bitis", "bildirim",
 )  # fmt: skip
 MAX_CIKTI = 4000
 
-Olay = Literal["run_baslangic", "run_bitis", "prompt", "pre_tool", "post_tool", "izin", "compact"]
+Olay = Literal[
+    "run_baslangic", "run_bitis", "prompt", "pre_tool", "post_tool", "izin", "compact",
+    "alt_ajan_bitis", "bildirim",
+]  # fmt: skip
 
 
 class Hook(BaseModel):
@@ -141,7 +145,8 @@ class HookDeposu:
             arac = str(veri.get("arac", ""))
             govde = {"hook_event_name": claude_olay, "session_id": str(veri.get("run", "")),
                      "cwd": str(cwd or ""), "tool_name": cc.TERS_ESLESME.get(arac, arac),
-                     "tool_input": _maskeli(veri.get("argumanlar", {})), "prompt": veri.get("metin", "")}  # fmt: skip
+                     "tool_input": _maskeli(veri.get("argumanlar", {})), "prompt": veri.get("metin", ""),
+                     "message": veri.get("metin", "")}  # fmt: skip
         else:
             govde = {"surum": SOZLESME_SURUMU, "olay": olay, "veri": _maskeli(veri)}
         girdi = json.dumps(govde, ensure_ascii=False, default=str)

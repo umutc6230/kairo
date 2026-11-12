@@ -47,6 +47,8 @@ OLAY_ESLESME = {
     "Stop": "run_bitis",
     "UserPromptSubmit": "prompt",
     "PreCompact": "compact",
+    "SubagentStop": "alt_ajan_bitis",
+    "Notification": "bildirim",
 }
 
 
@@ -153,6 +155,29 @@ def bilesenler(kok: Path) -> dict:
         mcp = _json(p) if p and p.is_file() else {}
     if isinstance(mcp, dict):
         sonuc["mcp"] = mcp.get("mcpServers", mcp)
+    return sonuc
+
+
+def komut_dosyalari(dizin: Path) -> list[dict]:
+    """Claude Code ozel slash komutlari: <dizin>/**/*.md (kullanici ~/.claude/commands ve proje
+    .claude/commands). Alt klasor ad alani olur (a/b.md -> a:b). Hicbir sey calistirmaz; dizin
+    disina cikan (sembolik link) dosya atlanir."""
+    if not dizin.is_dir():
+        return []
+    kok = dizin.resolve()
+    sonuc = []
+    for f in sorted(dizin.rglob("*.md"))[:200]:
+        try:
+            if not f.resolve().is_relative_to(kok) or f.stat().st_size > 200_000:
+                continue
+            fm, govde = _fm(f.read_text(encoding="utf-8-sig", errors="replace"))
+        except OSError:
+            continue
+        sonuc.append({
+            "ad": f.relative_to(dizin).with_suffix("").as_posix().replace("/", ":"),
+            "aciklama": str(fm.get("description", ""))[:300],
+            "ipucu": str(fm.get("argument-hint", ""))[:200], "govde": govde,
+        })  # fmt: skip
     return sonuc
 
 

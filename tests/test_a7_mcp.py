@@ -137,7 +137,8 @@ def test_http_json_ve_sse_oturum_resources(tmp_path, sse) -> None:
     sahte = SahteUzak(sse=sse)
     y = _uzak(tmp_path, sahte)
     t = y.test("uzak")
-    assert t == {"ad": "uzak", "araclar": ["ara"], "kaynaklar": ["file:///rapor.md"], "uzak": True}
+    assert t == {"ad": "uzak", "araclar": ["ara"], "kaynaklar": ["file:///rapor.md"], "uzak": True,
+                 "tembel": False}  # fmt: skip
     assert ("tools/list", "s1") in sahte.istekler  # oturum kimligi tasindi
 
 

@@ -1,7 +1,7 @@
 // Claude Desktop ayar karsiliklari: Gorunum, Bildirimler, Masaustu, Kod sekmeleri;
 // baglayici ice aktarma + dizin; gorunumun uygulanmasi ve bildirim gonderme.
 import { kacir } from "./md.js";
-import { $, $$, api, bildir, durum, sor } from "./ortak.js";
+import { $, $$, api, bildir, durum, onayla, sor } from "./ortak.js";
 
 const sec = (ad, secenekler) => `<select class="secim" data-ayar="${ad}">${secenekler.map(([v, e]) => `<option value="${v}">${e}</option>`).join("")}</select>`;
 const satir = (baslik, aciklama, kontrol) => `<div class="ayar-satir"><div><div>${baslik}</div>${aciklama ? `<div class="soluk kucuk">${aciklama}</div>` : ""}</div><div>${kontrol}</div></div>`;
@@ -104,6 +104,50 @@ export function kisayolEslesir(e, metin) {
   const tus = p[p.length - 1];
   return e.ctrlKey === p.includes("ctrl") && e.altKey === p.includes("alt") && e.shiftKey === p.includes("shift")
     && e.key.toLowerCase() === (tus === "space" ? " " : tus);
+}
+
+// ---- arac paketleri (REA, Craft Anything): surumu/ozeti sabit, veri klasorune kurulur ----
+export async function aracPaketleriCiz(govde, yenile) {
+  const kap = document.createElement("div");
+  kap.className = "ayar-grup";
+  kap.id = "arac-paketleri";
+  $('[data-panel="mcp"]', govde).prepend(kap);
+  const ciz = async () => {
+    let paketler;
+    try { ({ paketler } = await api("/api/arac-paketleri")); } catch (e) { kap.innerHTML = `<div class="hata-kutu">${kacir(e.message)}</div>`; return; }
+    kap.innerHTML = `<b class="kucuk">Araç paketleri</b>
+      <div class="ayar-not">Hazır araç setleri. Sürümü ve özeti sabittir; uygulamanın veri klasörüne kurulur, sistemde başka bir şeyi değiştirmez. Araçlar geçitle sunulur (ara → şema → çağır), her çağrı yine izin ister.</div>
+      <div class="rutin-sablon">${paketler.map((p) => `<div class="secenek-kart" data-paket="${kacir(p.ad)}"><div style="flex:1">
+        <div class="ust"><b>${kacir(p.baslik)}</b> <span class="soluk kucuk">v${kacir(p.surum)} · ~${kacir(p.boyut_mb)} MB · ${kacir(p.lisans)}</span></div>
+        <div class="alt">${kacir(p.aciklama)}</div>
+        ${p.engel ? `<div class="alt vurgu">${kacir(p.engel)}</div>` : ""}</div>
+        ${p.mesgul ? '<span class="rozet sari">kuruluyor…</span>' : p.kurulu
+          ? `<span class="rozet yesil">kurulu</span><button class="btn" data-kaldir="${kacir(p.ad)}">Kaldır</button>`
+          : `<button class="btn ana" data-kur="${kacir(p.ad)}" ${p.engel ? "disabled" : ""}>Kur</button>`}</div>`).join("")}</div>`;
+    $$("[data-kur]", kap).forEach((b) => {
+      b.onclick = async () => {
+        const p = paketler.find((x) => x.ad === b.dataset.kur);
+        const metin = `${p.baslik} v${p.surum} indirilecek (~${p.boyut_mb} MB).\nKaynak: ${p.kaynak}${p.uyari ? `\n\n${p.uyari}` : ""}`;
+        if (!(await onayla("Araç paketini kur", metin, { evet: "İndir ve kur" }))) return;
+        b.disabled = true;
+        b.textContent = "Kuruluyor…";
+        try {
+          await api(`/api/arac-paketleri/${p.ad}/kur`, { method: "POST" });
+          bildir(`${p.baslik} kuruldu; bağlayıcı eklendi.`, "basari", 4000);
+        } catch (e) { bildir(e.message, "hata", 8000); }
+        ciz(); yenile();
+      };
+    });
+    $$("[data-kaldir]", kap).forEach((b) => {
+      b.onclick = async () => {
+        const p = paketler.find((x) => x.ad === b.dataset.kaldir);
+        if (!(await onayla("Araç paketini kaldır", `${p.baslik} dosyaları, bağlayıcısı ve skill'i silinecek.`, { evet: "Kaldır", tehlike: true }))) return;
+        try { await api(`/api/arac-paketleri/${p.ad}`, { method: "DELETE" }); bildir(`${p.baslik} kaldırıldı.`, "basari", 3000); } catch (e) { bildir(e.message, "hata", 8000); }
+        ciz(); yenile();
+      };
+    });
+  };
+  ciz();
 }
 
 // ---- baglayici ice aktarma + dizin ----

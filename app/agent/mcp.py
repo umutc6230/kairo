@@ -38,6 +38,8 @@ PROTOKOL = "2025-06-18"
 AD = re.compile(r"^[a-z0-9][a-z0-9_-]{0,31}$")
 MAX_CIKTI = 20000
 ZAMAN_ASIMI = 30
+TEMBEL_ESIK = 40_000  # arac semalari toplami bunu asarsa sunucu kendiliginden gecitle sunulur
+MAX_SEMA = 12_000  # arac_sema'nin modele dondurdugu en buyuk sema (karakter)
 
 
 class McpSunucu(BaseModel):
@@ -49,6 +51,7 @@ class McpSunucu(BaseModel):
     basliklar: dict[str, str] = {}  # HTTP kimlik (or. Authorization): sir, disari maskeli
     izinli_araclar: list[str] = []  # onaysiz (okuma gibi) calisacak araclar
     aktif: bool = True
+    tembel: bool = False  # araclar modele tek tek degil, ara/sema/cagir gecidiyle sunulur
     oauth: dict = {}  # OAuth girisi (mcp_oauth): token, yenileme, bitis; disari GITMEZ
 
     @model_validator(mode="after")
@@ -322,6 +325,106 @@ def cikti_metni(sonuc: Any) -> dict:
     return veri
 
 
+def tembel_mi(s: McpSunucu, araclar: list[dict]) -> bool:
+    """Buyuk sunucular (or. REA: 139 arac, ~560K karakter sema) hicbir modelin baglamina sigmaz;
+    araclari tek tek vermek yerine uc araclik gecit sunulur (Claude Code 'deferred tools' gibi)."""
+    if s.tembel:
+        return True
+    return sum(len(json.dumps(a.get("inputSchema") or {})) for a in araclar) > TEMBEL_ESIK
+
+
+def arac_ara(araclar: list[dict], sorgu: str, limit: int = 8) -> list[dict]:
+    """Ad/baslik/aciklamada kelime eslesmesi; bos sorgu ilk araclari verir. Model cagirmaz."""
+    kelimeler = [k for k in re.split(r"[^a-z0-9]+", sorgu.lower()) if len(k) > 1]
+    puanli = []
+    for sira, a in enumerate(araclar):
+        ad = a["name"].lower()
+        baslik = str(a.get("title") or "").lower()
+        aciklama = str(a.get("description") or "").lower()
+        puan = sum(3 * (k in ad) + 2 * (k in baslik) + (k in aciklama) for k in kelimeler)
+        if puan or not kelimeler:
+            puanli.append((-puan, sira, a))
+    sonuc = []
+    for _, _, a in sorted(puanli, key=lambda x: x[:2])[: max(1, min(limit, 20))]:
+        sema = a.get("inputSchema") or {}
+        sonuc.append({
+            "arac": a["name"],
+            "aciklama": maskele(str(a.get("description") or "")[:400]),
+            "parametreler": list((sema.get("properties") or {}).keys())[:30],
+            "zorunlu": [str(x) for x in (sema.get("required") or [])][:30],
+        })  # fmt: skip
+    return sonuc
+
+
+def _tembel_araclar(s: McpSunucu, b: Any, izin_uygula) -> tuple[list[dict], dict]:
+    """Gecit: mcp__<sunucu>__arac_ara / arac_sema / arac_cagir. Ara ve sema yalniz yerel listeyi
+    okur (izin gerekmez); cagir GERCEK arac adiyla ayni izin motorundan gecer."""
+    from app.agent.yazma import sonuc_veya_hata
+
+    adlar = {a["name"]: a for a in b.araclar}
+    on = f"[MCP {s.ad}: {len(adlar)} arac, gecitle] "
+
+    def _f(ad: str, aciklama: str, ozellikler: dict, zorunlu: list[str]) -> dict:
+        return {"type": "function", "function": {
+            "name": arac_adi(s.ad, ad), "description": on + aciklama,
+            "parameters": {"type": "object", "properties": ozellikler, "required": zorunlu},
+        }}  # fmt: skip
+
+    semalar = [
+        _f("arac_ara", "Bu sunucunun araclarini anahtar kelimeyle arar (Ingilizce kelime kullan; "
+           "or. 'javascript application', 'decompile'). Arac adi + parametre adlarini dondurur.",
+           {"sorgu": {"type": "string"}, "limit": {"type": "integer"}}, ["sorgu"]),
+        _f("arac_sema", "Bir aracin tam girdi semasini dondurur; cagirmadan once parametreleri "
+           "ogrenmek icin kullan.", {"arac": {"type": "string"}}, ["arac"]),
+        _f("arac_cagir", "Adi verilen araci calistirir. `argumanlar` o aracin semasina uymali. "
+           "Bir skill ya da dokuman bu sunucunun bir aracini adiyla soyluyorsa (or. open_binary) "
+           "onu dogrudan degil BURADAN cagir.",
+           {"arac": {"type": "string"}, "argumanlar": {"type": "object"}}, ["arac"]),
+    ]  # fmt: skip
+
+    def _bul(arac: str) -> dict:
+        a = adlar.get(str(arac))
+        if a is None:
+            raise McpHatasi(f"'{str(arac)[:80]}' diye bir arac yok; once arac_ara ile bul.")
+        return a
+
+    def ara(sorgu: str = "", limit: int = 8, **_: Any) -> dict:
+        return {"toplam": len(adlar), "araclar": arac_ara(b.araclar, str(sorgu), int(limit or 8))}
+
+    def sema(arac: str = "", **_: Any) -> dict:
+        def _is() -> dict:
+            a = _bul(arac)
+            ham = json.dumps(a.get("inputSchema") or {}, ensure_ascii=False)
+            veri = {"arac": a["name"], "aciklama": maskele(str(a.get("description") or "")[:1500])}
+            if len(ham) > MAX_SEMA:  # dev sema: ozet + kesilmis metin (gecersiz JSON olabilir)
+                p = (a.get("inputSchema") or {}).get("properties") or {}
+                veri |= {"truncated": True, "parametreler": list(p.keys())[:60],
+                         "zorunlu": (a.get("inputSchema") or {}).get("required") or [],
+                         "sema_basi": ham[:MAX_SEMA]}  # fmt: skip
+            else:
+                veri["sema"] = a.get("inputSchema") or {"type": "object", "properties": {}}
+            return veri
+
+        return sonuc_veya_hata(_is)
+
+    def cagir(arac: str = "", argumanlar: dict | None = None, **_: Any) -> dict:
+        def _is() -> dict:
+            a = _bul(arac)
+            kw = argumanlar if isinstance(argumanlar, dict) else {}
+            ad = arac_adi(s.ad, a["name"])
+            oku = a["name"] in s.izinli_araclar and not s.url
+            izin_uygula(ad, oku, f"MCP {ad}: {json.dumps(kw, ensure_ascii=False)[:200]}", kw)
+            return cikti_metni(b.cagir(a["name"], kw))
+
+        return sonuc_veya_hata(_is)
+
+    return semalar, {
+        arac_adi(s.ad, "arac_ara"): ara,
+        arac_adi(s.ad, "arac_sema"): sema,
+        arac_adi(s.ad, "arac_cagir"): cagir,
+    }
+
+
 class McpYoneticisi:
     def __init__(self, veri_dizini: Path, transport: Any = None) -> None:
         self.yol = veri_dizini / "mcp.json"
@@ -431,7 +534,7 @@ class McpYoneticisi:
         except McpHatasi:
             kaynaklar = []
         return {"ad": ad, "araclar": [a["name"] for a in b.araclar], "kaynaklar": kaynaklar,
-                "uzak": bool(s.url)}  # fmt: skip
+                "uzak": bool(s.url), "tembel": tembel_mi(s, b.araclar)}  # fmt: skip
 
     def semalar_ve_isleyiciler(self, izin_uygula) -> tuple[list[dict], dict]:
         """Aktif sunucularin araclari. Baglanamayan sunucu atlanir (sohbeti dusurmez).
@@ -445,6 +548,11 @@ class McpYoneticisi:
             try:
                 b.hazirla()
             except McpHatasi:
+                continue
+            if tembel_mi(s, b.araclar):
+                ts, ti = _tembel_araclar(s, b, izin_uygula)
+                semalar += ts
+                isleyiciler |= ti
                 continue
             for a in b.araclar:
                 ad = arac_adi(s.ad, a["name"])

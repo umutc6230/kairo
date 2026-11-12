@@ -18,8 +18,8 @@ import time
 
 from app.sdk import BITMIS, Studio, StudioHatasi
 
-CIKIS = {"basarili": 0, "basarisiz": 1, "iptal": 1, "dogrulanmadi": 2,
-         "onay_bekliyor": 3, "karar_bekliyor": 3, "duraklatildi": 3}  # fmt: skip
+CIKIS = {"basarili": 0, "basarisiz": 1, "iptal": 1, "dogrulanmadi": 2, "duraklatildi": 3,
+         "onay_bekliyor": 3, "karar_bekliyor": 3, "cevap_bekliyor": 3}  # fmt: skip
 
 
 def arg_ayristir(argv: list[str]) -> argparse.Namespace:

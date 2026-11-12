@@ -1,11 +1,26 @@
 // Slash komut kaydi (A6.3). Komutlar YEREL calisir, modele mesaj olarak gitmez.
-// Servisi hazir olmayan komut sahte cevap vermez: "henuz yok" der.
+// Kayitli her komut gercek is yapar; bilinmeyen /... normal mesaj olarak gider.
 import { ayarlarAc } from "./ayarlar.js";
+import { diffAc } from "./gorevler.js";
 import { diffGoster, reviewYap } from "./inceleme.js";
 import { kacir } from "./md.js";
-import { api, bildir, durum, modal } from "./ortak.js";
-import { projeAc } from "./proje.js";
-import { pluginKomutuMu, uzantiKomutlariniYukle, uzantiKomutuMu } from "./uzantilar.js";
+import { $, $$, api, bildir, durum, el, modal, oturumBasligi, sayi } from "./ortak.js";
+import { projeAc, projeDurumu, projeYenile } from "./proje.js";
+import { ozelKomutListesi, pluginKomutuMu, uzantiKomutlariniYukle, uzantiKomutuMu } from "./uzantilar.js";
+
+// Bu sohbete bagli ajan gorevleri (sohbet.js ile ayni localStorage kaydi; dongusel import yok)
+function sohbetRunlari() {
+  try { return JSON.parse(localStorage.getItem("ajanRunlari") || "{}")[durum.oturumId] || []; } catch { return []; }
+}
+const oturumaGit = (id) => document.querySelector(`.oturum[data-id="${id}"]`)?.click();
+
+const INIT_ISTEMI = `Bu kod tabanını incele ve proje kökünde CLAUDE.md dosyasını oluştur (varsa oku ve eksiklerini tamamla).
+Dosya, bu projede çalışacak bir yapay zeka ajanına yol gösterecek. Yalnız koddan ve yapılandırma dosyalarından DOĞRULADIĞIN bilgileri yaz:
+- Projenin amacı ve kullanılan teknolojiler (tek paragraf)
+- Kurulum, çalıştırma, test, lint ve derleme komutları (gerçekten var olanlar)
+- Klasör yapısı ve önemli dosyalar; mimarinin ana hatları
+- Kod stili ve bu projeye özgü kurallar (README, AGENTS.md, .cursorrules gibi dosyalar varsa onlardan)
+Genel geçer öğütler yazma; kısa ve somut tut. Bitirmeden önce dosyayı geri okuyup doğrula.`;
 
 const git = (hedef) => document.querySelector(`[data-git="${hedef}"]`)?.click();
 
@@ -44,6 +59,48 @@ export const KOMUTLAR = {
   "/permissions": { aciklama: "Proje, mod ve izin kapsamı", calistir: () => projeAc() },
   "/diff": { aciklama: "Çalışma ağacı diff'i", calistir: () => diffGoster() },
   "/review": { aciklama: "Diff'i kod review'dan geçirir (/review derin: güvenlik + doğruluk geçişleri)", calistir: (arg) => reviewYap(arg === "derin") },
+  "/security-review": { aciklama: "Diff'i güvenlik + doğruluk odaklı ayrı geçişlerle inceler", calistir: () => reviewYap(true) },
+  "/init": {
+    aciklama: "Kod tabanını inceleyip CLAUDE.md oluşturur (proje açık olmalı)",
+    calistir: (arg, gonder) => {
+      if (!projeDurumu.aktif || !gonder) return bildir("/init için önce bir proje aç.", "uyari");
+      return gonder(arg ? `${INIT_ISTEMI}\n\nEk istek: ${arg}` : INIT_ISTEMI);
+    },
+  },
+  "/add-dir": {
+    aciklama: "/add-dir <klasör>: açık projeye ek klasör yetkisi verir",
+    calistir: async (arg) => {
+      if (!projeDurumu.aktif) return bildir("Önce bir proje aç.", "uyari");
+      if (!arg) return bildir("Kullanım: /add-dir <klasör yolu>", "uyari");
+      await api(`/api/projeler/${projeDurumu.aktif.id}/klasor`, { method: "POST", govde: { yol: arg } });
+      await projeYenile();
+      return bildir("Klasör yetkisi eklendi.", "basari", 2000);
+    },
+  },
+  "/cost": { aciklama: "Bu sohbetin kullanımı: token, model çağrısı, süre", calistir: () => maliyet() },
+  "/usage": { aciklama: "/cost ile aynı", calistir: () => maliyet() },
+  "/resume": { aciklama: "/resume [arama]: önceki bir sohbete dön", calistir: (arg) => devamEt(arg) },
+  "/rewind": { aciklama: "Checkpoint'ler: ajanın dosya değişikliklerini geri al", calistir: () => geriSar() },
+  "/todos": { aciklama: "Bu sohbetteki ajanın güncel planı", calistir: () => yapilacaklar() },
+  "/bashes": {
+    aciklama: "Arka plan komutları",
+    calistir: async () => {
+      const { isler } = await api("/api/komutlar");
+      bilgiPenceresi("Arka plan komutları", isler.length ? isler.map((i) => [`${i.id} ${i.komut.slice(0, 70)}`, `${i.durum}${i.cikis_kodu == null ? "" : ` · çıkış ${i.cikis_kodu}`}`]) : [["Yok", "Çalışan ya da biten komut yok"]]);
+    },
+  },
+  "/rename": {
+    aciklama: "/rename <ad>: bu sohbeti yeniden adlandırır",
+    calistir: async (arg) => {
+      if (!durum.oturumId || !arg) return bildir("Kullanım: /rename <yeni ad> (açık bir sohbette)", "uyari");
+      const o = await api(`/api/oturumlar/${durum.oturumId}`, { method: "PATCH", govde: { baslik: arg } });
+      $("#sayfa-basligi").textContent = o.baslik;
+      document.dispatchEvent(new Event("oturumlar-degisti"));
+      return undefined;
+    },
+  },
+  "/export": { aciklama: "Sohbeti Markdown dosyası olarak indirir (ajan görevleriyle birlikte)", calistir: () => disaAktar() },
+  "/output-style": { aciklama: "Çıktı stili ve ayrıntı düzeyi (Ayarlar > Kod)", calistir: () => ayarlarAc("kod") },
   "/agents": { aciklama: "Ajan görevleri sayfası", calistir: () => git("gorevler") },
   "/browser": {
     aciklama: "Tarayıcı durumu; /browser kapat: acil durdurma",
@@ -130,10 +187,110 @@ export const KOMUTLAR = {
       document.querySelector(`.oturum[data-id="${durum.oturumId}"]`)?.click();
     },
   },
-  "/compact": { aciklama: "Ajan görevlerinde bağlam dolunca otomatik özetlenir", calistir: () => bildir("Özetleme ajan görevlerinde otomatik; sohbet için henüz elle özet yok.", "bilgi") },
+  "/compact": {
+    aciklama: "Sohbetin eski mesajlarını özetleyip bağlamı boşaltır (ajan görevleri kendiliğinden özetler)",
+    calistir: async () => {
+      if (!durum.oturumId) return bildir("Özetlenecek açık sohbet yok.", "uyari");
+      if (sohbetRunlari().length) return bildir("Ajan sohbetinde bağlam dolunca kendiliğinden özetlenir; önceki turlar sonraki göreve özet olarak taşınır.", "bilgi");
+      bildir("Sohbet özetleniyor…", "bilgi", 2500);
+      const r = await api(`/api/oturumlar/${durum.oturumId}/ozetle`, { method: "POST" });
+      oturumaGit(durum.oturumId);
+      return bildir(`${r.ozetlenen} mesaj özetlendi.`, "basari", 2500);
+    },
+  },
+  "/loop": {
+    aciklama: "/loop <dakika> <hedef>: görevi aralıkla yineler (= /schedule; yalnız uygulama açıkken). /loop: listele",
+    calistir: (arg = "") => {
+      const ilk = arg.trim().split(/\s+/)[0];
+      if (ilk && ilk !== "sil" && !/^\d+$/.test(ilk)) return bildir("Biçim: /loop <dakika> <hedef> | /loop sil <id>", "hata");
+      return KOMUTLAR["/schedule"].calistir(arg);
+    },
+  },
 };
 
-const HENUZ_YOK = ["/cost", "/resume", "/rewind", "/loop"];
+async function maliyet() {
+  const kayitlar = sohbetRunlari();
+  const runlar = (await Promise.all(kayitlar.map((k) => api(`/api/gorevler/${k.run}`).catch(() => null)))).filter(Boolean);
+  const satirlar = [];
+  let token = 0;
+  let cagri = 0;
+  let sure = 0;
+  for (const r of runlar) {
+    token += r.kullanim.token; cagri += r.kullanim.model_cagrisi; sure += r.kullanim.sure_sn;
+    satirlar.push([`${r.hedef.slice(0, 60)}`, `${sayi(r.kullanim.token, 0)} token · ${r.kullanim.model_cagrisi} çağrı · ${r.kullanim.adim} adım · ${sayi(r.kullanim.sure_sn, 0)} sn`]);
+  }
+  if (durum.oturumId) {
+    const o = await api(`/api/oturumlar/${durum.oturumId}`).catch(() => null);
+    const cevaplar = (o?.mesajlar || []).filter((m) => m.rol === "asistan" && m.istatistik);
+    if (cevaplar.length) {
+      const t = cevaplar.reduce((a, m) => a + (m.istatistik.token || 0) + (m.istatistik.prompt_token || 0), 0);
+      const sn = cevaplar.reduce((a, m) => a + (m.istatistik.sure_sn || 0), 0);
+      token += t; cagri += cevaplar.length; sure += sn;
+      satirlar.push(["Sohbet mesajları", `${sayi(t, 0)} token · ${cevaplar.length} cevap · ${sayi(sn, 0)} sn`]);
+    }
+  }
+  satirlar.unshift(["Toplam", `${sayi(token, 0)} token · ${cagri} model çağrısı · ${sayi(sure, 0)} sn`]);
+  satirlar.push(["Not", "Ajan token'ları tahminidir. Yerel model ücretsizdir; OpenRouter ücreti sağlayıcı panelinde görünür."]);
+  bilgiPenceresi("Kullanım", satirlar);
+}
+
+async function devamEt(arama = "") {
+  const liste = await api(`/api/oturumlar${arama ? `?q=${encodeURIComponent(arama)}` : ""}`);
+  const kap = el(`<div class="komut-liste">${liste.slice(0, 40).map((o) => `<button class="btn" data-oturum="${kacir(o.id)}"><span>${kacir(o.baslik)}</span>
+    <span class="soluk kucuk">${kacir((o.guncelleme || "").replace("T", " ").slice(0, 16))} · ${kacir(o.mesaj_sayisi)} mesaj</span></button>`).join("") || '<div class="soluk">Sohbet bulunamadı.</div>'}</div>`);
+  const m = modal({ baslik: "Sohbete devam et", icerik: kap, dugmeler: [{ metin: "Kapat" }] });
+  $$("[data-oturum]", kap).forEach((b) => {
+    b.onclick = () => {
+      m.kapat();
+      if (!document.querySelector(`.oturum[data-id="${b.dataset.oturum}"]`)) return bildir("Sohbet kenar çubuğunda görünmüyor; aramayı temizleyip tekrar dene.", "uyari");
+      return oturumaGit(b.dataset.oturum);
+    };
+  });
+}
+
+async function geriSar() {
+  const { checkpointler } = await api("/api/checkpointler");
+  const kap = el(`<div class="komut-liste"><div class="ayar-not">Her satır ajanın yaptığı bir dosya değişikliğidir. Açınca farkı görür, tamamını ya da seçtiğin blokları geri alabilirsin. Sonradan elle değiştirdiğin dosyalara dokunulmaz.</div>
+    ${checkpointler.map((c) => `<button class="btn" data-cp="${kacir(c.id)}"><span>${kacir((c.aciklama || c.id).slice(0, 90))}</span>
+      <span class="soluk kucuk">${kacir((c.zaman || "").replace("T", " ").slice(0, 16))} · ${kacir((c.dosyalar || []).length)} dosya${c.geri_alindi ? " · geri alındı" : ""}</span></button>`).join("") || '<div class="soluk">Henüz checkpoint yok.</div>'}</div>`);
+  modal({ baslik: "Geri sar (checkpoint'ler)", icerik: kap, genis: true, dugmeler: [{ metin: "Kapat" }] });
+  $$("[data-cp]", kap).forEach((b) => { b.onclick = () => diffAc(b.dataset.cp); });
+}
+
+async function yapilacaklar() {
+  const son = sohbetRunlari().at(-1);
+  if (!son) return bildir("Bu sohbette ajan görevi yok.", "uyari");
+  const r = await api(`/api/gorevler/${son.run}`);
+  const isaret = { tamam: "✓", suruyor: "▸", atlandi: "–", bekliyor: "·" };
+  return bilgiPenceresi("Plan", (r.plan || []).length ? r.plan.map((p) => [`${isaret[p.durum] || "·"} ${p.baslik}`, p.kanit || p.durum]) : [["Plan yok", "Ajan henüz plan yazmadı"]]);
+}
+
+async function disaAktar() {
+  if (!durum.oturumId) return bildir("Dışa aktarılacak açık sohbet yok.", "uyari");
+  const r = await fetch(`/api/oturumlar/${durum.oturumId}/disa-aktar?bicim=md`, { headers: oturumBasligi() });
+  if (!r.ok) throw new Error(`Dışa aktarılamadı (${r.status})`);
+  let metin = await r.text();
+  const runlar = (await Promise.all(sohbetRunlari().map((k) => api(`/api/gorevler/${k.run}`).catch(() => null)))).filter(Boolean);
+  for (const g of runlar) {
+    metin += `\n## kullanici\n${g.hedef}\n\n## ajan (${g.durum})\n${g.sonuc?.ozet || g.hata || ""}\n`;
+    const adimlar = g.adimlar.filter((a) => a.arac !== "plan_guncelle").map((a) => `- ${a.no}. ${a.arac} ${a.dosya || a.argumanlar?.komut || a.argumanlar?.yol || ""} (${a.durum})`);
+    if (adimlar.length) metin += `\n${adimlar.join("\n")}\n`;
+  }
+  const url = URL.createObjectURL(new Blob([metin], { type: "text/markdown" }));
+  Object.assign(document.createElement("a"), { href: url, download: `sohbet-${durum.oturumId}.md` }).click();
+  setTimeout(() => URL.revokeObjectURL(url), 5000);
+  return bildir("Sohbet indirildi.", "basari", 1500);
+}
+
+/** "/" onerileri: yerlesik + uzanti + ozel/plugin komutlari. */
+export function komutListesi() {
+  const yerlesik = Object.entries(KOMUTLAR).map(([ad, k]) => ({ ad, aciklama: k.aciklama }));
+  const ozel = ozelKomutListesi().map((k) => ({
+    ad: `/${k.komut}`,
+    aciklama: `${k.aciklama || ""}${k.ipucu ? ` ${k.ipucu}` : ""} (${k.plugin ? `plugin: ${k.plugin}` : k.kaynak === "proje" ? "proje komutu" : "kullanıcı komutu"})`.trim(),
+  }));
+  return [...yerlesik, ...ozel.filter((o) => !KOMUTLAR[o.ad])];
+}
 
 // Is akislari (A8.6): adimlar yalniz "ajan" ya da "komut"; kod calistirma yok.
 const AKIS_ORNEK = JSON.stringify({ ad: "duzelt ve test et", adimlar: [
@@ -169,8 +326,8 @@ function akisPenceresi() {
 }
 
 function yardim() {
-  const satirlar = Object.entries(KOMUTLAR).map(([k, v]) => [k, v.aciklama]);
-  satirlar.push(["Henüz yok", HENUZ_YOK.join(" ")]);
+  const satirlar = komutListesi().map((k) => [k.ad, k.aciklama]);
+  satirlar.push(["Kısayollar", "@ dosya adı tamamlar · !komut kabukta çalıştırır · #not hafızaya ekler"]);
   bilgiPenceresi("Komutlar", satirlar);
 }
 
@@ -180,11 +337,8 @@ export function komutMu(metin, mesajGonder = null) {
   const [ad, ...kalan] = metin.split(/\s+/);
   const k = KOMUTLAR[ad.toLowerCase()];
   if (k) {
-    Promise.resolve(k.calistir(kalan.join(" ").trim())).catch((e) => bildir(e.message, "hata"));
-    return true;
-  }
-  if (HENUZ_YOK.includes(ad.toLowerCase())) {
-    bildir(`${ad} henüz yok (ilgili servis sonraki aşamalarda).`, "uyari");
+    // async sarmal: senkron firlatilan hata da bildirim olur
+    (async () => k.calistir(kalan.join(" ").trim(), mesajGonder))().catch((e) => bildir(e.message, "hata"));
     return true;
   }
   if (uzantiKomutuMu(ad, kalan.join(" ").trim())) return true; // kurulu uzanti komutu

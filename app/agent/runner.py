@@ -59,6 +59,7 @@ class RunDurum(StrEnum):
     duraklatildi = "duraklatildi"
     onay_bekliyor = "onay_bekliyor"
     karar_bekliyor = "karar_bekliyor"  # cokme sonrasi belirsiz yan etki
+    cevap_bekliyor = "cevap_bekliyor"  # ajan soru_sor ile kullaniciya soru sordu
     iptal = "iptal"
     basarili = "basarili"
     dogrulanmadi = "dogrulanmadi"
@@ -74,6 +75,7 @@ class AdimDurum(StrEnum):
     tamam = "tamam"
     hata = "hata"
     onay_bekliyor = "onay_bekliyor"
+    cevap_bekliyor = "cevap_bekliyor"  # soru_sor: kullanici cevabi bekleniyor
     reddedildi = "reddedildi"
     belirsiz = "belirsiz"
     atlandi = "atlandi"
@@ -148,6 +150,9 @@ class Run(BaseModel):
     izinli_araclar: list[str] = []  # alt ajanin dar arac seti
     sahip_dosyalar: list[str] = []  # alt ajanin yazabilecegi dosyalar (goreli yol)
     cocuklar: list[str] = []
+    onceki: str = ""  # ayni sohbetteki onceki gorev (konusma surekliligi)
+    gecmis: str = ""  # onceki turlarin ozeti; sonraki tura aynen tasinir
+    etkilesimli: bool = False  # sohbetten baslatildi: soru_sor araci sunulur
     calisma_koku: str = ""  # izole worktree (A8.3); bos = proje kokunde
     dal: str = ""
     hata_sayaci: dict[str, int] = {}
@@ -190,6 +195,19 @@ RUNNER_ARACLARI = [
 ]
 META = {"plan_guncelle", "gorevi_bitir"}
 
+# Claude Code AskUserQuestion karsiligi: yalniz sohbetten baslatilan (etkilesimli) gorevde sunulur;
+# headless/zamanlanmis/alt ajan gorevleri cevap verecek kimse olmadigi icin bu araci GORMEZ.
+SORU_ARACI = _f(
+    "soru_sor",
+    "Kullaniciya TEK bir netlestirme sorusu sorar ve cevabini bekler. Yalniz gercekten "
+    "kullanicinin karar vermesi gereken durumda kullan (belirsiz gereksinim, birden fazla gecerli "
+    "yol); koddan/dosyadan ogrenebilecegin seyi sorma. `secenekler`: 2-4 kisa secenek (istege "
+    "bagli).",
+    {"soru": {"type": "string"}, "secenekler": {"type": "array", "items": {"type": "string"}}},
+    ["soru"],
+)
+GECMIS_SINIRI = 6000  # onceki turlarin ozeti icin karakter siniri (en yeni turlar kalir)
+
 # A8.1 alt ajan: ayri baglam, dar arac seti, sahip olunan dosyalar, ebeveynden KESILEN butce.
 ALT_AJAN_ARACI = _f(
     "alt_ajan",
@@ -224,6 +242,20 @@ Kurallar:
   ornek girdilerle sonucu yazdir); hedefteki ornek degerleri birebir kontrol et.
 - Bitince gorevi_bitir'i, hedefi kanitlayan basarili adim numaralariyla cagir.
 - Kullaniciya kisa yaz: ne yaptin, siradaki adim, varsa engel. Uzun aciklama yapma."""
+
+
+def gecmis_ozeti(onceki: Run) -> str:
+    """Biten gorevden sonraki tura tasinacak kisa ozet: ne istendi, ne oldu, hangi dosyalar."""
+    dosyalar = sorted({a.dosya for a in onceki.adimlar if a.dosya and a.arac in YAZAN_ARACLAR})
+    sonuc = (onceki.sonuc.ozet or onceki.hata or "sonuc yok").strip()[:1200]
+    satirlar = [
+        f"- Kullanici istedi: {onceki.hedef[:600]}",
+        f"  Sonuc ({onceki.durum.value}): {sonuc}",
+    ]
+    if dosyalar:
+        satirlar.append(f"  Degisen dosyalar: {', '.join(dosyalar[:20])}")
+    metin = "\n".join([onceki.gecmis, *satirlar]).strip()
+    return metin[-GECMIS_SINIRI:]
 
 
 def _norm_yol(yol: str) -> str:
@@ -341,16 +373,31 @@ class AgentRunner:
         butce: Butce | None = None,
         model: str = "",
         izole_kur: Callable[[str], tuple[str, str]] | None = None,
+        onceki: str = "",
+        etkilesimli: bool = False,
     ) -> Run:
         if self.yetenek is not None:  # aracsiz modelle gorev baslamaz (acik hata)
             dogrula(self.yetenek(), araclar_gerekli=True)
         if not hedef.strip():
             raise UygulamaHatasi("Gorev hedefi bos olamaz.")
-        run = Run(hedef=hedef.strip(), kabul=kabul or [], butce=butce or Butce(), model=model)
+        run = Run(
+            hedef=hedef.strip(), kabul=kabul or [], butce=butce or Butce(), model=model,
+            etkilesimli=etkilesimli,
+        )  # fmt: skip
         kabul_metni = "\n".join(f"- {k}" for k in run.kabul) or "- (belirtilmedi: hedefi kanitla)"
-        run.mesajlar = [
-            {"role": "user", "content": f"GOREV: {run.hedef}\n\nKABUL KOSULLARI:\n{kabul_metni}"}
-        ]
+        gorev_metni = f"GOREV: {run.hedef}\n\nKABUL KOSULLARI:\n{kabul_metni}"
+        if onceki:  # ayni sohbetin devami: onceki turlar OZET olarak tasinir (ham gecmis degil)
+            try:
+                once = self.depo.getir(onceki)
+            except Bulunamadi:
+                once = None
+            if once is not None and not once.parent:
+                run.onceki, run.gecmis = once.id, gecmis_ozeti(once)
+                gorev_metni = (
+                    "BU SOHBETTEKI ONCEKI TURLAR (baglam icindir; dosyalarin guncel halini "
+                    f"yine OKUYARAK dogrula):\n{run.gecmis}\n\n{gorev_metni}"
+                )
+        run.mesajlar = [{"role": "user", "content": gorev_metni}]
         await self._hook("run_baslangic", {"run": run.id, "hedef": run.hedef})  # engel: baslamaz
         if izole_kur is not None:  # A8.3: ayri worktree + ajan/<id> dali
             run.calisma_koku, run.dal = izole_kur(run.id)
@@ -381,6 +428,15 @@ class AgentRunner:
         if run.durum in BITMIS:
             raise UygulamaHatasi("Biten goreve mesaj eklenemez; 'tekrar' ile yeniden baslatin.")
         await self._hook("prompt", {"run": run_id, "metin": metin})
+        soru = next((a for a in run.adimlar if a.durum is AdimDurum.cevap_bekliyor), None)
+        if soru is not None:  # mesaj, ajanin sordugu sorunun CEVABIDIR: arac sonucu olarak doner
+            soru.durum = AdimDurum.tamam
+            self._arac_mesaji(run, soru, {"cevap": metin.strip()[:4000]})
+            run.guncellemeler.append(f"Kullanici: {metin.strip()[:200]}")
+            run.durum = RunDurum.calisiyor
+            self.depo.kaydet(run)
+            self._calistir(run_id)
+            return run
         run.kuyruk.append(metin.strip()[:4000])
         return self.depo.kaydet(run)
 
@@ -419,6 +475,8 @@ class AgentRunner:
             raise UygulamaHatasi("Biten gorev devam ettirilemez; 'tekrar' kullanin.")
         if any(a.durum is AdimDurum.belirsiz for a in run.adimlar):
             raise UygulamaHatasi("Sonucu belirsiz adim var; once karar verin.")
+        if any(a.durum is AdimDurum.cevap_bekliyor for a in run.adimlar):
+            raise UygulamaHatasi("Ajan bir soru sordu; once soruyu cevaplayin.")
         run.durum = RunDurum.calisiyor
         run.hata = ""
         self.depo.kaydet(run)
@@ -547,6 +605,8 @@ class AgentRunner:
                     ek = f" Hazir profiller (profil=ad): {liste[:3000]}"
                     arac["function"]["description"] += ek
                 semalar = [*semalar, arac]
+                if run.etkilesimli:
+                    semalar = [*semalar, SORU_ARACI]
             run.durum = RunDurum.calisiyor
             self.depo.kaydet(run)
             while True:
@@ -748,7 +808,7 @@ class AgentRunner:
                 run.durum = RunDurum.onay_bekliyor
                 self.depo.kaydet(run)
                 return True
-            if run.durum in BITMIS:
+            if run.durum in BITMIS or run.durum is RunDurum.cevap_bekliyor:
                 return True
         return False
 
@@ -774,6 +834,9 @@ class AgentRunner:
             return
         if a.arac == "gorevi_bitir":
             self._bitir(run, a)
+            return
+        if a.arac == "soru_sor" and run.etkilesimli and not run.parent:
+            await self._soru(run, a)
             return
         fonk = isleyiciler.get(a.arac)
         if fonk is None:
@@ -810,6 +873,11 @@ class AgentRunner:
             a.onay_id = (sonuc.get("onay") or {}).get("id", "")
             run.guncellemeler.append(f"Onay bekleniyor: {a.arac}")
             self.depo.kaydet(run)
+            if self.hooks is not None:  # Notification karsiligi
+                await asyncio.to_thread(
+                    self.hooks.tetikle, "bildirim",
+                    {"run": run.id, "tur": "onay", "arac": a.arac, "metin": f"Onay: {a.arac}"},
+                )  # fmt: skip
             return
         if isinstance(sonuc, dict) and sonuc.get("karar") == "ret":
             a.durum = AdimDurum.reddedildi
@@ -927,6 +995,29 @@ class AgentRunner:
         a.durum = AdimDurum.tamam if c.durum is RunDurum.basarili else AdimDurum.hata
         self._arac_mesaji(run, a, sonuc)
         self.depo.kaydet(run)
+        if self.hooks is not None:  # SubagentStop karsiligi; bilgilendirme
+            await asyncio.to_thread(
+                self.hooks.tetikle, "alt_ajan_bitis",
+                {"run": run.id, "alt_ajan": c.id, "durum": str(c.durum)},
+            )  # fmt: skip
+
+    async def _soru(self, run: Run, a: Adim) -> None:
+        """soru_sor: gorev durur, cevap `mesaj()` ile gelince ayni adimdan surer."""
+        soru = str(a.argumanlar.get("soru") or "").strip()
+        if not soru:
+            a.durum = AdimDurum.hata
+            self._arac_mesaji(run, a, {"hata": "soru bos olamaz."})
+            self.depo.kaydet(run)
+            return
+        run.kullanim.adim -= 1  # soru sormak is adimi degildir; butce yemez
+        a.durum = AdimDurum.cevap_bekliyor
+        run.durum = RunDurum.cevap_bekliyor
+        run.guncellemeler.append(f"Soru: {soru[:200]}")
+        self.depo.kaydet(run)
+        if self.hooks is not None:  # Notification karsiligi; bilgilendirme, engellemez
+            await asyncio.to_thread(
+                self.hooks.tetikle, "bildirim", {"run": run.id, "tur": "soru", "metin": soru[:500]}
+            )
 
     def _plan(self, run: Run, a: Adim) -> None:
         try:

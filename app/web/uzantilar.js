@@ -13,6 +13,9 @@ export async function uzantiKomutlariniYukle() {
   try { komutlar = (await api("/api/uzantilar")).komutlar.map((k) => k.komut); } catch { komutlar = []; }
 }
 
+/** Ozel (proje/kullanici .claude/commands) ve plugin komutlari; "/" onerileri icin. */
+export const ozelKomutListesi = () => pluginKomutlari;
+
 /** Claude Code plugin komutu (/plugin:komut ya da /komut): govde genisletilip MESAJ olarak gider. */
 export function pluginKomutuMu(ad, arg, gonder) {
   const k = ad.replace(/^\//, "");

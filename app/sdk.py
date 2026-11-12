@@ -20,7 +20,7 @@ import httpx
 
 API_SURUMU = 1
 BITMIS = {"basarili", "dogrulanmadi", "basarisiz", "iptal"}
-DURAN = BITMIS | {"onay_bekliyor", "karar_bekliyor", "duraklatildi"}
+DURAN = BITMIS | {"onay_bekliyor", "karar_bekliyor", "cevap_bekliyor", "duraklatildi"}
 
 
 class StudioHatasi(Exception):

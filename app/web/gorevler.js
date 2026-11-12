@@ -14,7 +14,8 @@ function bildirimGerekirse(r) {
   if (once === undefined || once === r.durum) return; // ilk gorus ya da degisiklik yok
   const a = durum.ayarlar || {};
   const ad = (r.hedef || "").slice(0, 80);
-  if (["onay_bekliyor", "karar_bekliyor"].includes(r.durum) && a.bildirim_onay) masaustuBildirimi("Onay bekleniyor", ad);
+  if (r.durum === "cevap_bekliyor" && a.bildirim_onay) masaustuBildirimi("Ajan bir soru soruyor", ad);
+  else if (["onay_bekliyor", "karar_bekliyor"].includes(r.durum) && a.bildirim_onay) masaustuBildirimi("Onay bekleniyor", ad);
   else if (BITMIS.has(r.durum) && /^\[(rutin|zamanlanmis)/.test(r.hedef || "") && a.bildirim_zamanlama) masaustuBildirimi(`Rutin: ${(DURUM_TR[r.durum] || [r.durum])[0]}`, ad);
 }
 export function gorevBildirimIzle() {
@@ -30,6 +31,7 @@ const DURUM_TR = {
   duraklatildi: ["Duraklatıldı", "sari"],
   onay_bekliyor: ["Onay bekliyor", "sari"],
   karar_bekliyor: ["Karar bekliyor", "sari"],
+  cevap_bekliyor: ["Cevabını bekliyor", "sari"],
   iptal: ["İptal edildi", ""],
   basarili: ["Başarılı", "yesil"],
   dogrulanmadi: ["Doğrulanmadı", "sari"],
@@ -38,6 +40,7 @@ const DURUM_TR = {
 const ADIM_TR = {
   sirada: "sırada", niyet: "çalışıyor", tamam: "tamam", hata: "hata", onay_bekliyor: "onay bekliyor",
   reddedildi: "reddedildi", belirsiz: "belirsiz", atlandi: "atlandı", tekrarla: "tekrarlanacak",
+  cevap_bekliyor: "cevap bekliyor",
 };
 const BITMIS = new Set(["iptal", "basarili", "dogrulanmadi", "basarisiz"]);
 const YAZAN = new Set(["proje_dosya_yaz", "proje_dosya_yama", "proje_dosya_tasi", "proje_dosya_sil"]);
@@ -132,6 +135,15 @@ function bekleyenKartlari(r) {
         ${onayOnizleme(a)}
         <div class="dugme-sira"><button class="btn ana" data-onay="${kacir(a.onay_id)}" data-karar="1">Onayla</button>
         <button class="btn tehlike" data-onay="${kacir(a.onay_id)}" data-karar="0">Reddet</button></div></div>`);
+    }
+    if (a.durum === "cevap_bekliyor") { // soru_sor: ajan kullanicidan karar bekliyor
+      const g = a.argumanlar || {};
+      const secenekler = (Array.isArray(g.secenekler) ? g.secenekler : []).slice(0, 4).map((x) => String(x).slice(0, 200));
+      parcalar.push(`<div class="uyari-kutu soru-kart" role="alert">
+        <b>Ajan soruyor:</b> <span class="soru-metin">${kacir(g.soru || "")}</span>
+        ${secenekler.length ? `<div class="dugme-sira">${secenekler.map((x) => `<button class="btn" data-cevap="${kacir(x)}">${kacir(x)}</button>`).join("")}</div>` : ""}
+        <div class="satir"><input class="alan" id="gr-cevap" placeholder="Cevabını yaz (Enter)" maxlength="4000" style="flex:1" aria-label="Ajanın sorusuna cevap">
+        <button class="btn ana" data-cevap-gonder>Gönder</button></div></div>`);
     }
     if (a.durum === "belirsiz") {
       parcalar.push(`<div class="uyari-kutu" role="alert">
@@ -283,6 +295,16 @@ function baglantilar(r) {
   $$("[data-belirsiz]", kap).forEach((b) => {
     b.onclick = sarmala(() => api(`/api/gorevler/${r.id}/karar`, { method: "POST", govde: { adim: Number(b.dataset.belirsiz), karar: b.dataset.k } }));
   });
+  const cevapla = (metin) => sarmala(async () => {
+    if (!metin.trim()) return;
+    await api(`/api/gorevler/${r.id}/mesaj`, { method: "POST", govde: { metin: metin.trim() } });
+  })();
+  $$("[data-cevap]", kap).forEach((b) => { b.onclick = () => cevapla(b.dataset.cevap); });
+  const cevap = $("#gr-cevap", kap);
+  if (cevap) {
+    $("[data-cevap-gonder]", kap).onclick = () => cevapla(cevap.value);
+    cevap.onkeydown = (e) => { if (e.key === "Enter") cevapla(cevap.value); };
+  }
   $$("[data-ac]", kap).forEach((b) => {
     b.onclick = () => {
       const no = Number(b.dataset.ac);
@@ -314,7 +336,7 @@ function hunkHtml(h) {
     <div class="diff">${satirlar("-", h.eski)}${satirlar("+", h.yeni)}</div></div></label>`;
 }
 
-async function diffAc(cpId) {
+export async function diffAc(cpId) {
   let o;
   try { o = await api(`/api/checkpointler/${cpId}`); } catch (e) { bildir(e.message, "hata"); return; }
   const govde = el('<div class="diff-modal"></div>');
@@ -398,11 +420,13 @@ async function gorevYenile(zorla = true) {
     // kullanici yazarken yeniden cizme girdiyi silmesin
     const g = $("#gr-yonlendir");
     const yazilan = g?.value;
+    const cevapYazilan = $("#gr-cevap", detayKabi())?.value;
     const odak = document.activeElement?.id;
     detayCiz(r);
-    if (yazilan) $("#gr-yonlendir").value = yazilan;
+    if (yazilan && $("#gr-yonlendir")) $("#gr-yonlendir").value = yazilan;
+    if (cevapYazilan && $("#gr-cevap", detayKabi())) $("#gr-cevap", detayKabi()).value = cevapYazilan;
     if (odak) document.getElementById(odak)?.focus();
-    if (BITMIS.has(r.durum) || ["onay_bekliyor", "karar_bekliyor", "duraklatildi"].includes(r.durum)) {
+    if (BITMIS.has(r.durum) || ["onay_bekliyor", "karar_bekliyor", "cevap_bekliyor", "duraklatildi"].includes(r.durum)) {
       listeCiz();
     }
     bildirimGerekirse(r);
