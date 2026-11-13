@@ -68,7 +68,7 @@ class KullaniciAyarlari(BaseModel):
     otomatik_baslat: bool = True
     sohbet_araclari: bool = True  # salt okunur dosya araclari + hesap/saat
     claude_talimatlari: bool = True  # ~/.claude/CLAUDE.md + @importlar (brain policy)
-    uygulama_talimati: bool = True  # <veri>/AGENTS.md
+    uygulama_talimati: bool = True  # <veri>/KAIRO.md (+ @importlar)
     skiller_acik: bool = True  # Claude Code / brain / uygulama skill'leri
     kapali_skiller: list[str] = []
     sunucu_acik: bool = True  # Ollama gibi yerel sunucu: diger uygulamalar modelleri kullanir

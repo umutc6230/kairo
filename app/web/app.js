@@ -16,7 +16,7 @@ import { dockAcKapa, dockKur, degisiklikYenile } from "./dock.js";
 import { gorunumUygula, kisayolEslesir } from "./ayarlar2.js";
 import { rutinleriYukle, rutinlerKur } from "./rutinler.js";
 import { ajanlarKur, ajanlarYukle } from "./ajanlar.js";
-import { ajanBloklariniCiz, ajanliOturum, akisVar, durdur, mesajlariCiz, sohbetKur, yeniSohbetEkrani } from "./sohbet.js";
+import { ajanBloklariniCiz, ajanKayitlariniBirlestir, ajanliOturum, akisVar, durdur, mesajlariCiz, sohbetKur, sohbetRunlari, yeniSohbetEkrani } from "./sohbet.js";
 
 const BASLIKLAR = { karsilastir: "Karşılaştır", ocr: "OCR testi", arac: "Araç testi", paket: "Test paketi", eklentiler: "Eklentiler", skiller: "Skill'ler ve talimatlar", modeller: "Modeller", gorevler: "Ajan görevleri", rutinler: "Rutinler", ajanlar: "Ajanlar" };
 const gecmis = [];
@@ -67,6 +67,24 @@ async function arkaPlanIsleri() {
   } catch (e) { bildir(e.message, "hata"); }
 }
 
+// Sohbet dosyasinda yalniz duz sohbet mesajlari var; ajan turlari ayri gorev kayitlarinda.
+// Paylasim ikisini birlestirir (ajan istegi + sonucu + adim ozeti).
+async function sohbetMarkdown(o) {
+  const r = await fetch(`/api/oturumlar/${o.id}/disa-aktar?bicim=md`, { headers: oturumBasligi() });
+  if (!r.ok) throw new Error(`Dışa aktarılamadı (${r.status})`);
+  let metin = await r.text();
+  for (const k of sohbetRunlari(o.id)) {
+    try {
+      const g = await api(`/api/gorevler/${k.run}`);
+      const adimlar = (g.adimlar || []).map((a) => `${a.no}. ${a.arac} - ${a.durum}${a.cikis_kodu != null ? ` (çıkış ${a.cikis_kodu})` : ""}`);
+      metin += `\n## kullanici\n${k.metin || g.hedef || ""}\n\n## asistan (ajan, ${g.durum})\n`;
+      if (adimlar.length) metin += `\n<details><summary>Adımlar</summary>\n\n${adimlar.join("\n")}\n\n</details>\n\n`;
+      metin += `${g.sonuc?.ozet || g.hata || ""}\n`;
+    } catch { metin += `\n_(ajan görevi ${k.run} okunamadı)_\n`; }
+  }
+  return metin;
+}
+
 // Claude Desktop gibi: basliga tiklaninca etkin sohbetin menusu
 function baslikMenusu(capa) {
   const o = (durum.oturumlar || []).find((x) => x.id === durum.oturumId);
@@ -76,12 +94,25 @@ function baslikMenusu(capa) {
     { metin: "Çatalla (kopyasından devam)", ikon: "kopyala", eylem: async () => {
       try { const y = await api(`/api/oturumlar/${o.id}/catal`, { method: "POST" }); await oturumlariYenile(); git({ tur: "oturum", id: y.id }); } catch (e) { bildir(e.message, "hata"); }
     } },
-    { metin: "Markdown olarak dışa aktar", ikon: "dis", eylem: async () => {
+    { metin: "Tüm sohbeti kopyala", ikon: "kopyala", eylem: async () => {
       try {
-        const r = await fetch(`/api/oturumlar/${o.id}/disa-aktar?bicim=md`, { headers: oturumBasligi() });
-        if (!r.ok) throw new Error(`Dışa aktarılamadı (${r.status})`);
-        await navigator.clipboard.writeText(await r.text());
-        bildir("Sohbet Markdown olarak panoya kopyalandı.", "basari", 1500);
+        await navigator.clipboard.writeText(await sohbetMarkdown(o));
+        bildir("Sohbetin tamamı (ajan cevapları dahil) panoya kopyalandı.", "basari", 2000);
+      } catch (e) { bildir(e.message, "hata"); }
+    } },
+    { metin: "Dosyaya kaydet (.md)", ikon: "dis", eylem: async () => {
+      try {
+        const metin = await sohbetMarkdown(o);
+        const ad = `${(o.baslik || "sohbet").replace(/[\\/:*?"<>|]+/g, "-").slice(0, 60)}.md`;
+        if (window.pywebview?.api?.dosya_kaydet) {
+          const yol = await window.pywebview.api.dosya_kaydet(ad, metin);
+          if (yol) bildir(`Kaydedildi: ${yol}`, "basari", 3000);
+        } else {
+          const a = el(`<a download="${kacir(ad)}"></a>`);
+          a.href = URL.createObjectURL(new Blob([metin], { type: "text/markdown" }));
+          a.click();
+          URL.revokeObjectURL(a.href);
+        }
       } catch (e) { bildir(e.message, "hata"); }
     } },
     "ayrac",
@@ -103,6 +134,7 @@ async function oturumAc(id, kaydetme = false) {
     durum.oturumId = o.id;
     gorunumGoster("sohbet");
     mesajlariCiz(o);
+    ajanKayitlariniBirlestir(o);
     ajanBloklariniCiz(o.id);
     baslikAyarla(o.baslik);
     oturumListesiCiz();
@@ -171,7 +203,7 @@ function oturumListesiCiz() {
   kap.innerHTML = "";
   const gruplar = new Map();
   for (const o of durum.oturumlar) {
-    if (!o.mesaj_sayisi && o.id !== durum.oturumId && !ajanliOturum(o.id)) continue;
+    if (!o.mesaj_sayisi && !o.ajan_sayisi && o.id !== durum.oturumId && !ajanliOturum(o.id)) continue;
     const g = grupAdi(o.guncelleme);
     if (!gruplar.has(g)) gruplar.set(g, []);
     gruplar.get(g).push(o);
@@ -420,6 +452,7 @@ async function baslat() {
   eklentilerKur({ git });
   document.addEventListener("oturumlar-degisti", degisiklikYenile);
   $("#baslik-menu").onclick = (e) => baslikMenusu(e.currentTarget);
+  $("#btn-paylas").onclick = (e) => baslikMenusu(e.currentTarget);
   $("#btn-daha").onclick = (e) => menuAc(e.currentTarget, [
     { metin: "Yan sohbet (Ctrl+;)", ikon: "liste", eylem: () => dockAcKapa("yan", true) },
     { metin: "Plan", ikon: "liste", eylem: () => dockAcKapa("plan", true) },

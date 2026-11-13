@@ -4,7 +4,10 @@ Kaynaklar (sirayla, hepsi her sohbetin sistem mesajina eklenir):
 1. Claude Code genel talimati: ~/.claude/CLAUDE.md ve icindeki `@yol` importlari (orn. brain
    BRAIN-POLICY.md). Claude Code'daki gibi: satir basindaki `@~/...` ya da `@yol` dosyayi icine
    alir; kod blogu icindekiler alinmaz; en fazla 4 seviye, dongu korumali.
-2. Uygulama talimati: <veri>/AGENTS.md (uygulama icinden duzenlenir).
+2. Kairo talimati: <veri>/KAIRO.md (Claude'daki CLAUDE.md karsiligi; uygulama icinden
+   duzenlenir, `@yol` importlarini destekler). Ilk acilista brain BRAIN-POLICY.md'yi import eden
+   varsayilan icerikle olusturulur; eski <veri>/AGENTS.md varsa ona tasinir.
+Ayni dosya iki kaynaktan da import edilirse (BRAIN-POLICY gibi) yalniz bir kez eklenir.
 """
 
 from __future__ import annotations
@@ -51,13 +54,35 @@ def importlari_coz(yol: Path, ziyaret: set[Path] | None = None, derinlik: int = 
     return ([{"yol": str(yol), "metin": metin}] if metin else []) + alinanlar
 
 
+BRAIN_POLICY = Path.home() / "Documents" / "brain" / "BRAIN-POLICY.md"
+
+
+def varsayilan_kairo_md() -> str:
+    satirlar = [
+        "# KAIRO.md - Kairo'nun kalici talimatlari",
+        "",
+        "Bu dosya her sohbete ve ajan gorevine eklenir (Claude'daki CLAUDE.md gibi).",
+        "Satir basindaki `@yol` baska bir dosyayi icine alir.",
+        "",
+    ]
+    if BRAIN_POLICY.is_file():
+        satirlar += ["Genel kurallar brain policy'de:", "", "@~/Documents/brain/BRAIN-POLICY.md"]
+    return "\n".join(satirlar) + "\n"
+
+
 def tahmini_token(metin: str) -> int:
     return int(len(metin) / 3.3) + 4
 
 
 class TalimatDeposu:
     def __init__(self, veri_dizini: Path) -> None:
-        self.uygulama_yolu = veri_dizini / "AGENTS.md"
+        self.uygulama_yolu = veri_dizini / "KAIRO.md"
+        eski = veri_dizini / "AGENTS.md"
+        if not self.uygulama_yolu.exists():
+            if eski.is_file():
+                eski.replace(self.uygulama_yolu)
+            elif veri_dizini.is_dir() and BRAIN_POLICY.is_file():  # baglanacak policy yoksa bos
+                self.uygulama_yolu.write_text(varsayilan_kairo_md(), encoding="utf-8")
 
     def uygulama_oku(self) -> str:
         try:
@@ -74,11 +99,13 @@ class TalimatDeposu:
     def kaynaklar(self, *, claude: bool = True, uygulama: bool = True) -> list[dict]:
         """Etkin talimat kaynaklari: [{tur, yol, metin, token, kisaltildi}]."""
         sonuc: list[dict] = []
+        ziyaret: set[Path] = set()  # ortak: ayni import (BRAIN-POLICY) iki kez eklenmez
         if claude:
-            for k in importlari_coz(claude_md_yolu()):
+            for k in importlari_coz(claude_md_yolu(), ziyaret):
                 sonuc.append({"tur": "claude", **k})
-        if uygulama and (metin := self.uygulama_oku().strip()):
-            sonuc.append({"tur": "uygulama", "yol": str(self.uygulama_yolu), "metin": metin})
+        if uygulama:
+            for k in importlari_coz(self.uygulama_yolu, ziyaret):
+                sonuc.append({"tur": "uygulama", **k})
         for k in sonuc:
             k["kisaltildi"] = len(k["metin"]) > MAX_KAYNAK_KARAKTER
             k["metin"] = k["metin"][:MAX_KAYNAK_KARAKTER]

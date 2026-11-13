@@ -248,3 +248,11 @@ class IzoleSahte:
 
     def sar(self, komut, cwd, kok):
         return None
+
+
+@pytest.fixture(autouse=True)
+def _gercek_brain_policy_yok(tmp_path, monkeypatch):
+    """Varsayilan KAIRO.md kullanicinin gercek BRAIN-POLICY'sini testlere sokmasin."""
+    from app.services import talimatlar
+
+    monkeypatch.setattr(talimatlar, "BRAIN_POLICY", tmp_path / "yok" / "BRAIN-POLICY.md")

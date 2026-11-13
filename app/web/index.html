@@ -15,7 +15,7 @@
         <button class="ikon-btn" id="btn-geri" title="Geri" data-ikon="sol"></button>
         <button class="ikon-btn" id="btn-ileri" title="İleri" data-ikon="sag"></button>
       </div>
-      <div class="baslik-orta pywebview-drag-region"><button id="baslik-menu" class="baslik-dugme"><span id="sayfa-basligi">Yeni sohbet</span><span data-ikon="asagi"></span></button></div>
+      <div class="baslik-orta pywebview-drag-region"><button id="baslik-menu" class="baslik-dugme"><span id="sayfa-basligi">Yeni sohbet</span><span data-ikon="asagi"></span></button><button id="btn-paylas" class="ikon-btn" title="Paylaş: kopyala ya da dosyaya kaydet" aria-label="Sohbeti paylaş" data-ikon="dis"></button></div>
       <div class="baslik-sag">
         <div class="arac-cubugu">
           <button class="ikon-btn" id="btn-sag-panel" title="Oturum paneli" data-ikon="liste"></button>
@@ -310,20 +310,24 @@
           <iframe id="tr-cerceve" class="tr-cerceve" sandbox="allow-scripts allow-forms allow-same-origin allow-popups" referrerpolicy="no-referrer"></iframe>
         </div>
       </section>
-      <aside id="sag-panel" class="sag-panel" aria-label="Oturum paneli">
-        <div class="sp-baslik"><span>Ortam</span></div>
-        <div class="sp-satir"><span data-ikon="ekran"></span><span style="flex:1">Bu bilgisayar</span><button class="ikon-btn kucuk-ikon" id="sp-ayar" title="Ayarlar" data-ikon="disli"></button></div>
-        <button class="sp-satir sp-tik" id="sp-proje"><span data-ikon="klasor"></span><span id="sp-proje-metni">Proje seç</span></button>
-        <label class="sp-satir"><span data-ikon="ekran"></span><span style="flex:1">Uzak erişim</span><span class="anahtar"><input type="checkbox" id="sp-uzak"><span></span></span></label>
-        <div class="sp-satir" id="sp-model"></div>
-        <div class="sp-ayrac"></div>
-        <button class="sp-satir sp-tik" id="sp-baglam-satir" title="Bağlam ayrıntısı"><span style="flex:1">Bağlam</span><span id="sp-baglam" class="soluk kucuk">-</span><span class="baglam-cubuk"><span id="sp-baglam-dolu"></span></span></button>
-        <div id="sag-panel-gorev"></div>
-        <div class="sp-ayrac"></div>
-        <button class="sp-satir sp-tik" id="sp-baglayici-baslik"><span style="flex:1">Bağlayıcılar</span><span id="sp-baglayici" class="soluk kucuk"></span></button>
-        <div class="sp-ayrac"></div>
-        <div class="sp-baslik"><span>Dosyalar</span><button class="ikon-btn kucuk-ikon" id="sp-dosya-yenile" title="Yenile" data-ikon="yenile"></button></div>
+      <aside id="dosya-panel" class="yan-panel dosya-panel" aria-label="Dosyalar" hidden>
+        <div class="sp-baslik"><span>Dosyalar</span><span class="sp-sag"><button class="ikon-btn kucuk-ikon" id="sp-dosya-yenile" title="Yenile" data-ikon="yenile"></button><button class="ikon-btn kucuk-ikon" id="sp-dosya-kapat" title="Dosya panelini kapat" data-ikon="x"></button></span></div>
         <div id="sp-agac" class="sp-agac"></div>
+      </aside>
+      <aside id="sag-panel" class="yan-panel sag-panel" aria-label="Oturum paneli">
+        <div class="sp-bolum">Ortam</div>
+        <div class="sp-satir"><span data-ikon="ekran"></span><span class="sp-ad">Bu bilgisayar</span><button class="ikon-btn kucuk-ikon" id="sp-ayar" title="Ayarlar" data-ikon="disli"></button></div>
+        <button class="sp-satir sp-tik" id="sp-proje"><span data-ikon="klasor"></span><span class="sp-ad" id="sp-proje-metni">Proje seç</span></button>
+        <label class="sp-satir"><span data-ikon="ekran"></span><span class="sp-ad">Uzak erişim</span><span class="anahtar"><input type="checkbox" id="sp-uzak"><span></span></span></label>
+        <div class="sp-ayrac"></div>
+        <button class="sp-satir sp-tik" id="sp-baglam-satir" title="Bağlam ayrıntısı"><span class="sp-ad">Bağlam <span class="sp-ok" data-ikon="sag"></span></span><span id="sp-baglam" class="soluk kucuk">-</span><span class="baglam-cubuk"><span id="sp-baglam-dolu"></span></span></button>
+        <div class="sp-ayrac"></div>
+        <button class="sp-satir sp-tik" id="sp-baglayici-baslik"><span class="sp-ad">Bağlayıcılar <span class="sp-ok" data-ikon="sag"></span></span><span id="sp-baglayici" class="soluk kucuk"></span></button>
+        <div class="sp-ayrac"></div>
+        <div class="sp-bolum">Arka plan işleri</div>
+        <div id="sp-isler" class="sp-isler"><span class="soluk kucuk">Yok</span></div>
+        <div id="sag-panel-gorev"></div>
+        <div class="sp-satir soluk kucuk" id="sp-model"></div>
       </aside>
     </div>
     <footer id="durum-cubugu" class="durum-cubugu" aria-label="Durum çubuğu">

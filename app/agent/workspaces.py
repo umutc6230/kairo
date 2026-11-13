@@ -22,7 +22,7 @@ from app.services.depo import json_oku, json_yaz
 
 MAX_KOK = 8
 MAX_SON_PROJE = 12
-PROJE_TALIMAT_ADLARI = ("AGENTS.md", "CLAUDE.md", ".yas/AGENTS.md")
+PROJE_TALIMAT_ADLARI = ("KAIRO.md", "AGENTS.md", "CLAUDE.md", ".yas/AGENTS.md")
 
 
 class Guven(StrEnum):

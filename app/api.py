@@ -207,6 +207,11 @@ class AdIstegi(BaseModel):
     baslik: str
 
 
+class AjanRunKaydi(BaseModel):
+    run: str = Field(min_length=1, max_length=64)
+    metin: str = ""
+
+
 class AnahtarIstegi(BaseModel):
     anahtar: str = Field(max_length=300)
 
@@ -1412,6 +1417,11 @@ def uygulama_olustur(
     @app.patch("/api/oturumlar/{oturum_id}")
     async def oturum_adlandir(oturum_id: str, istek: AdIstegi) -> dict:
         return oturumlar.yeniden_adlandir(oturum_id, istek.baslik).model_dump()
+
+    @app.post("/api/oturumlar/{oturum_id}/ajan-run")
+    async def oturum_ajan_run(oturum_id: str, istek: AjanRunKaydi) -> dict:
+        o = oturumlar.ajan_run_ekle(oturum_id, istek.run, istek.metin)
+        return {"ajan_runlari": o.ajan_runlari}
 
     @app.delete("/api/oturumlar/{oturum_id}")
     async def oturum_sil(oturum_id: str) -> dict:

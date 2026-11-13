@@ -548,10 +548,21 @@ const AJAN_ANAHTAR = "ajanRunlari";
 function ajanKayitlari() {
   try { return JSON.parse(localStorage.getItem(AJAN_ANAHTAR) || "{}"); } catch { return {}; }
 }
-function ajanKaydet(oturumId, kayit) {
+function ajanKaydet(oturumId, kayit, sunucuya = true) {
   const t = ajanKayitlari();
-  (t[oturumId] ||= []).push(kayit);
+  if ((t[oturumId] ||= []).some((k) => k.run === kayit.run)) return;
+  t[oturumId].push(kayit);
   try { localStorage.setItem(AJAN_ANAHTAR, JSON.stringify(t)); } catch { /* depolama kapali */ }
+  if (sunucuya) api(`/api/oturumlar/${oturumId}/ajan-run`, { method: "POST", govde: kayit }).catch(() => {});
+}
+/** Sunucudaki kayitlar (kalici) ile tarayici onbellegini birlestirir; yalniz yerelde olanlar
+ * sunucuya tasinir. Port her acilista degistigi icin tarayici deposu tek basina kayboluyordu. */
+export function ajanKayitlariniBirlestir(oturum) {
+  for (const k of oturum.ajan_runlari || []) ajanKaydet(oturum.id, k, false);
+  const sunucu = new Set((oturum.ajan_runlari || []).map((k) => k.run));
+  for (const k of ajanKayitlari()[oturum.id] || []) {
+    if (!sunucu.has(k.run)) api(`/api/oturumlar/${oturum.id}/ajan-run`, { method: "POST", govde: k }).catch(() => {});
+  }
 }
 function ajanModu() {
   // Proje acik olmasa da (kisisel klasorler) ajan calisir; yalniz 'sohbet' modu duz sohbettir

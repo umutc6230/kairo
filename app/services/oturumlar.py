@@ -42,6 +42,9 @@ class Oturum(BaseModel):
     olusturma: str = Field(default_factory=simdi)
     guncelleme: str = Field(default_factory=simdi)
     mesajlar: list[Mesaj] = []
+    # Sohbetten baslatilan ajan gorevleri ({run, metin}); eskiden yalniz tarayici deposundaydi ve
+    # her acilista degisen port yuzunden kayboluyordu.
+    ajan_runlari: list[dict] = []
 
 
 def baslik_uret(metin: str) -> str:
@@ -98,6 +101,13 @@ class OturumDeposu:
             satirlar += [f"## {m.rol}", m.metin or "", ""]
         return "\n".join(satirlar)
 
+    def ajan_run_ekle(self, oturum_id: str, run: str, metin: str) -> Oturum:
+        oturum = self.getir(oturum_id)
+        if not any(k.get("run") == run for k in oturum.ajan_runlari):
+            oturum.ajan_runlari.append({"run": str(run)[:64], "metin": str(metin)[:4000]})
+            oturum = self.kaydet(oturum)
+        return oturum
+
     def yeniden_adlandir(self, oturum_id: str, baslik: str) -> Oturum:
         oturum = self.getir(oturum_id)
         oturum.baslik = baslik.strip()[:80] or "Yeni sohbet"
@@ -122,6 +132,7 @@ class OturumDeposu:
                     "baslik": ham.get("baslik", ""),
                     "guncelleme": ham.get("guncelleme", ""),
                     "mesaj_sayisi": len(ham.get("mesajlar", [])),
+                    "ajan_sayisi": len(ham.get("ajan_runlari", [])),
                 }
             )
         return sorted(sonuc, key=lambda o: o["guncelleme"], reverse=True)

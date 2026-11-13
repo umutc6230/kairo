@@ -4,6 +4,7 @@ import { kacir } from "./md.js";
 import { $, api, bildir, durum, el, modal } from "./ortak.js";
 
 const PANEL_ANAHTAR = "kairo.sagPanel";
+const DOSYA_ANAHTAR = "kairo.dosyaPanel";
 
 async function klasorCiz(kap, yol) {
   try {
@@ -42,7 +43,7 @@ async function dosyaAc(yol) {
 
 export function dosyaAgaciniYenile() {
   const kap = $("#sp-agac");
-  if (kap) klasorCiz(kap, "");
+  if (kap && !$("#dosya-panel").hidden) klasorCiz(kap, "");
 }
 
 async function baglayicilariYenile() {
@@ -74,7 +75,42 @@ async function uzakYenile() {
 function paneliAyarla(acik) {
   const p = $("#sag-panel");
   p.hidden = !acik;
+  $("#btn-sag-panel").setAttribute("aria-pressed", String(acik));
   localStorage.setItem(PANEL_ANAHTAR, acik ? "1" : "0");
+  if (acik) islerYenile();
+}
+
+// Dosyalar: oturum panelinden bagimsiz, kendi dugmesiyle acilip kapanan ayri yan panel
+function dosyaPaneliAyarla(acik) {
+  $("#dosya-panel").hidden = !acik;
+  $("#btn-dosyalar").setAttribute("aria-pressed", String(acik));
+  localStorage.setItem(DOSYA_ANAHTAR, acik ? "1" : "0");
+  if (acik) dosyaAgaciniYenile();
+}
+
+const SURE = (sn) => (sn >= 60 ? `${Math.floor(sn / 60)} dk` : `${Math.max(0, Math.round(sn))} sn`);
+const CALISAN = new Set(["calisiyor", "onay_bekliyor", "karar_bekliyor", "duraklatildi", "bekliyor"]);
+
+// Claude Code'daki "Background tasks": calisan komut ve ajan gorevleri + biten sayisi
+async function islerYenile() {
+  const kap = $("#sp-isler");
+  if (!kap || $("#sag-panel").hidden) return;
+  try {
+    const [{ isler }, { gorevler }] = await Promise.all([api("/api/komutlar"), api("/api/gorevler")]);
+    const satirlar = [];
+    let biten = 0;
+    for (const i of isler) {
+      if (i.durum !== "calisiyor") { biten++; continue; }
+      satirlar.push(`<div class="sp-satir sp-is" title="${kacir(i.komut)}">${ikon("terminal")}<span class="sp-ad">${kacir(i.komut)}</span></div>`);
+    }
+    for (const g of gorevler) {
+      if (!CALISAN.has(g.durum)) { biten++; continue; }
+      const sn = g.kullanim?.sure_sn ?? 0;
+      satirlar.push(`<div class="sp-satir sp-is" title="${kacir(g.hedef || "")}">${ikon("liste")}<span class="sp-ad">${kacir(g.hedef || "Ajan görevi")}</span><span class="soluk kucuk">${SURE(sn)}</span></div>`);
+    }
+    if (biten) satirlar.push(`<div class="sp-satir soluk">${ikon("tik")}<span class="sp-ad">${biten} bitti</span></div>`);
+    kap.innerHTML = satirlar.join("") || '<span class="soluk kucuk">Yok</span>';
+  } catch { /* sessiz */ }
 }
 
 export function sagPanelKur({ baglayiciAc, ayarAc }) {
@@ -94,11 +130,13 @@ export function sagPanelKur({ baglayiciAc, ayarAc }) {
   uzakYenile();
   paneliAyarla(localStorage.getItem(PANEL_ANAHTAR) !== "0");
   $("#btn-sag-panel").onclick = () => paneliAyarla($("#sag-panel").hidden);
-  $("#btn-dosyalar").onclick = () => { paneliAyarla(true); dosyaAgaciniYenile(); };
+  $("#btn-dosyalar").onclick = () => dosyaPaneliAyarla($("#dosya-panel").hidden);
+  $("#sp-dosya-kapat").onclick = () => dosyaPaneliAyarla(false);
   $("#sp-dosya-yenile").onclick = dosyaAgaciniYenile;
+  dosyaPaneliAyarla(localStorage.getItem(DOSYA_ANAHTAR) === "1");
+  setInterval(islerYenile, 4000);
   $("#sp-baglayici-baslik").onclick = baglayiciAc;
   ikonlariYerlestir(document.getElementById("kok"));
-  dosyaAgaciniYenile();
   baglayicilariYenile();
   api("/api/bilgi").then((b) => { $("#dc-surum").textContent = `${b.urun} ${b.surum}`; }).catch(() => {});
   document.addEventListener("oturumlar-degisti", () => { dosyaAgaciniYenile(); baglamYenile(); }); // proje/sohbet degisince

@@ -297,3 +297,55 @@ async def test_durdur_kilidi_beklemez(tmp_path):
     assert sonuc == {"harici_kapatildi": False} and y.durum == "kapali"
     with pytest.raises(RuntimeError):
         await yukleme
+
+
+def test_pencere_klasor_sec(monkeypatch):
+    import webview
+
+    class SahtePencere:
+        def __init__(self, sonuc):
+            self.sonuc = sonuc
+
+        def create_file_dialog(self, tur):
+            self.tur = tur
+            return self.sonuc
+
+    api = PencereApi()
+    api._pencere = SahtePencere(("C:\Projeler\kairo",))
+    assert api.klasor_sec() == "C:\Projeler\kairo"
+    assert api._pencere.tur == webview.FileDialog.FOLDER
+    api._pencere = SahtePencere(None)  # iptal
+    assert api.klasor_sec() == ""
+
+
+def test_pencere_dosya_kaydet(tmp_path):
+    hedef = tmp_path / "cikti.md"
+
+    class SahtePencere:
+        def __init__(self, sonuc):
+            self.sonuc = sonuc
+
+        def create_file_dialog(self, tur, **kw):
+            self.kw = kw
+            return self.sonuc
+
+    api = PencereApi()
+    api._pencere = SahtePencere(str(hedef))
+    assert api.dosya_kaydet("..\kotu/ad.md", "# Merhaba ç") == str(hedef)
+    assert hedef.read_text(encoding="utf-8") == "# Merhaba ç"
+    assert api._pencere.kw["save_filename"] == "ad.md"
+    api._pencere = SahtePencere(None)  # iptal
+    assert api.dosya_kaydet("a.md", "x") == ""
+
+
+def test_oturum_ajan_run_kalici(tmp_path):
+    depo = OturumDeposu(tmp_path)
+    o = (
+        depo.yeni()
+        if hasattr(depo, "yeni")
+        else depo.kaydet(__import__("app.services.oturumlar", fromlist=["Oturum"]).Oturum())
+    )
+    depo.ajan_run_ekle(o.id, "r1", "disk durumuna bak")
+    depo.ajan_run_ekle(o.id, "r1", "tekrar")  # ayni run iki kez eklenmez
+    assert depo.getir(o.id).ajan_runlari == [{"run": "r1", "metin": "disk durumuna bak"}]
+    assert depo.liste()[0]["ajan_sayisi"] == 1

@@ -296,7 +296,9 @@ class _Baglanti:
     def cagir(self, arac: str, argumanlar: dict) -> Any:
         self.hazirla()
         with self.kilit:
-            return self._istek("tools/call", {"name": arac, "arguments": argumanlar})
+            return self._istek(
+                "tools/call", {"name": arac, "arguments": argumanlar}, arac_suresi(argumanlar)
+            )
 
     def kaynaklar(self) -> list[dict]:
         self.hazirla()
@@ -308,8 +310,23 @@ class _Baglanti:
 
     def kapat(self) -> None:
         if self.surec and self.surec.poll() is None:
+            if sys.platform == "win32":  # uv/npx gibi baslaticilarin alt sureci yetim kalmasin
+                subprocess.run(
+                    ["taskkill", "/PID", str(self.surec.pid), "/T", "/F"],
+                    capture_output=True,
+                    creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
+                )
             self.surec.kill()
         self.surec = None
+
+
+def arac_suresi(argumanlar: dict) -> float:
+    """Arac argumaninda timeout (sn) varsa ona + 15 sn pay tanir (en az 30, en cok 600).
+    Sabit 30 sn, timeout=120 isteyen PowerShell komutlarini yarida kesip sunucuyu olduruyordu."""
+    t = argumanlar.get("timeout") if isinstance(argumanlar, dict) else None
+    if isinstance(t, (int, float)) and not isinstance(t, bool) and t > 0:
+        return min(600.0, max(ZAMAN_ASIMI, float(t) + 15))
+    return float(ZAMAN_ASIMI)
 
 
 def _gecerli_arac(a: object) -> bool:

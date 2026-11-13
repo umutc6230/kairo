@@ -10,7 +10,7 @@ const MOD_TR = {
   otomatik: { ad: "Politika kapsamında otomatik", aciklama: "Onay istemeden uygular; yine de kök dışına, gizli dosyalara ve dış ağa dokunamaz." },
 };
 const GUVEN_TR = {
-  guvenilir: { ad: "Güvenilir", aciklama: "Projenin kendi AGENTS.md/CLAUDE.md talimatı okunur." },
+  guvenilir: { ad: "Güvenilir", aciklama: "Projenin kendi KAIRO.md/AGENTS.md/CLAUDE.md talimatı okunur." },
   sinirli: { ad: "Sınırlı", aciklama: "Proje talimatı okunmaz; araçlar kök içinde çalışır." },
   guvenilmeyen: { ad: "Güvenilmeyen", aciklama: "Yalnız okuma; proje talimatı okunmaz." },
 };
@@ -81,7 +81,10 @@ export function projeAc() {
       <div class="kutu">
         <div class="kutu-baslik">Proje aç</div>
         <label class="proje-alan">Klasör yolu
-          <input class="alan" id="proje-yol" type="text" placeholder="C:\\Users\\umuti\\Projects\\ornek" spellcheck="false">
+          <span class="klasor-sec-sira">
+            <input class="alan" id="proje-yol" type="text" placeholder="Klasör seçin" spellcheck="false">
+            <button class="btn" type="button" data-klasor-sec="#proje-yol">Klasör seç</button>
+          </span>
         </label>
         <label class="proje-alan">Güven
           <select class="alan" id="proje-guven">${Object.entries(GUVEN_TR).map(([k, v]) => `<option value="${k}" ${k === "sinirli" ? "selected" : ""}>${kacir(v.ad)} - ${kacir(v.aciklama)}</option>`).join("")}</select>
@@ -98,7 +101,10 @@ export function projeAc() {
           <select class="alan" id="proje-guven-sec">${Object.entries(GUVEN_TR).map(([k, v]) => `<option value="${k}" ${aktif.guven === k ? "selected" : ""}>${kacir(v.ad)}</option>`).join("")}</select>
         </label>
         <label class="proje-alan">Ek klasör yetkilendir (kök dışı)
-          <input class="alan" id="proje-ek" type="text" placeholder="C:\\...\\baska-klasor" spellcheck="false">
+          <span class="klasor-sec-sira">
+            <input class="alan" id="proje-ek" type="text" placeholder="Klasör seçin" spellcheck="false">
+            <button class="btn" type="button" data-klasor-sec="#proje-ek">Klasör seç</button>
+          </span>
         </label>
         <div class="dugme-sira">
           <button class="btn" id="btn-ek-ekle">Ek klasör ekle</button>
@@ -130,6 +136,22 @@ export function projeAc() {
   };
 
   function baglantilariKur() {
+    // Masaustu penceresinde Windows klasor secici; tarayici modunda yol elle yazilir.
+    for (const b of govde.querySelectorAll("[data-klasor-sec]")) {
+      const hedef = $(b.dataset.klasorSec, govde);
+      if (!window.pywebview?.api?.klasor_sec) {
+        b.hidden = true;
+        hedef.placeholder = "C:\\Users\\...\\klasor";
+        continue;
+      }
+      const sec = async () => {
+        const yol = await window.pywebview.api.klasor_sec();
+        if (yol) hedef.value = yol;
+      };
+      b.onclick = sec;
+      hedef.readOnly = true;
+      hedef.onclick = sec;
+    }
     $("#izolasyon-sec", govde).onchange = (ev) =>
       sarmala(async () => {
         await api("/api/ayarlar", { method: "PUT", govde: { izolasyon: ev.target.value } });

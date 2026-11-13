@@ -222,6 +222,23 @@ RUNNER_ARACLARI = [
 ]
 META = {"plan_guncelle", "gorevi_bitir"}
 
+def net_degisiklikler(adimlar: list) -> list:
+    """Basarili dosya degisikligi adimlari; gorevin kendi yazip sonra sildigi gecici dosyalar
+    (yaz ... sil, ayni yol) haric. Yoksa temizlik silmesi oncesindeki gercek kaniti gecersiz
+    kilip salt okunur isleri 'dogrulanmadi' yapiyordu."""
+    tamam = [x for x in adimlar if x.arac in DEGISTIREN and x.durum is AdimDurum.tamam]
+    yol = lambda x: str(x.argumanlar.get("yol") or "").replace("\\", "/").lower()  # noqa: E731
+    # shortcut: yazmadan once dosyanin var olup olmadigi bilinmiyor; once var olan dosyayi ezip
+    # silen gorev de "degisiklik yok" sayilir. Gerekirse yaz adimina "yeni_dosya" bilgisi eklenmeli.
+    gecici: set[str] = set()
+    for x in tamam:
+        if x.arac == "proje_dosya_sil" and any(
+            o.arac == "proje_dosya_yaz" and o.no < x.no and yol(o) == yol(x) for o in tamam
+        ):
+            gecici.add(yol(x))
+    return [x for x in tamam if yol(x) not in gecici]
+
+
 # Claude Code AskUserQuestion karsiligi: yalniz sohbetten baslatilan (etkilesimli) gorevde sunulur;
 # headless/zamanlanmis/alt ajan gorevleri cevap verecek kimse olmadigi icin bu araci GORMEZ.
 SORU_ARACI = _f(
@@ -1202,7 +1219,7 @@ class AgentRunner:
         numaralar = [n for n in a.argumanlar.get("kanit_adimlari") or [] if isinstance(n, int)]
         adimlar = {x.no: x for x in run.adimlar}
         son_degisiklik = max(
-            (x.no for x in run.adimlar if x.arac in DEGISTIREN and x.durum is AdimDurum.tamam),
+            (x.no for x in net_degisiklikler(run.adimlar)),
             default=0,
         )
         gecerli: list[int] = []

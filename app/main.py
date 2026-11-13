@@ -86,6 +86,30 @@ class PencereApi:
             logger.debug("Calisma alanina sigdirilamadi: {}", e)
             return False
 
+    def klasor_sec(self) -> str:
+        """Windows klasor secme penceresi; iptalde bos metin."""
+        import webview
+
+        tur = getattr(getattr(webview, "FileDialog", None), "FOLDER", None)
+        sonuc = self._pencere.create_file_dialog(tur if tur is not None else webview.FOLDER_DIALOG)
+        return sonuc[0] if sonuc else ""
+
+    def dosya_kaydet(self, ad: str, icerik: str) -> str:
+        """Windows 'Farkli kaydet' penceresi; secilen yola UTF-8 yazar. Iptalde bos metin."""
+        import webview
+
+        tur = getattr(getattr(webview, "FileDialog", None), "SAVE", None)
+        sonuc = self._pencere.create_file_dialog(
+            tur if tur is not None else webview.SAVE_DIALOG,
+            save_filename=Path(str(ad)).name or "sohbet.md",
+            file_types=("Markdown (*.md)", "Tum dosyalar (*.*)"),
+        )
+        if not sonuc:
+            return ""
+        yol = Path(sonuc if isinstance(sonuc, str) else sonuc[0])
+        yol.write_text(str(icerik), encoding="utf-8")
+        return str(yol)
+
     def kapat(self) -> None:
         if self._tepside:
             self._pencere.hide()
