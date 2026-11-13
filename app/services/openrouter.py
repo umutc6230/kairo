@@ -7,6 +7,7 @@ Model listesi GET /api/v1/models'ten cekilir, 24 saat diskte tutulur (atomik yaz
 from __future__ import annotations
 
 import os
+import threading
 import time
 from pathlib import Path
 from typing import Any
@@ -144,6 +145,25 @@ def _sadelestir(m: dict) -> dict:
     }
 
 
+_HAVUZ_KILIDI = threading.Lock()
+
+
+class _KapanmayanTasima(httpx.AsyncBaseTransport):
+    """Paylasilan baglanti havuzu: her mesajin istemcisi kapaninca havuz KAPANMAZ. Her mesajda
+    yeni istemci + TLS el sikismasi ~1.5 sn ekliyordu (canli olcum)."""
+
+    def __init__(self) -> None:
+        self.ic = httpx.AsyncHTTPTransport(
+            retries=1, limits=httpx.Limits(max_keepalive_connections=8, keepalive_expiry=120)
+        )
+
+    async def handle_async_request(self, istek: httpx.Request) -> httpx.Response:
+        return await self.ic.handle_async_request(istek)
+
+    async def aclose(self) -> None:
+        return None  # havuz uygulama boyunca yasar
+
+
 class OpenRouterDeposu:
     """Anahtar + secim disinda kalan OpenRouter verisi (anahtar, model listesi onbellegi)."""
 
@@ -204,8 +224,16 @@ class OpenRouterDeposu:
         json_yaz(self.liste_yolu, veri)
         return veri | {"uyari": ""}
 
+    def _tasima(self) -> Any:
+        if self.transport is not None:  # testler: sahte tasima
+            return self.transport
+        with _HAVUZ_KILIDI:  # acilista arka plan is parcacigi da kurabilir
+            if getattr(self, "_havuz", None) is None:
+                self._havuz = _KapanmayanTasima()
+        return self._havuz
+
     def istemci(self, model: str) -> OpenRouterLLM:
-        return OpenRouterLLM(self.anahtar(), model, transport=self.transport, adres=self.adres)
+        return OpenRouterLLM(self.anahtar(), model, transport=self._tasima(), adres=self.adres)
 
     async def test(self, model: str) -> dict:
         """Uygulamanin kullandigi bicimde (arac tanimli) kisa istek; sure ve maliyet dondurur."""

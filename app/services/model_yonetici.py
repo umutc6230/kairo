@@ -12,7 +12,7 @@ from typing import Any
 
 from loguru import logger
 
-from app.exceptions import FarkliModelAcik, YerelLLMHatasi
+from app.exceptions import FarkliModelAcik, UygulamaHatasi, YerelLLMHatasi
 from app.services import sistem
 from app.services.ayarlar import AyarDeposu
 from app.services.yerel_llm import MODELLER, YerelLLM
@@ -80,7 +80,17 @@ class ModelYonetici:
     @asynccontextmanager
     async def kullan(self, model: str | None = None) -> AsyncIterator[YerelLLM]:
         """Modeli hazirlar ve is bitene kadar kilitli tutar (bu sirada model degistirilemez)."""
-        model = model or self.ayarlar.oku().aktif_model
+        a = self.ayarlar.oku()
+        model = model or a.aktif_model
+        if model in MODELLER and a.saglayici == "openrouter":
+            # Saglayici OpenRouter: yerel (llama.cpp) model hicbir yoldan acilmaz/kullanilmaz
+            raise UygulamaHatasi(
+                "OpenRouter seçili; yerel modeller kullanılmaz. AI Ayarları'ndan bir OpenRouter "
+                "modeli seç ya da sağlayıcıyı Yerel yap."
+                if not a.or_model
+                else "OpenRouter seçili; yerel modeller kullanılmaz. Yerel model için "
+                "sağlayıcıyı Yerel yap."
+            )
         if model not in MODELLER and self.uzak is not None:  # uzak: yerel kilide gerek yok
             llm = self.uzak.istemci(model)
             try:

@@ -15,8 +15,10 @@ shortcut: OAuth akisi yok; kimlik basligi (Bearer/API key) elle girilir, 401'de 
 
 from __future__ import annotations
 
+import concurrent.futures as cf
 import json
 import re
+import shutil
 import subprocess
 import sys
 import threading
@@ -38,6 +40,7 @@ PROTOKOL = "2025-06-18"
 AD = re.compile(r"^[a-z0-9][a-z0-9_-]{0,31}$")
 MAX_CIKTI = 20000
 ZAMAN_ASIMI = 30
+HAZIRLIK_SN = 12  # mesaj basina MCP hazirlik bekleme siniri (gerisi arka planda baglanir)
 TEMBEL_ESIK = 40_000  # arac semalari toplami bunu asarsa sunucu kendiliginden gecitle sunulur
 MAX_SEMA = 12_000  # arac_sema'nin modele dondurdugu en buyuk sema (karakter)
 
@@ -194,9 +197,25 @@ class _Baglanti:
 
     def _baslat(self) -> None:
         ortam = ortam_allowlist() | self.s.ortam
+        # Windows: npx/uvx gibi komutlar aslinda npx.cmd/.exe; kabuksuz CreateProcess uzantiyi
+        # tamamlamaz ("WinError 2"). Claude Code gibi PATH + PATHEXT ile cozulur.
+        komut = (
+            shutil.which(self.s.komut, path=ortam.get("PATH") or ortam.get("Path"))
+            or shutil.which(self.s.komut)
+            or self.s.komut
+        )
+        if not Path(komut).is_file() and not shutil.which(komut):
+            ipucu = {"npx": "Node.js", "node": "Node.js", "uvx": "uv (pip install uv)",
+                     "uv": "uv (pip install uv)", "python": "Python"}.get(
+                Path(self.s.komut).stem.lower(), ""
+            )  # fmt: skip
+            raise McpHatasi(
+                f"MCP sunucusu '{self.s.ad}' baslatilamadi: '{self.s.komut}' bulunamadi"
+                + (f"; {ipucu} kurulu olmali." if ipucu else ".")
+            )
         try:
             self.surec = subprocess.Popen(  # noqa: S603 - kullanicinin ekledigi sunucu komutu
-                [self.s.komut, *self.s.argumanlar],
+                [komut, *self.s.argumanlar],
                 stdin=subprocess.PIPE,
                 stdout=subprocess.PIPE,
                 stderr=subprocess.DEVNULL,
@@ -536,19 +555,39 @@ class McpYoneticisi:
         return {"ad": ad, "araclar": [a["name"] for a in b.araclar], "kaynaklar": kaynaklar,
                 "uzak": bool(s.url), "tembel": tembel_mi(s, b.araclar)}  # fmt: skip
 
+    def _paralel_hazirla(self, sunucular: list[McpSunucu]) -> list[tuple[McpSunucu, Any]]:
+        """Sunuculari PARALEL baslatir (Claude Code gibi). HAZIRLIK_SN icinde hazir olmayan bu
+        mesajda atlanir ama arka planda baglanmaya devam eder; sonraki mesajda hazir olur.
+        Sirali soguk acilis kullanicinin 11 sunucusunda ~85 sn suruyordu (canli olcum)."""
+        if not hasattr(self, "_havuz"):
+            self._havuz = cf.ThreadPoolExecutor(max_workers=16, thread_name_prefix="mcp")
+            self._suren: dict[str, cf.Future] = {}
+        isler: dict[str, tuple[McpSunucu, Any, cf.Future]] = {}
+        for s in sunucular:
+            b = self._baglanti(s)
+            f = self._suren.get(s.ad)
+            if f is None or f.done():  # hazirla idempotent: hazirsa aninda doner, kopmussa yeniden
+                f = self._havuz.submit(b.hazirla)
+                self._suren[s.ad] = f
+            isler[s.ad] = (s, b, f)
+        cf.wait([f for _, _, f in isler.values()], timeout=HAZIRLIK_SN)
+        sonuc = []
+        for s, b, f in isler.values():
+            if not f.done():
+                logger.info("MCP '{}' henuz hazir degil; arka planda baglaniyor.", s.ad)
+                continue
+            if f.exception() is not None:
+                continue  # baglanamayan sunucu sohbeti dusurmez
+            sonuc.append((s, b))
+        return sonuc
+
     def semalar_ve_isleyiciler(self, izin_uygula) -> tuple[list[dict], dict]:
         """Aktif sunucularin araclari. Baglanamayan sunucu atlanir (sohbeti dusurmez).
         izin_uygula(arac_adi, salt_okunur, ozet) PolitikaMotoru kararini uygular."""
         semalar: list[dict] = []
         isleyiciler: dict = {}
-        for s in self.tum():
-            if not s.aktif:
-                continue
-            b = self._baglanti(s)
-            try:
-                b.hazirla()
-            except McpHatasi:
-                continue
+        hazir = self._paralel_hazirla([s for s in self.tum() if s.aktif])
+        for s, b in hazir:
             if tembel_mi(s, b.araclar):
                 ts, ti = _tembel_araclar(s, b, izin_uygula)
                 semalar += ts

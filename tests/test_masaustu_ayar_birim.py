@@ -109,7 +109,7 @@ def test_gercek_genel_kisayol_tetiklenir_ve_cakisma_bildirilir() -> None:
     assert tid
     ikinci = m.GenelKisayol(lambda: None)
     assert ikinci.ayarla("Ctrl+Alt+Shift+F11") is False  # ayni kisayol zaten kayitli
-    assert "kullaniliyor" in ikinci.hata
+    assert "kullanılıyor" in ikinci.hata
     u = ctypes.windll.user32
     u.PostThreadMessageW.argtypes = [ctypes.c_ulong, ctypes.c_uint, ctypes.c_size_t,
                                      ctypes.c_ssize_t]  # fmt: skip

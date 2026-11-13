@@ -4,7 +4,7 @@ import { kacir } from "./md.js";
 import { $, $$, api, bildir, durum, onayla, sor } from "./ortak.js";
 
 const sec = (ad, secenekler) => `<select class="secim" data-ayar="${ad}">${secenekler.map(([v, e]) => `<option value="${v}">${e}</option>`).join("")}</select>`;
-const satir = (baslik, aciklama, kontrol) => `<div class="ayar-satir"><div><div>${baslik}</div>${aciklama ? `<div class="soluk kucuk">${aciklama}</div>` : ""}</div><div>${kontrol}</div></div>`;
+const satir = (baslik, aciklama, kontrol) => `<div class="ayar-satir"><div><div>${baslik}</div>${aciklama ? `<div class="soluk kucuk">${aciklama}</div>` : ""}</div><div class="ayar-kontrol">${kontrol}</div></div>`;
 const anahtar = (ad) => `<label class="anahtar"><input type="checkbox" data-ayar="${ad}"><span></span></label>`;
 
 export const EK_SEKMELER = `<button class="sekme" data-sekme="gorunum">Görünüm</button><button class="sekme" data-sekme="bildirim">Bildirimler</button><button class="sekme" data-sekme="masaustu">Masaüstü</button><button class="sekme" data-sekme="kod">Kod</button>`;
@@ -43,7 +43,7 @@ export const EK_PANELLER = `
 </div>`;
 
 // GitHub: token yapistirmadan, GitHub CLI'nin tarayici girisiyle baglanir (openbot cihaz kodu gibi)
-async function githubBaglan() {
+export async function githubBaglan() {
   try {
     let r = await api("/api/github/baglan", { method: "POST" });
     if (r.durum === "gh_yok") {

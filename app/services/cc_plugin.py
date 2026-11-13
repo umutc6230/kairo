@@ -193,6 +193,19 @@ def degisken_ac(metin: str, kok: Path) -> str:
     return re.sub(r"\$\{([A-Za-z_][A-Za-z0-9_]*)(:-([^}]*))?\}", yerine, metin)
 
 
+def hook_komutu(komut: str, kok: Path) -> str:
+    """Claude Code hook komutunu Windows'ta calisir hale getirir: ${CLAUDE_PLUGIN_ROOT} '/' ile
+    acilir; bastaki 'bash' Git Bash'e yonlendirilir (PATH'teki System32 altindaki bash.exe WSL'dir,
+    Windows yollarini goremez: 'No such file', cikis 127)."""
+    metin = degisken_ac(komut.replace("${CLAUDE_PLUGIN_ROOT}", kok.as_posix()), kok)
+    from app.agent.terminal import windows_bash
+
+    gb = windows_bash()
+    if gb and re.match(r"^\s*bash(\s|$)", metin):
+        metin = re.sub(r"^\s*bash", lambda _: f'"{gb}"', metin, count=1)
+    return metin
+
+
 def komut_genislet(govde: str, arg: str, kok: Path) -> str:
     parcalar = arg.split()
     metin = govde.replace("$ARGUMENTS", arg)

@@ -8,6 +8,7 @@ import { sayfaModelleriniYenile, sayfalarKur } from "./sayfalar.js";
 import { modelSayfasiYukle, modellerKur } from "./modeller.js";
 import { projeAc, projeDurumu, projeKur } from "./proje.js";
 import { skillSayfasiYukle, skillerKur } from "./skiller.js";
+import { eklentilerKur, yukle as eklentileriYukle } from "./eklentiler.js";
 import { gorevBildirimIzle, gorevSayfasiYukle, gorevlerKur } from "./gorevler.js";
 import { dikteDurumuYenile, dikteKur } from "./dikte.js";
 import { baglamYenile, sagPanelKur } from "./sagpanel.js";
@@ -17,7 +18,7 @@ import { rutinleriYukle, rutinlerKur } from "./rutinler.js";
 import { ajanlarKur, ajanlarYukle } from "./ajanlar.js";
 import { ajanBloklariniCiz, ajanliOturum, akisVar, durdur, mesajlariCiz, sohbetKur, yeniSohbetEkrani } from "./sohbet.js";
 
-const BASLIKLAR = { karsilastir: "Karşılaştır", ocr: "OCR testi", arac: "Araç testi", paket: "Test paketi", skiller: "Skill'ler ve talimatlar", modeller: "Modeller", gorevler: "Ajan görevleri", rutinler: "Rutinler", ajanlar: "Ajanlar" };
+const BASLIKLAR = { karsilastir: "Karşılaştır", ocr: "OCR testi", arac: "Araç testi", paket: "Test paketi", eklentiler: "Eklentiler", skiller: "Skill'ler ve talimatlar", modeller: "Modeller", gorevler: "Ajan görevleri", rutinler: "Rutinler", ajanlar: "Ajanlar" };
 const gecmis = [];
 let gecmisKonum = -1;
 
@@ -25,7 +26,7 @@ let gecmisKonum = -1;
 function gorunumGoster(ad) {
   durum.gorunum = ad;
   $$(".gorunum").forEach((g) => { g.hidden = g.id !== `g-${ad}`; });
-  $$(".nav-oge").forEach((n) => n.classList.toggle("aktif", n.dataset.git === ad || (n.dataset.git === "ozellestir" && ["skiller", "modeller"].includes(ad))));
+  $$(".nav-oge").forEach((n) => n.classList.toggle("aktif", n.dataset.git === ad || (n.dataset.git === "ozellestir" && ["eklentiler", "skiller", "modeller"].includes(ad))));
   $$(".oturum").forEach((o) => o.classList.toggle("aktif", ad === "sohbet" && o.dataset.id === durum.oturumId));
   if (BASLIKLAR[ad]) baslikAyarla(BASLIKLAR[ad]);
 }
@@ -41,6 +42,7 @@ function git(hedef, { kaydetme = false } = {}) {
   else {
     gorunumGoster(hedef.tur);
     if (hedef.tur === "skiller") skillSayfasiYukle();
+    if (hedef.tur === "eklentiler") eklentileriYukle().catch((e) => bildir(e.message, "hata"));
     if (hedef.tur === "gorevler") gorevSayfasiYukle();
     if (hedef.tur === "rutinler") rutinleriYukle();
     if (hedef.tur === "ajanlar") ajanlarYukle();
@@ -146,11 +148,11 @@ async function oturumlariYenile() {
 // Claude Code Desktop gibi: ayri ozellik sayfasi yok. Ozellestir = skill/talimat + modeller
 // (ayni gorunumde sekme), hafiza/hook/AI ayarlari Ayarlar penceresinde.
 function ozellestirSekmeleri() {
-  const sekmeler = [["skiller", "Skill'ler ve talimatlar"], ["modeller", "Modeller"], ["mcp", "Bağlayıcılar"], ["plugin", "Plugin'ler"], ["uzanti", "Uzantılar"], ["hafiza", "Hafıza"], ["hooks", "Hook'lar"]];
-  for (const ad of ["skiller", "modeller"]) {
+  const sekmeler = [["eklentiler", "Eklentiler"], ["skiller", "Skill'ler ve talimatlar"], ["modeller", "Modeller"], ["mcp", "Bağlayıcılar"], ["plugin", "Plugin'ler"], ["uzanti", "Uzantılar"], ["hafiza", "Hafıza"], ["hooks", "Hook'lar"]];
+  for (const ad of ["eklentiler", "skiller", "modeller"]) {
     const ic = document.querySelector(`#g-${ad} .sayfa-ic`);
     if (!ic || ic.querySelector(".ozellestir-sekmeler")) continue;
-    const bar = el(`<div class="sekmeler ozellestir-sekmeler" role="tablist">${sekmeler.map(([k, m]) => `<button class="sekme ${k === ad ? "aktif" : ""}" role="tab" aria-selected="${k === ad}" data-oz="${k}">${kacir(m)}</button>`).join("")}</div>`);
+    const bar = el(`<div class="sekmeler ozellestir-sekmeler" role="tablist">${sekmeler.map(([k, m]) => `<button class="sekme ${k === ad ? "aktif" : ""}" ${k === "modeller" ? "data-yalniz-yerel" : ""} role="tab" aria-selected="${k === ad}" data-oz="${k}">${kacir(m)}</button>`).join("")}</div>`);
     bar.querySelectorAll("[data-oz]").forEach((b) => {
       b.onclick = () => (["mcp", "plugin", "uzanti", "hafiza", "hooks"].includes(b.dataset.oz) ? ayarlarAc(b.dataset.oz) : git({ tur: b.dataset.oz }));
     });
@@ -222,6 +224,9 @@ async function oturumSil(o) {
 // ---------------- durum / model ----------------
 const DURUM_METNI = { hazir: "hazır", yukleniyor: "yükleniyor", kapali: "kapalı", hata: "hata", bilinmiyor: "…" };
 
+/** OpenRouter seciliyse yerel (llama.cpp) modeller arayuzde gorunmez ve kullanilmaz. */
+const uzakMi = () => durum.ayarlar?.saglayici === "openrouter";
+
 async function durumYenile() {
   try {
     durum.sunucu = await api("/api/durum");
@@ -233,6 +238,18 @@ async function durumYenile() {
   const s = durum.sunucu;
   const a = durum.ayarlar;
   const aktif = s.yuklenen_model || a.model;
+  document.body.classList.toggle("uzak-saglayici", uzakMi());
+  if (uzakMi()) {
+    $("#sunucu-nokta").className = `nokta ${a.or_model ? "hazir" : "hata"}`;
+    $("#sunucu-metni").textContent = a.or_model ? `OpenRouter · ${a.or_model}` : "OpenRouter · model seçilmedi";
+    $("#hap-model-metni").textContent = a.or_model || "Model seç";
+    const dus0 = durum.bilgi.dusunme_secenekleri.find((d) => d.deger === a.dusunme);
+    $("#hap-dusunme-metni").textContent = dus0 ? dus0.kisa : a.dusunme;
+    bantGuncelle();
+    bosDurumKartlari();
+    agecidiGuncelle();
+    return;
+  }
   $("#sunucu-nokta").className = `nokta ${s.durum}`;
   $("#hap-nokta").className = `nokta buyuk ${s.durum}`;
   $("#sunucu-metni").textContent = s.durum === "kapali" ? "Model kapalı" : `${modelAdi(aktif)} · ${DURUM_METNI[s.durum] || s.durum}`;
@@ -288,7 +305,14 @@ function bosDurumKartlari() {
   const kap = $("#model-kartlari");
   const a = durum.ayarlar;
   kap.innerHTML = "";
-  for (const m of durum.sunucu.modeller) {
+  // AI Ayarlari'ndaki saglayici ve model ne ise o gorunur
+  kap.append(el(`<div class="kart-baslik-satir soluk kucuk">Sağlayıcı: ${uzakMi() ? "OpenRouter" : "Yerel (llama.cpp)"}</div>`));
+  if (uzakMi()) {
+    const k = el(`<button class="kart-satir secili"><span data-ikon="model"></span><span>${kacir(a.or_model || "Model seç")}</span><span class="sag">OpenRouter</span>${a.or_model ? '<span class="tik" data-ikon="tik"></span>' : ""}</button>`);
+    k.onclick = () => ayarlarAc();
+    kap.append(k);
+  }
+  for (const m of uzakMi() ? [] : durum.sunucu.modeller) {
     const k = el(`<button class="kart-satir ${m.anahtar === a.model ? "secili" : ""} ${m.dosya_var ? "" : "pasif"}">
       <span data-ikon="model"></span><span>${kacir(m.ad)}</span>
       <span class="sag">${m.dosya_var ? `~${m.ram_gb} GB${m.ses ? " · ses" : ""}` : "indirilmedi"}</span>
@@ -312,8 +336,9 @@ function dusunmeMenusu(capa, yukari = true) {
 
 function modelMenusu(capa) {
   const a = durum.ayarlar;
-  const ogeler = [{ baslik: "Model" }];
-  for (const m of durum.sunucu.modeller) {
+  const ogeler = [{ baslik: uzakMi() ? "Model · OpenRouter" : "Model" }];
+  if (uzakMi()) ogeler.push({ metin: a.or_model || "Model seçilmedi", sag: "uzak", secili: !!a.or_model, eylem: () => ayarlarAc() });
+  for (const m of uzakMi() ? [] : durum.sunucu.modeller) {
     ogeler.push({
       metin: m.ad, sag: m.dosya_var ? `~${m.ram_gb} GB` : "yok", secili: m.anahtar === a.model, pasif: !m.dosya_var,
       eylem: () => ayarKaydet({ model: m.anahtar }, true),
@@ -329,6 +354,11 @@ function modelMenusu(capa) {
 
 function sunucuMenusu(capa, yukari) {
   const s = durum.sunucu;
+  if (uzakMi()) {
+    menuAc(capa, [{ baslik: `OpenRouter · ${durum.ayarlar.or_model || "model seçilmedi"}` }, "ayrac",
+      { metin: "AI Ayarları", ikon: "disli", eylem: () => ayarlarAc() }], { yukari, sagaHizali: !yukari });
+    return;
+  }
   menuAc(capa, [
     { baslik: s.sunucu_acik ? `Açık: ${s.acik_modeller.join(", ") || "?"}` : "Model sunucusu kapalı" },
     { metin: `Modeli yükle (${modelAdi(durum.ayarlar.model)})`, ikon: "guc", eylem: () => modelYukle() },
@@ -337,6 +367,25 @@ function sunucuMenusu(capa, yukari) {
     "ayrac",
     { metin: "AI Ayarları", ikon: "disli", eylem: () => ayarlarAc() },
   ], { yukari, sagaHizali: !yukari });
+}
+
+// OpenBot "Activity": ajanlarin yaptigi her islem, onay karari ve kapsami (denetim kaydi)
+async function etkinlikAc() {
+  const KAPSAM = { tek: "bir kez", sohbet: "bu görev", her_zaman: "her zaman" };
+  const govde = el(`<div><div class="satir"><label class="onay"><input type="checkbox" id="et-yan"> Yalnız değişiklik yapanlar</label></div><div id="et-liste" class="kaynak-liste"></div></div>`);
+  const ciz = async () => {
+    const yan = govde.querySelector("#et-yan").checked;
+    try {
+      const { etkinlik } = await api(`/api/etkinlik?adet=300&yalniz_yan_etkili=${yan}`);
+      govde.querySelector("#et-liste").innerHTML = etkinlik.map((x) => `<div class="etk-satir">
+        <div><span class="soluk kucuk">${kacir(x.zaman.replace("T", " "))}</span> <code>${kacir(x.arac)}</code> <span class="rozet ${x.durum === "hata" ? "kirmizi" : ""}">${kacir(x.durum)}</span>${x.yan_etkili ? ' <span class="rozet sari">değişiklik</span>' : ""}${x.onay ? ` <span class="rozet">onay: ${kacir(x.onay.karar)}${x.onay.karar === "onayli" ? ` (${kacir(KAPSAM[x.onay.kapsam] || x.onay.kapsam)})` : ""}</span>` : ""}</div>
+        <div class="soluk kucuk">${kacir(x.aciklama || x.dosya || "")}</div>
+        <div class="soluk kucuk">Görev: ${kacir(x.gorev)}</div></div>`).join("") || '<div class="soluk">Henüz etkinlik yok.</div>';
+    } catch (e) { bildir(e.message, "hata"); }
+  };
+  govde.querySelector("#et-yan").onchange = ciz;
+  modal({ baslik: "Etkinlik", icerik: govde, genis: true });
+  ciz();
 }
 
 async function hepsiniYenile() {
@@ -368,6 +417,7 @@ async function baslat() {
   dockKur();
   rutinlerKur();
   ajanlarKur();
+  eklentilerKur({ git });
   document.addEventListener("oturumlar-degisti", degisiklikYenile);
   $("#baslik-menu").onclick = (e) => baslikMenusu(e.currentTarget);
   $("#btn-daha").onclick = (e) => menuAc(e.currentTarget, [
@@ -375,10 +425,11 @@ async function baslat() {
     { metin: "Plan", ikon: "liste", eylem: () => dockAcKapa("plan", true) },
     { metin: "Arka plan işleri", ikon: "terminal", eylem: () => arkaPlanIsleri() },
     { metin: "Ajan görevleri", ikon: "liste", eylem: () => git({ tur: "gorevler" }) },
+    { metin: "Etkinlik (ne yapıldı)", ikon: "saat", eylem: () => etkinlikAc() },
     { metin: uyanikAcik ? "Uyanık tutmayı kapat" : "Bilgisayarı uyanık tut", ikon: "guc", eylem: () => uyanikDegistir() },
     "ayrac",
-    { metin: "Özelleştir (skill, plugin)", ikon: "sihir", eylem: () => git({ tur: "skiller" }) },
-    { metin: "Modeller", ikon: "model", eylem: () => git({ tur: "modeller" }) },
+    { metin: "Eklentiler (bağlayıcı, skill, plugin)", ikon: "sihir", eylem: () => git({ tur: "eklentiler" }) },
+    ...(uzakMi() ? [] : [{ metin: "Modeller", ikon: "model", eylem: () => git({ tur: "modeller" }) }]),
     { metin: "Ayarlar", ikon: "disli", eylem: () => ayarlarAc() },
     { metin: "Hakkında", ikon: "bilgi", eylem: () => ayarlarAc("hakkinda") },
   ], { sagaHizali: true });
@@ -390,7 +441,7 @@ async function baslat() {
       const h = n.dataset.git;
       if (h === "ara") aramaAc(oturumAc);
       else if (h === "artifactler") artifactPenceresi();
-      else git({ tur: h === "ozellestir" ? "skiller" : h });
+      else git({ tur: h === "ozellestir" ? "eklentiler" : h });
     };
   });
   $("#btn-kenar").onclick = () => $("#kok").classList.toggle("kenar-kapali");

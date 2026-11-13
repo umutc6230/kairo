@@ -35,7 +35,7 @@ class Zamanlama(BaseModel):
     ad: str = Field(min_length=1, max_length=80)
     hedef: str = Field(min_length=1, max_length=4000)
     proje_kok: str = Field(min_length=1)
-    tur: Literal["aralik", "gunluk"]
+    tur: Literal["aralik", "gunluk", "bir_kez"]  # bir_kez: OpenBot "Now, once"
     aralik_dk: int = Field(default=60, ge=5, le=7 * 24 * 60)
     saat: str = Field(default="09:00", pattern=r"^([01]\d|2[0-3]):[0-5]\d$")
     gunler: list[int] = Field(default=[0, 1, 2, 3, 4, 5, 6])  # 0 = Pazartesi
@@ -46,6 +46,10 @@ class Zamanlama(BaseModel):
     aktif: bool = True
     baslangic: str = Field(default_factory=lambda: datetime.now(UTC).isoformat())
     son_plan: str = ""  # islenmis son planlanan tetikleme (UTC ISO)
+    # OpenBot rutin cumlesi: Ne / Ne zaman / Ne yapar (yap | bildir) / Ne zamana kadar
+    davranis: Literal["yap", "bildir"] = "yap"  # bildir: degisiklik yapmaz, yalniz raporlar
+    bitis_kosulu: str = Field(default="", max_length=500)  # dolu: hedef; saglaninca durur
+    tamamlandi: str = ""  # hedefe ulasildigi an (UTC ISO)
 
     @field_validator("saat_dilimi")
     @classmethod
@@ -69,6 +73,9 @@ def _utc(s: str) -> datetime:
 
 def sonraki(z: Zamanlama, sonra: datetime) -> datetime:
     """`sonra`dan (UTC) kesin sonraki planlanan tetikleme (UTC)."""
+    if z.tur == "bir_kez":  # yalniz baslangic aninda; sonrasi yok
+        bas = _utc(z.baslangic)
+        return bas if sonra < bas else bas + timedelta(days=365 * 100)
     if z.tur == "aralik":
         bas = _utc(z.baslangic)
         adim = timedelta(minutes=z.aralik_dk)
@@ -124,6 +131,8 @@ class Zamanlayici:
         z = Zamanlama(**veri)
         z.baslangic = (simdi or datetime.now(UTC)).isoformat()
         z.son_plan = z.baslangic  # olusturma oncesi tetiklemeler "kacirilmis" sayilmaz
+        if z.tur == "bir_kez":  # "simdi, bir kez": ilk tick'te calisir
+            z.son_plan = (_utc(z.baslangic) - timedelta(seconds=1)).isoformat()
         v = self._oku()
         v["zamanlamalar"].append(z.model_dump())
         self._yaz(v)
@@ -198,10 +207,21 @@ class Zamanlayici:
                 t.durum = "atlandi_overlap"
             else:
                 baslat.append(t)
+            if z.tur == "bir_kez":  # tek seferlik rutin calistiktan sonra kapanir
+                z.aktif = False
+                v["zamanlamalar"][zi] = z.model_dump()
             gecmis.append(t)
         v["gecmis"] = [t.model_dump() for t in gecmis]
         self._yaz(v)
         return baslat
+
+    def hedefe_ulasti(self, zid: str, simdi: datetime) -> None:
+        """Bitis kosulu saglandi: rutin durur (OpenBot goal 'until')."""
+        v = self._oku()
+        for z in v["zamanlamalar"]:
+            if z["id"] == zid:
+                z["aktif"], z["tamamlandi"] = False, simdi.isoformat()
+        self._yaz(v)
 
     def baslatildi(self, t: Tetik, run_id: str, hata: str = "") -> None:
         v = self._oku()

@@ -73,7 +73,10 @@ def baslat(sunucu_url: str, geri: str, c: httpx.Client, client_id: str = "") -> 
     m = kesif(sunucu_url, c)
     if not client_id:
         if not m["registration_endpoint"]:
-            raise UygulamaHatasi("Sunucu otomatik istemci kaydi desteklemiyor; client_id gerekli.")
+            raise UygulamaHatasi(
+                "Bu sunucu tarayıcıdan otomatik girişi desteklemiyor. Sağlayıcının API anahtarını "
+                "ya da token'ını bağlayıcı başlığına (Authorization) ekleyin."
+            )
         r = c.post(_https(m["registration_endpoint"]), json={
             "client_name": "Kairo", "redirect_uris": [geri], "token_endpoint_auth_method": "none",
             "grant_types": ["authorization_code", "refresh_token"], "response_types": ["code"],

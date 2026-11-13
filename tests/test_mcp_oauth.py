@@ -102,3 +102,16 @@ async def test_api_geri_donus_gecersiz_state(istemci) -> None:
         "/api/mcp/oauth/geri", params={"state": "yok", "code": "x"}, headers={"x-yas-oturum": ""}
     )
     assert r.status_code == 200 and "Gecersiz" in r.text
+
+
+async def test_api_geri_donus_dis_referer_kabul(istemci) -> None:
+    # saglayici sitesinden yonlendirme: Referer dis olsa da geri donus islenir
+    r = await istemci.get(
+        "/api/mcp/oauth/geri",
+        params={"state": "yok", "code": "x"},
+        headers={"x-yas-oturum": "", "referer": "https://vercel.com/oauth/authorize"},
+    )
+    assert r.status_code == 200 and "Gecersiz" in r.text
+    # baska uclar icin dis kaynak hala reddedilir
+    r = await istemci.get("/api/bilgi", headers={"origin": "https://vercel.com"})
+    assert r.status_code == 403

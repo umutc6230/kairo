@@ -1,6 +1,6 @@
 // AI Ayarlari, Hakkinda ve Arama pencereleri.
 import { uzantiKomutlariniYukle, uzantiSekmesiKur } from "./uzantilar.js";
-import { aracPaketleriCiz, baglayiciIceAktarCiz, EK_PANELLER, EK_SEKMELER, ekSekmeKur } from "./ayarlar2.js";
+import { aracPaketleriCiz, baglayiciIceAktarCiz, EK_PANELLER, EK_SEKMELER, ekSekmeKur, githubBaglan } from "./ayarlar2.js";
 import { ikon, ikonlariYerlestir } from "./ikonlar.js";
 import { kacir } from "./md.js";
 import { $, $$, api, bildir, durum, el, modal, onayla, sayi, sor } from "./ortak.js";
@@ -71,7 +71,7 @@ export function ayarlarAc(sekme = "ai") {
       <div id="ay-dusunme" class="ayar-grup secenek-sira"></div>
       <h3 class="ay-bolum" id="ay-b-yetki">Yetkiler</h3>
       <div class="ayar-not">Proje açık olmasa da model Claude Code gibi iş yapar. Okuma serbesttir; dosya yazma, komut, bağlayıcı (GitHub vb.) ve web, <b>Tam yetki</b> kapalıyken senin onayınla çalışır.</div>
-      <div class="anahtar-satir tam-yetki"><div><div>Tam yetki <span class="rozet sari">onaysız</span></div><div class="ayar-not">Açıkken ajan dosya yazar, komut çalıştırır, bağlayıcıları (GitHub, MCP) ve web'i <b>sormadan</b> kullanır. Yine de sorulanlar: disk/sürücü silme, biçimlendirme, bilgisayarı kapatma, zorla git push gibi geri alınamaz komutlar. Gizli dosyalar (.env, ssh anahtarı) hiç okunmaz. Planla modu salt okunur kalır.</div></div>
+      <div class="anahtar-satir tam-yetki"><div><div>Tam yetki <span class="rozet sari">onaysız</span></div><div class="ayar-not">Açıkken ajan dosya yazar, komut çalıştırır, bağlayıcıları (GitHub, MCP) ve web'i <b>sormadan</b> kullanır. Yine de sorulanlar: disk/sürücü silme, biçimlendirme, bilgisayarı kapatma, zorla git push gibi geri alınamaz komutlar ve gönderme, paylaşma, yayınlama, ödeme gibi dış etkili eylemler (onay kartında "Her zaman izin ver" dersen o tür bir daha sorulmaz). Gizli dosyalar (.env, ssh anahtarı) hiç okunmaz. Planla modu salt okunur kalır.</div></div>
         <label class="anahtar"><input type="checkbox" id="ay-tam-yetki" ${a.tam_yetki ? "checked" : ""}><span></span></label></div>
       <div class="anahtar-satir"><div><div>Sohbette araçlar</div><div class="ayar-not">Model dosyaları listeleyip okuyabilir ve arayabilir; yazma, silme ve komut Tam yetki kapalıyken onay ister. .env, ssh anahtarı, parola dosyaları hiç okunmaz.</div></div>
         <label class="anahtar"><input type="checkbox" id="ay-araclar" ${a.sohbet_araclari ? "checked" : ""}><span></span></label></div>
@@ -83,6 +83,9 @@ export function ayarlarAc(sekme = "ai") {
         <label class="anahtar"><input type="checkbox" id="ay-masaustu-hepsi" ${(a.masaustu_izinli || []).includes("*") ? "checked" : ""}><span></span></label></div>
       <div class="ayar-grup" id="ay-masaustu-liste" ${(a.masaustu_izinli || []).includes("*") ? "hidden" : ""}><label>Ya da yalnız şu programlar</label>
         <input class="alan" id="ay-masaustu" placeholder="ör. notepad.exe, calc.exe (boş: kapalı)" value="${kacir((a.masaustu_izinli || []).filter((x) => x !== "*").join(", "))}"></div>
+      <div class="ayar-grup"><label>Onay kuralları</label>
+        <div class="ayar-not">Onay kartında "Her zaman izin ver" dediğin işlem türleri. Kaldırırsan o tür yeniden sorulur.</div>
+        <div id="ay-kurallar" class="kaynak-liste"><span class="soluk kucuk">Yükleniyor…</span></div></div>
       <h3 class="ay-bolum" id="ay-b-cevap">Cevap</h3>
       <div class="ayar-grup"><label>Sistem istemi (isteğe bağlı)</label><textarea class="alan" id="ay-sistem" rows="3" placeholder="Örn: Her zaman Türkçe ve kısa cevap ver.">${kacir(a.sistem_istemi)}</textarea></div>
       <div class="satir"><div class="ayar-grup" style="flex:1"><label>Sıcaklık (${a.sicaklik})</label><input type="range" id="ay-sicaklik" min="0" max="1.5" step="0.1" value="${a.sicaklik}"></div>
@@ -337,6 +340,13 @@ export function ayarlarAc(sekme = "ai") {
                   };
                 });
                 b.disabled = false;
+                return;
+              }
+              if (b.dataset.is === "oauth" && /githubcopilot\.com|github\.com/i.test(s.url || "")) {
+                // GitHub MCP otomatik istemci kaydi (OAuth DCR) desteklemez: GitHub CLI girisiyle token baglanir
+                await githubBaglan();
+                b.disabled = false;
+                mcpCiz();
                 return;
               }
               if (b.dataset.is === "oauth") {
@@ -605,6 +615,15 @@ export function ayarlarAc(sekme = "ai") {
     import("./proje.js").then((m) => m.projeYenile()).catch(() => {});
   };
   alanKaydet("#ay-tarayici", "tarayici_acik");
+  const kurallarCiz = (liste) => {
+    const k = $("#ay-kurallar", govde);
+    if (!k) return;
+    k.innerHTML = liste.length ? liste.map((x) => `<div class="satir"><span style="flex:1"><code>${kacir(x.arac)}</code> <span class="soluk kucuk">${kacir(x.yan_etki)}${x.anahtar.split("|")[2] ? ` · ${kacir(x.anahtar.split("|")[2])}` : ""}</span></span><button class="btn kucuk tehlike" data-kural="${kacir(x.id)}">Kaldır</button></div>`).join("") : '<span class="soluk kucuk">Kural yok.</span>';
+    k.querySelectorAll("[data-kural]").forEach((b) => {
+      b.onclick = async () => { try { kurallarCiz((await api(`/api/onay-kurallari/${b.dataset.kural}`, { method: "DELETE" })).kurallar); } catch (e) { bildir(e.message, "hata"); } };
+    });
+  };
+  api("/api/onay-kurallari").then((r) => kurallarCiz(r.kurallar)).catch(() => kurallarCiz([]));
   alanKaydet("#ay-masaustu", "masaustu_izinli", (v) => v.split(",").map((x) => x.trim()).filter(Boolean));
   $("#ay-masaustu-hepsi", govde).onchange = async (e) => {
     const hepsi = e.target.checked;

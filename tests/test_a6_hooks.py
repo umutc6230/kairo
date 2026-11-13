@@ -112,3 +112,40 @@ async def test_slash_komut_dosyasi_ve_html(istemci) -> None:
     for k in ("/compact", "/cost", "/todos", "/export", "/rewind", "/resume", "/init"):
         assert f'"{k}"' in js
     assert "HENUZ_YOK" not in js
+
+
+def test_claude_plugin_hooku_yalniz_cikis_2_ile_engeller(tmp_path) -> None:
+    """Bozuk kurulumlu plugin hook'u (cikis 127) sohbeti kilitlememeli; Claude Code gibi."""
+    d = HookDeposu(tmp_path)
+    bozuk = _betik(tmp_path, "k", "import sys; sys.exit(127)")
+    engel = _betik(tmp_path, "e", "import sys; sys.stderr.write('dur'); sys.exit(2)")
+    tanim = {"olay": "pre_tool", "tur": "guvenlik", "bicim": "claude", "kaynak": "plugin:x"}
+    d.ek_kaynak = lambda: [{**tanim, "id": "p1", "ad": "bozuk", "komut": bozuk}]
+    assert d.tetikle("pre_tool", {}, arac="x").izin
+    d.ek_kaynak = lambda: [{**tanim, "id": "p2", "ad": "engel", "komut": engel}]
+    s = d.tetikle("pre_tool", {}, arac="x")
+    assert not s.izin and "dur" in s.neden
+
+
+def test_plugin_hook_komutu_git_bash_ve_duz_yol(tmp_path) -> None:
+    from app.agent.terminal import windows_bash
+    from app.services.cc_plugin import hook_komutu
+
+    k = hook_komutu('bash "${CLAUDE_PLUGIN_ROOT}/h.sh"', tmp_path)
+    assert tmp_path.as_posix() + "/h.sh" in k and "\\" not in k.split('" "')[-1]
+    if windows_bash():
+        assert k.startswith(f'"{windows_bash()}"')
+
+
+def test_claude_async_hook_beklenmez(tmp_path) -> None:
+    """{"async": true} ilk satiri: hook arka planda surer, sohbet beklemez (Claude Code gibi)."""
+    import time
+
+    yavas = _betik(tmp_path, "a", 'import json,time,sys; print(json.dumps({"async": True}), '
+                   'flush=True); time.sleep(8)')  # fmt: skip
+    d = HookDeposu(tmp_path)
+    d.ek_kaynak = lambda: [{"id": "pa", "ad": "async", "olay": "pre_tool", "tur": "guvenlik",
+                            "bicim": "claude", "kaynak": "plugin:x", "komut": yavas}]  # fmt: skip
+    bas = time.monotonic()
+    assert d.tetikle("pre_tool", {}, arac="x").izin
+    assert time.monotonic() - bas < 5

@@ -14,6 +14,7 @@ gecer.
 
 from __future__ import annotations
 
+import functools
 import hashlib
 import re
 import shutil
@@ -235,6 +236,39 @@ def varsayilan_kaynaklar(veri_dizini: Path) -> list[tuple[str, Path]]:
     ]
 
 
+def _imza(kaynaklar: tuple) -> tuple:
+    """Skill dosyalarinin ucuz imzasi (yalniz stat; icerik okunmaz)."""
+    parcalar: list = []
+    for kaynak, kok in kaynaklar:
+        parcalar.append((kaynak, str(kok)))
+        try:
+            ogeler = list(kok.iterdir())
+        except OSError:
+            continue
+        for oge in ogeler:
+            f = oge / "SKILL.md" if oge.is_dir() else oge
+            try:
+                st = f.stat()
+            except OSError:
+                continue
+            parcalar.append((str(f), st.st_mtime_ns, st.st_size))
+    return tuple(parcalar)
+
+
+def _bosaltir(f):
+    """Skill yazan metodlar: once ve sonra onbellegi bosaltir (yeni/silinen skill hemen gorunur)."""
+
+    @functools.wraps(f)
+    def w(self, *a, **k):
+        self._onbellek = None
+        try:
+            return f(self, *a, **k)
+        finally:
+            self._onbellek = None
+
+    return w
+
+
 class SkillDeposu:
     def __init__(self, veri_dizini: Path, kaynaklar: list[tuple[str, Path]] | None = None) -> None:
         self.uygulama_dizini = veri_dizini / "skills"
@@ -243,12 +277,28 @@ class SkillDeposu:
         self.proje_kaynaklari: Callable[[], list[tuple[str, Path]]] = lambda: []
 
     def kesfet(self) -> list[Skill]:
+        """Onbellekli tarama: her mesajda iki kez taranip ~0.6 sn yiyordu. Dosyalarin imzasi
+        (yol, degisme zamani, boyut) ayniysa YAML yeniden okunmaz; disaridan yapilan her
+        ekleme/silme/duzenleme imzayi degistirir."""
+        kaynaklar = (*self.kaynak_listesi, *self.proje_kaynaklari())
+        imza = _imza(kaynaklar)
+        onb = getattr(self, "_onbellek", None)
+        if onb and onb[0] == imza:
+            return list(onb[1])
+        sonuc = self._tara(kaynaklar)
+        self._onbellek = (imza, sonuc)
+        return list(sonuc)
+
+    def onbellegi_bosalt(self) -> None:
+        self._onbellek = None
+
+    def _tara(self, kaynaklar: tuple) -> list[Skill]:
         """Tum kaynaklari tarar. Ayni dosya (junction/kisayol) iki kaynakta varsa bir kez alinir;
         ayni ad iki kez varsa ilki (claude > brain > uygulama) kazanir."""
         gorulen_dosya: set[Path] = set()
         gorulen_ad: set[str] = set()
         sonuc: list[Skill] = []
-        for kaynak, kok in [*self.kaynak_listesi, *self.proje_kaynaklari()]:
+        for kaynak, kok in kaynaklar:
             if not kok.is_dir():
                 continue
             for oge in sorted(kok.iterdir(), key=lambda p: p.name.lower()):
@@ -278,6 +328,7 @@ class SkillDeposu:
         raise Bulunamadi(f"Skill bulunamadi: {ad}")
 
     # ---- uygulama skill'leri (eklenebilir/silinebilir) ----
+    @_bosaltir
     def guncelle(self, ad: str, aciklama: str, icerik: str, surum: str = "",
                  gereken_araclar: list[str] | None = None) -> Skill:  # fmt: skip
         """Yalniz uygulama skill'i duzenlenir; Claude/brain/proje kaynaklari salt okunur."""
@@ -316,6 +367,7 @@ class SkillDeposu:
                       key=lambda p: int(p.stem.split(".r")[-1]))  # fmt: skip
         return [{"revizyon": int(p.stem.split(".r")[-1]), "boyut": p.stat().st_size} for p in eski]
 
+    @_bosaltir
     def geri_al(self, ad: str, revizyon: int) -> Skill:
         s = self.getir(ad)
         if s.kaynak != "uygulama" or s.klasor is None:
@@ -327,6 +379,7 @@ class SkillDeposu:
         shutil.copy2(kaynak, s.klasor / "SKILL.md")
         return self.getir(ad)
 
+    @_bosaltir
     def ajan_kaydet(self, ad: str, aciklama: str, icerik: str, okunan_revizyon: int = 0) -> dict:
         """Ajanin skill_kaydet araci: yoksa olusturur, varsa (okunan revizyon guncelse) gunceller.
         Claude/brain/proje skill'leri DEGISTIRILMEZ; ajan yalniz uygulama skill'i yazar."""
@@ -362,6 +415,7 @@ class SkillDeposu:
         gecici.write_text(f"---\n{on}---\n\n{icerik.strip()}\n", encoding="utf-8")
         gecici.replace(hedef)
 
+    @_bosaltir
     def olustur(self, ad: str, aciklama: str, icerik: str, surum: str = "",
                 gereken_araclar: list[str] | None = None) -> Skill:  # fmt: skip
         ad = ad.strip().lower()
@@ -376,6 +430,7 @@ class SkillDeposu:
         self._yaz(klasor, ad, aciklama, icerik, surum, gereken_araclar)
         return self.getir(ad)
 
+    @_bosaltir
     def sil(self, ad: str) -> None:
         s = self.getir(ad)
         if s.kaynak != "uygulama" or s.klasor is None:

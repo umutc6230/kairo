@@ -44,13 +44,14 @@ const P = {
 };
 
 // Kairo karakteri: kucuk piksel baykus (turkuaz).
-const LOGO = `<svg viewBox="0 0 13 10" shape-rendering="crispEdges" fill="#2bb6a8">
-<rect x="2" y="0" width="1" height="1"/><rect x="10" y="0" width="1" height="1"/>
-<rect x="2" y="1" width="9" height="8"/><rect x="1" y="4" width="1" height="3"/><rect x="11" y="4" width="1" height="3"/>
-<rect x="3" y="2" width="3" height="3" fill="#f4f1e8"/><rect x="7" y="2" width="3" height="3" fill="#f4f1e8"/>
-<rect x="4" y="3" width="1" height="1" fill="#1f1f1e"/><rect x="8" y="3" width="1" height="1" fill="#1f1f1e"/>
-<rect x="6" y="5" width="1" height="1" fill="#f2b134"/>
-<rect x="4" y="9" width="2" height="1" fill="#f2b134"/><rect x="7" y="9" width="2" height="1" fill="#f2b134"/></svg>`;
+const LOGO = `<svg class="baykus" viewBox="0 0 13 10" shape-rendering="crispEdges" fill="#2bb6a8">
+<g class="bk-govde"><rect x="2" y="0" width="1" height="1"/><rect x="10" y="0" width="1" height="1"/>
+<rect x="2" y="1" width="9" height="8"/>
+<g class="bk-goz"><rect x="3" y="2" width="3" height="3" fill="#f4f1e8"/><rect x="7" y="2" width="3" height="3" fill="#f4f1e8"/>
+<rect class="bk-bebek" x="4" y="3" width="1" height="1" fill="#1f1f1e"/><rect class="bk-bebek" x="8" y="3" width="1" height="1" fill="#1f1f1e"/></g>
+<rect x="6" y="5" width="1" height="1" fill="#f2b134"/></g>
+<rect class="bk-kanat bk-sol" x="1" y="4" width="1" height="3"/><rect class="bk-kanat bk-sag" x="11" y="4" width="1" height="3"/>
+<rect class="bk-ayak bk-a1" x="4" y="9" width="2" height="1" fill="#f2b134"/><rect class="bk-ayak bk-a2" x="7" y="9" width="2" height="1" fill="#f2b134"/></svg>`;
 
 export function ikon(ad) {
   if (ad === "logo") return LOGO;

@@ -59,7 +59,7 @@
             <div class="bos-durum" id="bos-durum">
               <div class="logo" data-ikon="logo"></div>
               <div class="kart-liste" id="model-kartlari"></div>
-              <button class="kart-satir" id="klasor-satiri"><span data-ikon="klasor"></span><span id="klasor-metni">Model klasörü</span></button>
+              <button class="kart-satir" id="klasor-satiri" data-yalniz-yerel><span data-ikon="klasor"></span><span id="klasor-metni">Model klasörü</span></button>
             </div>
           </div>
           <div class="yazma-kap">
@@ -76,14 +76,14 @@
             </div>
             <div class="alt-satir">
               <div class="alt-sol">
-                <button class="hap duz" id="hap-bilgisayar"><span data-ikon="ekran"></span><span>Bu bilgisayar</span><span data-ikon="asagi" class="kucuk-ikon"></span></button>
-                <span class="hap duz" id="hap-klasor"><span data-ikon="klasor"></span><span id="hap-klasor-metni">llm</span></span>
+                <button class="hap duz" id="hap-bilgisayar" data-yalniz-yerel><span data-ikon="ekran"></span><span>Bu bilgisayar</span><span data-ikon="asagi" class="kucuk-ikon"></span></button>
+                <span class="hap duz" id="hap-klasor" data-yalniz-yerel><span data-ikon="klasor"></span><span id="hap-klasor-metni">llm</span></span>
               </div>
               <div class="alt-sag">
                 <button class="hap duz" id="hap-izole" aria-pressed="false" title="Ajan ayrı git dalında (worktree) çalışsın; sen birleştirene kadar ana dosyalara dokunmaz" hidden>Ayrı dal</button>
                 <button class="hap duz" id="hap-mod" title="Mod: ajanın neye izinli olduğu" hidden><span id="hap-mod-metni">Mod</span><span data-ikon="asagi" class="kucuk-ikon"></span></button>
                 <button class="hap duz" id="hap-model"><span id="hap-model-metni">Model</span><span class="soluk" id="hap-dusunme-metni">Kapalı</span></button>
-                <span class="nokta buyuk" id="hap-nokta" title="Sunucu durumu"></span>
+                <span class="nokta buyuk" id="hap-nokta" data-yalniz-yerel title="Sunucu durumu"></span>
               </div>
             </div>
             <input type="file" id="dosya-sec" multiple hidden accept=".png,.jpg,.jpeg,.webp,.bmp,.gif,.pdf,.wav,.mp3,.txt,.md,.csv,.json,.py,.js,.html,.xml,.log,.ini">
@@ -238,6 +238,17 @@
         </section>
 
         <!-- SKILL'LER VE TALIMATLAR -->
+        <section class="gorunum sayfa" id="g-eklentiler" hidden>
+          <div class="sayfa-ic ek-sayfa">
+            <div class="ek-ust"><h1>Eklentiler</h1><button class="ikon-btn" id="ek-yenile" data-ikon="yenile" title="Yenile" aria-label="Yenile"></button></div>
+            <div class="ek-arac-cubugu">
+              <label class="ek-arama"><span data-ikon="ara"></span><input id="ek-ara" placeholder="Ara" aria-label="Eklentilerde ara"></label>
+              <div class="ek-filtre" id="ek-filtre" role="tablist"><button data-f="hepsi" class="aktif">Tümü</button><button data-f="baglayici">Bağlayıcılar</button><button data-f="skill">Skill'ler</button><button data-f="plugin">Plugin'ler</button></div>
+              <button class="btn ana kucuk" id="ek-ekle">Ekle <span data-ikon="asagi" class="kucuk-ikon"></span></button>
+            </div>
+            <div id="ek-icerik"><div class="soluk">Yükleniyor…</div></div>
+          </div>
+        </section>
         <section class="gorunum sayfa" id="g-skiller" hidden>
           <div class="sayfa-ic">
             <h1>Skill'ler ve talimatlar</h1>
@@ -324,7 +335,7 @@
         </button>
         <button id="agecidi-hapi" class="hap" title="Yerel sunucu (Ollama gibi): diğer uygulamalar buradaki modelleri kullanır" hidden>
           <span class="nokta" id="agecidi-nokta"></span><span id="agecidi-metni"></span></button>
-        <span id="ram-metni" class="soluk kucuk"></span>
+        <span id="ram-metni" class="soluk kucuk" data-yalniz-yerel></span>
         <span class="dc-bosluk"></span>
         <span id="dc-baglayici" class="soluk kucuk"></span>
         <span id="dc-surum" class="soluk kucuk"></span>

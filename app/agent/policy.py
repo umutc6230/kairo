@@ -14,6 +14,7 @@ Belirsizlikte `sor`/`ret` uygulanir; asla `izin` degil.
 
 from __future__ import annotations
 
+import contextvars
 import hashlib
 import json
 import re
@@ -222,6 +223,50 @@ def yerel_host_mu(host: str | None) -> bool:
         return False
 
 
+# OpenBot "kinds of action": tam yetkide de sorulan dis eylem turleri. Arac adi + ozet + komut
+# uzerinde aranir (MCP araci adi, tarayici/masaustu dugme etiketi). Digerleri tam yetkide serbest.
+_S = r"(?<![a-zçğıöşü])"  # kelime siniri: harf degil (snake_case alt cizgi sinir sayilir)
+_E = r"(?![a-zçğıöşü])"
+
+
+def _tur(*kelimeler: str) -> re.Pattern:
+    return re.compile(_S + "(" + "|".join(kelimeler) + ")" + _E, re.I)
+
+
+EYLEM_TURLERI: dict[str, re.Pattern] = {
+    "odeme": _tur("pay", "payment", "checkout", "purchase", "buy", "order", "invoice", "refund",
+                  "transfer", "payout", "withdraw", "charge", "subscribe", "ödeme", "öde", "ode",
+                  "satın al", "sipariş", "siparis"),
+    "kimlik": _tur("password", "passwd", "2fa", "two.factor", "credentials?", "parola", "şifre",
+                   "sifre"),
+    "silme": _tur("delete", "destroy", "erase", "purge", "wipe", "trash", "discard", "sil",
+                  "silin", "kaldır"),
+    "gonderme": _tur("send", "reply", "forward", "respond", "notify", "broadcast", "invite",
+                     "comment", "email", "mail", "gönder", "gonder", "yanıtla", "ilet"),
+    "paylasma": _tur("share", "sharing", "permissions?", "collaborators?", "grant", "paylaş",
+                     "paylas"),
+    "yayinlama": _tur("publish", "post", "tweet", "repost", "release", "go live", "merge", "push",
+                      "pull_request", "yayınla", "yayinla"),
+}  # fmt: skip
+
+
+def eylem_turu(istek: Istek) -> str:
+    metin = " ".join(x for x in (istek.arac, istek.ozet, istek.komut or "") if x)
+    return next((ad for ad, d in EYLEM_TURLERI.items() if d.search(metin)), "")
+
+
+# Onayin "bu sohbet/gorev" kapsami icin hangi run/oturumda oldugumuz (runner ve sohbet ayarlar;
+# asyncio.to_thread baglami kopyalar). OpenBot "Allow for this conversation" karsiligi.
+BAGLAM: contextvars.ContextVar[str] = contextvars.ContextVar("onay_baglami", default="")
+KAPSAMLAR = ("tek", "sohbet", "her_zaman")
+SOHBET_KAPSAM_SAAT = 24
+
+
+def islem_anahtari(istek: Istek) -> str:
+    """Kapsamli onay icin islem TURU: ayni arac, ayni yan etki, ayni host (yol/komut degil)."""
+    return f"{istek.arac}|{istek.yan_etki}|{(istek.host or '').lower()}"
+
+
 class Onay(BaseModel):
     """Tek bir ISLEM icin onay. Islem degisirse hash degisir ve eski onay gecersiz olur (A1.4)."""
 
@@ -230,7 +275,9 @@ class Onay(BaseModel):
     ozet: str
     arac: str
     yan_etki: YanEtki
-    kapsam: str = "tek"  # tek | oturum
+    kapsam: str = "tek"  # tek | sohbet | her_zaman
+    anahtar: str = ""  # islem_anahtari: kapsamli onayin eslesecegi islem turu
+    baglam: str = ""  # sohbet kapsami: onayin verildigi run/oturum
     politika_surumu: int = POLITIKA_SURUMU
     olusturma: str = Field(default_factory=lambda: datetime.now().isoformat(timespec="seconds"))
     son: str = ""
@@ -282,7 +329,10 @@ class OnayDeposu:
         return sonuc
 
     def _yaz(self, onaylar: list[Onay]) -> None:
-        json_yaz(self.yol, [o.model_dump(mode="json") for o in onaylar[: self.en_fazla]])
+        # "Her zaman" kurallari gecmis sinirinda dusmez; digerleri son en_fazla kayit
+        kalici = [o for o in onaylar if o.kapsam == "her_zaman" and o.karar == "onayli"]
+        diger = [o for o in onaylar if o not in kalici][: self.en_fazla]
+        json_yaz(self.yol, [o.model_dump(mode="json") for o in [*kalici, *diger]])
 
     def olustur(self, istek: Istek, islem_hash: str) -> Onay:
         onay = Onay(
@@ -291,17 +341,29 @@ class OnayDeposu:
             arac=istek.arac,
             yan_etki=istek.yan_etki,
             son=(datetime.now() + timedelta(seconds=ONAY_SURESI_SN)).isoformat(timespec="seconds"),
+            anahtar=islem_anahtari(istek),
+            baglam=BAGLAM.get(),
         )
         self._yaz([onay, *self._liste()])
         return onay
 
-    def karar_ver(self, onay_id: str, onayla: bool) -> Onay:
+    def karar_ver(self, onay_id: str, onayla: bool, kapsam: str = "tek") -> Onay:
+        """kapsam: tek (yalniz bu islem), sohbet (bu run/oturumda ayni tur islem, 24 saat),
+        her_zaman (ayni tur islem her yerde; Ayarlar'dan kaldirilabilir kural)."""
+        if kapsam not in KAPSAMLAR:
+            raise YetkiYok(f"Gecersiz onay kapsami: {kapsam}")
         onaylar = self._liste()
         for o in onaylar:
             if o.id == onay_id:
                 if o.karar != "bekliyor":
                     raise YetkiYok("Bu onay zaten sonuclandi.")
                 o.karar = "onayli" if onayla else "reddedildi"
+                if onayla and kapsam != "tek" and o.anahtar:
+                    o.kapsam = kapsam
+                    if kapsam == "sohbet":
+                        o.son = (datetime.now() + timedelta(hours=SOHBET_KAPSAM_SAAT)).isoformat(
+                            timespec="seconds"
+                        )
                 self._yaz(onaylar)
                 return o
         raise YetkiYok("Onay kaydi bulunamadi ya da suresi gecti.")
@@ -315,8 +377,32 @@ class OnayDeposu:
                 self._yaz(onaylar)
                 return
 
-    def gecerli_onay(self, islem_hash: str) -> Onay | None:
-        return next((o for o in self._liste() if o.gecerli_mi(islem_hash)), None)
+    def gecerli_onay(self, islem_hash: str, anahtar: str = "", baglam: str = "") -> Onay | None:
+        liste = self._liste()
+        tam = next((o for o in liste if o.gecerli_mi(islem_hash)), None)
+        if tam is not None or not anahtar:
+            return tam
+        simdi = datetime.now().isoformat(timespec="seconds")
+        for o in liste:
+            if o.karar != "onayli" or o.anahtar != anahtar or o.politika_surumu != POLITIKA_SURUMU:
+                continue
+            if o.kapsam == "her_zaman":
+                return o
+            if o.kapsam == "sohbet" and baglam and o.baglam == baglam and simdi <= o.son:
+                return o
+        return None
+
+    def kurallar(self) -> list[dict]:
+        """Kalici 'her zaman izin ver' kurallari (Ayarlar'da listelenir/kaldirilir)."""
+        return [o.model_dump(mode="json") for o in self._liste()
+                if o.kapsam == "her_zaman" and o.karar == "onayli"]  # fmt: skip
+
+    def kural_sil(self, onay_id: str) -> None:
+        onaylar = self._liste()
+        for o in onaylar:
+            if o.id == onay_id and o.kapsam == "her_zaman":
+                o.karar = "geri_alindi"
+        self._yaz(onaylar)
 
     def gecmis(self, adet: int = 50) -> list[dict]:
         return [o.model_dump(mode="json") for o in self._liste()[:adet]]
@@ -416,6 +502,15 @@ class PolitikaMotoru:
         # hassas dosya ve kok kapsami yukarida zaten uygulandi; burada yalniz Planla (kullanicinin
         # sectigi salt okunur mod) ve geri alinamaz genis komutlar sorulur.
         if self.tam_yetki() and mod is not Mod.planla and alan.guven is not Guven.guvenilmeyen:
+            if istek.yan_etki is YanEtki.dis and (tur := eylem_turu(istek)):
+                # OpenBot "kinds of action": gonderme, paylasma, yayinlama, odeme, silme, parola
+                # gibi geri alinamaz dis eylemler tam yetkide de sorulur; "Her zaman" ile sorulmaz
+                return Sonuc(
+                    karar=Karar.sor,
+                    neden=f"Geri alinamaz dis eylem ({tur}): tam yetkide de onay ister.",
+                    kural="eylem_turu",
+                    cozulmus_yol=yol_metni,
+                )
             if istek.yan_etki is YanEtki.komut and TEHLIKELI_KOMUT.search(istek.komut or ""):
                 return Sonuc(
                     karar=Karar.sor,
@@ -502,7 +597,7 @@ class PolitikaMotoru:
             raise YetkiYok(sonuc.neden)
         if sonuc.karar is Karar.sor:
             h = islem_hashi(istek, sonuc.cozulmus_yol)
-            gecerli = self.onaylar.gecerli_onay(h)
+            gecerli = self.onaylar.gecerli_onay(h, islem_anahtari(istek), BAGLAM.get())
             if gecerli is None:
                 onay = self.onaylar.olustur(istek, h)
                 raise OnayGerekli(sonuc.neden, onay.model_dump(mode="json"))

@@ -136,17 +136,20 @@ function kullaniciMesaji(m) {
 /** Asistan mesaji: ustte dusunce blogu, altta cevap ve istatistik. Canli guncellenebilir. */
 function asistanMesaji() {
   const d = el(`<div class="mesaj asistan">
+    <div class="baykus-canli" data-mod="bekliyor" hidden><span class="baykus-kap"></span><span class="baykus-etiket"></span></div>
     <div class="durum-satiri" hidden><span class="parilti"></span><span class="sayac soluk"></span></div>
     <div class="dusunce" hidden>
       <button class="dusunce-baslik"><span data-ikon="beyin"></span><span class="dusunce-etiket">Düşünüyor…</span><span class="ok" data-ikon="sag"></span></button>
       <div class="dusunce-icerik"></div>
     </div>
+    <div class="sohbet-plan" hidden></div>
     <div class="arac-adimlari"></div>
     <div class="govde-metin md"></div>
     <div class="uyarilar"></div>
     <div class="mesaj-alt" hidden><button class="ikon-btn" title="Kopyala" data-ikon="kopyala"></button><span class="istat istat-cipleri"></span></div>
   </div>`);
   const dusunceKutu = d.querySelector(".dusunce");
+  d.querySelector(".baykus-kap").innerHTML = ikon("logo");
   d.querySelector(".dusunce-baslik").onclick = () => dusunceKutu.classList.toggle("acik");
   const o = {
     el: d,
@@ -156,7 +159,16 @@ function asistanMesaji() {
     sayac: null,
     sayacDurdur: null,
     model: "",
+    mod(m) {
+      // Claude'daki canli simge gibi: baykus isin asamasina gore hareket eder
+      const b = d.querySelector(".baykus-canli");
+      if (!m) { b.hidden = true; return; }
+      b.hidden = false;
+      b.dataset.mod = m;
+      b.querySelector(".baykus-etiket").textContent = { bekliyor: "Hazırlanıyor…", dusunuyor: "Düşünüyor…", calisiyor: "Çalışıyor…", yaziyor: "Yazıyor…" }[m] || "";
+    },
     canliBaslat(model) {
+      this.mod("bekliyor");
       // beklerken "Model hazirlaniyor... 8 sn" gibi canli sayac
       this.model = model;
       this.sayacDurdur = canliSayac(d.querySelector(".durum-satiri .sayac"), "· ");
@@ -170,6 +182,7 @@ function asistanMesaji() {
       s.querySelector("span").textContent = metin || "";
     },
     dusunceEkle(parca) {
+      this.mod("dusunuyor");
       if (!this.dusunceBas) {
         this.dusunceBas = performance.now();
         this.durum("");
@@ -198,6 +211,7 @@ function asistanMesaji() {
       dusunceKutu.classList.remove("acik");
     },
     parcaEkle(parca) {
+      if (this.sayacDurdur) this.mod("yaziyor");
       if (this.dusunceBas && this.sayac) this.dusunceBitir();
       this.durum("");
       this.metin += parca;
@@ -210,8 +224,25 @@ function asistanMesaji() {
         ikonlariYerlestir(g);
       });
     },
+    planCiz(adimlar) {
+      // Claude Code gibi yapilacaklar listesi: model plan_guncelle cagirdikca yerinde guncellenir
+      if (!Array.isArray(adimlar) || !adimlar.length) return;
+      const k = d.querySelector(".sohbet-plan");
+      const biten = adimlar.filter((a) => a.durum === "tamam" || a.durum === "atlandi").length;
+      k.hidden = false;
+      k.innerHTML = `<div class="sohbet-plan-baslik soluk kucuk">Plan · ${biten}/${adimlar.length}</div><ul class="plan-liste">${adimlar
+        .map((a) => `<li class="plan-${kacir(a.durum || "bekliyor")}">${kacir(a.baslik || "")}</li>`).join("")}</ul>`;
+    },
     aracCagrisi(o) {
       this.durum("");
+      if (this.sayacDurdur) this.mod("calisiyor");
+      if (o.ad === "plan_guncelle") {
+        if (this.sayac) this.dusunceBitir();
+        this.planCiz(o.argumanlar?.adimlar);
+        const g = el(`<div class="arac-adim" data-id="${kacir(o.id)}" hidden><span class="ozet"></span><pre class="arac-sonuc"></pre></div>`);
+        d.querySelector(".arac-adimlari").append(g);
+        return g;
+      }
       if (this.sayac) this.dusunceBitir();
       const arg = Object.entries(o.argumanlar || {}).map(([k, v]) => `${k}=${JSON.stringify(v)}`).join(", ");
       const a = el(`<div class="arac-adim" data-id="${kacir(o.id)}">
@@ -224,6 +255,10 @@ function asistanMesaji() {
     },
     aracSonucu(o) {
       const a = [...d.querySelectorAll(".arac-adim")].find((x) => x.dataset.id === o.id) || this.aracCagrisi(o);
+      if (o.ad === "plan_guncelle") {
+        try { this.planCiz(JSON.parse(o.sonuc).plan); } catch { /* hata/kesik: arguman cizimi kalir */ }
+        return;
+      }
       const ozet = a.querySelector(".ozet");
       const hataVar = o.durum === "hata" || (o.ozet || "").startsWith("hata");
       const sonucsuz = o.durum === "sonucsuz";
@@ -240,12 +275,14 @@ function asistanMesaji() {
       d.querySelector(".uyarilar").append(el(`<div class="uyari-kutu">${kacir(mesaj)}</div>`));
     },
     hata(mesaj) {
+      this.mod(null);
       clearInterval(this.sayac);
       this.hataVar = true;
       this.durum("");
       d.querySelector(".uyarilar").append(el(`<div class="hata-kutu">${kacir(mesaj)}</div>`));
     },
     bitir(ist) {
+      this.mod(null);
       const gecen = this.gecen();
       this.sayacDurdur = null;
       this.durum("");

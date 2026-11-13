@@ -1,6 +1,6 @@
 // Ajan gorevleri ekrani (A5): gorev baslat, canli adimlar, kontroller, onay, diff ve geri alma.
 // GUVENLIK: model metni, dosya icerigi ve komut ciktisi DAIMA kacir() ile basilir; ham HTML yok.
-import { ikonlariYerlestir } from "./ikonlar.js";
+import { ikon, ikonlariYerlestir } from "./ikonlar.js";
 import { kacir, md } from "./md.js";
 import { artifactListesiCiz, diffGoster, reviewYap } from "./inceleme.js";
 import { $, $$, api, bildir, durum, el, modal, onayla, sayi } from "./ortak.js";
@@ -104,7 +104,7 @@ function adimSatiri(a) {
 
 function kontroller(r) {
   const b = (is, ad, kosul, tehlike = false) =>
-    `<button class="btn ${tehlike ? "tehlike" : ""}" data-islem="${is}" ${kosul ? "" : "disabled"}>${ad}</button>`;
+    `<button class="btn kucuk ${tehlike ? "tehlike" : ""}" data-islem="${is}" ${kosul ? "" : "disabled"}>${ad}</button>`;
   return `<div class="dugme-sira">
     ${b("duraklat", "Duraklat", r.durum === "calisiyor")}
     ${b("devam", "Devam", ["duraklatildi", "onay_bekliyor"].includes(r.durum))}
@@ -133,7 +133,9 @@ function bekleyenKartlari(r) {
       parcalar.push(`<div class="uyari-kutu" role="alert">
         <b>Onay gerekiyor:</b> adım ${kacir(a.no)} <code>${kacir(a.arac)}</code> ${kacir(argOzet(a))}
         ${onayOnizleme(a)}
-        <div class="dugme-sira"><button class="btn ana" data-onay="${kacir(a.onay_id)}" data-karar="1">Onayla</button>
+        <div class="dugme-sira"><button class="btn ana" data-onay="${kacir(a.onay_id)}" data-karar="1" data-kapsam="tek">Bir kez izin ver</button>
+        <button class="btn" data-onay="${kacir(a.onay_id)}" data-karar="1" data-kapsam="sohbet" title="Bu görevde aynı türden işlemler bir daha sorulmaz">Bu görev için izin ver</button>
+        <button class="btn" data-onay="${kacir(a.onay_id)}" data-karar="1" data-kapsam="her_zaman" title="Aynı türden işlem bir daha hiç sorulmaz; Ayarlar > Onay kuralları'ndan kaldırılabilir">Her zaman izin ver</button>
         <button class="btn tehlike" data-onay="${kacir(a.onay_id)}" data-karar="0">Reddet</button></div></div>`);
     }
     if (a.durum === "cevap_bekliyor") { // soru_sor: ajan kullanicidan karar bekliyor
@@ -172,8 +174,8 @@ function sohbetCiz(r) {
     `${a.aciklama ? `<li class="ajan-aciklama">${md(a.aciklama)}</li>` : ""}${adimSatiri(a)}`).join("");
   kap.innerHTML = `
     <ol class="adim-liste sade">${akis}</ol>
-    ${notlar.map((g) => `<p class="ajan-not">${kacir(g)}</p>`).join("")}
-    ${calisiyor && r.durum === "calisiyor" ? '<div class="parilti kucuk">Çalışıyor…</div>' : ""}
+    ${notlar.map((g) => `<div class="ajan-not md">${md(g)}</div>`).join("")}
+    ${calisiyor ? `<div class="baykus-canli" data-mod="${r.durum === "calisiyor" ? "calisiyor" : "bekliyor"}" style="--bk-gecikme:-${(Date.now() / 1000 % 3600).toFixed(2)}s"><span class="baykus-kap">${ikon("logo")}</span><span class="baykus-etiket">${r.durum === "calisiyor" ? "Çalışıyor…" : "Onay bekliyor…"}</span></div>` : ""}
     ${bekleyenKartlari(r)}
     ${r.hata ? `<div class="uyari-kutu kucuk">${kacir(r.hata)}</div>` : ""}
     ${r.sonuc?.ozet ? `<div class="ajan-sonuc ajan-rapor"><div class="rapor-baslik">${basari ? '<span data-ikon="tik" class="yesil-ikon" aria-label="doğrulandı"></span> Tamamlandı' : "Sonuç"}${r.sonuc.kanit?.length ? ` <span class="soluk kucuk">(kanıt: adım ${kacir(r.sonuc.kanit.join(", "))})</span>` : ' <span class="rozet sari">doğrulanmadı</span>'}</div><div class="md">${md(r.sonuc.ozet)}</div></div>` : ""}
@@ -296,7 +298,7 @@ function baglantilar(r) {
     });
   });
   $$("[data-onay]", kap).forEach((b) => {
-    b.onclick = sarmala(() => api(`/api/onaylar/${b.dataset.onay}`, { method: "POST", govde: { onayla: b.dataset.karar === "1" } }));
+    b.onclick = sarmala(() => api(`/api/onaylar/${b.dataset.onay}`, { method: "POST", govde: { onayla: b.dataset.karar === "1", kapsam: b.dataset.kapsam || "tek" } }));
   });
   $$("[data-belirsiz]", kap).forEach((b) => {
     b.onclick = sarmala(() => api(`/api/gorevler/${r.id}/karar`, { method: "POST", govde: { adim: Number(b.dataset.belirsiz), karar: b.dataset.k } }));

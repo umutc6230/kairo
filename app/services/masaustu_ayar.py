@@ -160,7 +160,7 @@ class GenelKisayol:
         u = ctypes.windll.user32
         self._tid = ctypes.windll.kernel32.GetCurrentThreadId()
         if not u.RegisterHotKey(None, 1, c[0] | MOD_NOREPEAT, c[1]):
-            self.hata = "Kisayol baska bir uygulamada kullaniliyor."
+            self.hata = "Kısayol başka bir uygulamada kullanılıyor."
             self._tid = 0
             hazir.set()
             return

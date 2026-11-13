@@ -411,10 +411,10 @@ class PluginDeposu:
             for i, h in enumerate(cc.bilesenler(kok)["hooks"]):
                 out.append({
                     "id": f"p{i:02d}{ad}"[:12], "ad": f"{ad} ({h['olay']})"[:80],
-                    "olay": h["olay"], "tur": "guvenlik", "komut": cc.degisken_ac(h["komut"], kok),
+                    "olay": h["olay"], "tur": "guvenlik", "komut": cc.hook_komutu(h["komut"], kok),
                     "eslesen": h["eslesen"], "timeout": max(1, min(h["timeout"], 120)),
                     "bicim": "claude", "kaynak": f"plugin:{ad}",
-                    "ortam": {"CLAUDE_PLUGIN_ROOT": str(kok)},
+                    "ortam": {"CLAUDE_PLUGIN_ROOT": kok.as_posix()},
                 })  # fmt: skip
         return out
 

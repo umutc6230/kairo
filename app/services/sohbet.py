@@ -27,8 +27,10 @@ from app.services.model_yonetici import ModelYonetici
 from app.services.oturumlar import EkOzet, Mesaj, OturumDeposu, baslik_uret
 from app.services.sohbet_araclari import (
     AJAN_NOTU,
+    PLAN_ARACI,
     SISTEM_NOTU,
     DosyaAraclari,
+    plan_isleyici,
     sonuc_ozeti,
     varsayilan_kokler,
 )
@@ -498,7 +500,9 @@ async def arac_calistir(
         "sure_ms": round((time.perf_counter() - bas) * 1000),
     }
     gonder({"tur": "arac_sonucu", **kayit, **etiket})
-    mesaj = {"role": "tool", "tool_call_id": cagri["id"], "content": metin}
+    from app.agent.runner import dis_zarf
+
+    mesaj = {"role": "tool", "tool_call_id": cagri["id"], "content": dis_zarf(ad, metin)}
     return mesaj, kayit
 
 
@@ -530,7 +534,8 @@ async def cevap_akit(
     kayitlar: list[dict] = []
     mesajlar = list(mesajlar)
     durum = "tamam"
-    for tur in range(max_tur):
+    tur, plan_turu = 0, 0
+    while tur < max_tur:
         cagrilar: list[dict] = []
         tur_metni: list[str] = []
         mesajlar = baglami_darat(mesajlar, baglam_token, rezerv, gonder)
@@ -584,6 +589,11 @@ async def cevap_akit(
             mesaj, kayit = await arac_calistir(c, isleyiciler or {}, gonder, etiket)
             mesajlar.append(mesaj)
             kayitlar.append(kayit)
+        # Yalniz plan guncelleyen tur is yapmaz: tur butcesinden dusme (en fazla 6 kez)
+        if plan_turu < 6 and all(c["function"]["name"] == "plan_guncelle" for c in cagrilar):
+            plan_turu += 1
+        else:
+            tur += 1
     ist = istatistik(llm, bas, ilk, None)
     if dusunceler:  # dusunme suresi: ilk cevap parcasina kadar (cevap yoksa tum sure)
         ist["dusunce_sn"] = round((ilk or time.perf_counter()) - bas, 1)
@@ -821,6 +831,9 @@ class SohbetServisi:
         )
         if ajan_kaydi is not None:  # ajan araclari var: kisitlayan notlar yerine ajan notu
             not_ = f"{AJAN_NOTU}\n{kapsam_notu(alan, ajan=True)}"
+            # Claude Code gibi: cok adimli iste gorunur yapilacaklar listesi (arayuz canli cizer)
+            araclar.append(PLAN_ARACI)
+            isleyiciler["plan_guncelle"] = plan_isleyici
             skill_metni = skill_metni.replace(skl.SINIR, skl.SINIR_AJAN)
         else:
             not_ = f"{SISTEM_NOTU}\n{kapsam_notu(alan)}" if ayar.sohbet_araclari else ""
@@ -927,6 +940,9 @@ class SohbetServisi:
         otomatik_kayit: list[dict] = []
 
         async def uret(gonder: Callable[[Olay], None]) -> dict:
+            from app.agent.policy import BAGLAM
+
+            BAGLAM.set(f"oturum:{oturum_id}")  # "bu sohbet icin izin ver" kapsami
             if self.yonetici.mesgul:
                 gonder({"tur": "durum", "metin": "Onceki islemin bitmesi bekleniyor..."})
             gonder({"tur": "durum", "metin": f"Model hazirlaniyor: {ayar.aktif_model}"})
@@ -995,6 +1011,8 @@ class SohbetServisi:
                     sicaklik=ayar.sicaklik,
                     araclar=araclar or None,
                     isleyiciler=isleyiciler,
+                    # ajan araclari varsa (yaz/komut) cok adimli is: 6 tur yetmiyordu (canli)
+                    max_tur=20 if "plan_guncelle" in isleyiciler else 6,
                     baglam_token=ayar.baglam_token,
                     rezerv=GUVENLIK_TOKEN + ayrilan_token(ayar.max_tokens, seviye),
                 )

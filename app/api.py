@@ -16,7 +16,7 @@ from collections.abc import AsyncIterator, Callable
 from contextlib import asynccontextmanager
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import Any
+from typing import Any, Literal
 from urllib.parse import urlsplit
 
 import httpx
@@ -69,6 +69,7 @@ from app.services.arac_paketleri import AracPaketleri
 from app.services.araclar import ARACLAR, ORNEK_ISTEMLER
 from app.services.artifactler import ARTIFACT_ARACI, ONIZLEME_CSP, ArtifactDeposu
 from app.services.ayarlar import AyarDeposu
+from app.services.composio import Composio
 from app.services.ekler import EkDeposu
 from app.services.hafiza import HafizaDeposu
 from app.services.model_magaza import Indirici, Magaza, ModelKaydi, uyumluluk
@@ -118,6 +119,7 @@ class GuvenIstegi(BaseModel):
 
 class OnayIstegi(BaseModel):
     onayla: bool
+    kapsam: Literal["tek", "sohbet", "her_zaman"] = "tek"
 
 
 class GorevIstegi(BaseModel):
@@ -319,7 +321,18 @@ def uygulama_olustur(
     uzantilar = UzantiYoneticisi(veri_dizini)
     arac_paketleri = AracPaketleri(veri_dizini, mcp)
     hooklar.ek_kaynak = pluginler.hook_tanimlari  # Claude Code plugin hook'lari (acilirsa)
-    mcp.ek_kaynak = pluginler.mcp_tanimlari  # Claude Code plugin .mcp.json (acilirsa)
+    composio = Composio(veri_dizini)
+
+    def _mcp_ek() -> list[dict]:
+        ek = list(pluginler.mcp_tanimlari())  # Claude Code plugin .mcp.json (acilirsa)
+        try:  # Composio anahtari varsa tool router MCP'si ajan baglayicisi olur
+            if (d := composio.mcp_tanimi()) is not None:
+                ek.append(d)
+        except Exception as e:  # noqa: BLE001 - ag yoksa diger baglayicilar calismaya devam eder
+            logger.debug("Composio baglayicisi eklenmedi: {}", e)
+        return ek
+
+    mcp.ek_kaynak = _mcp_ek
     sohbet.uzantilar = uzantilar
     sohbet.tarayici = Tarayici(veri_dizini)
     sohbet.masaustu = Masaustu(
@@ -590,6 +603,12 @@ def uygulama_olustur(
     testler = TestServisi(yonetici, ekler)
 
     @asynccontextmanager
+    def _isit_baglam() -> None:
+        try:
+            ajan_baglami("")
+        except Exception as e:  # noqa: BLE001 - isitma yardimci; proje yoksa vb. sessiz
+            logger.debug("Baglam isitma atlandi: {}", e)
+
     async def omur(_: FastAPI):
         a = ayarlar.oku()
         if gecit and a.sunucu_acik:
@@ -602,6 +621,10 @@ def uygulama_olustur(
             kisayol.ayarla(a.hizli_kisayol)
         if gecit:  # Claude Code plugin'lerini arka planda ice aktar (acilisi bekletmez)
             asyncio.get_running_loop().run_in_executor(None, _cc_esitle)
+        if gecit:  # MCP sunuculari ve arac semalari ilk mesajdan once arka planda isinsin
+            asyncio.get_running_loop().run_in_executor(None, _isit_baglam)
+        if a.saglayici == "openrouter":  # baglanti havuzu (SSL ~1.5 sn) ilk mesajdan once
+            asyncio.get_running_loop().run_in_executor(None, openrouter._tasima)
         yield
         if zd:
             zd.cancel()
@@ -734,7 +757,10 @@ def uygulama_olustur(
         if not yerel_host_mu(konak):
             return JSONResponse({"hata": "Yalniz bu bilgisayardan erisilir."}, status_code=403)
         kaynak = istek.headers.get("origin") or istek.headers.get("referer") or ""
-        if kaynak:
+        # OAuth geri donusu saglayicinin sitesinden (or. vercel.com) yonlendirmeyle gelir;
+        # Referer dis olur. Tek kullanimlik state ile korunur, yalniz GET.
+        oauth_geri = istek.method == "GET" and istek.url.path == "/api/mcp/oauth/geri"
+        if kaynak and not oauth_geri:
             try:
                 kaynak_konak = urlsplit(kaynak).hostname
             except ValueError:
@@ -1687,9 +1713,72 @@ def uygulama_olustur(
     async def onay_gecmisi() -> dict:
         return {"onaylar": politika.onaylar.gecmis()}
 
+    # ---- Composio: yuzlerce uygulamaya OAuth ile tek tikla baglanti ----
+    @app.get("/api/composio")
+    async def composio_durum() -> dict:
+        return composio.durum()
+
+    @app.post("/api/composio/anahtar")
+    async def composio_anahtar(veri: dict) -> dict:
+        return await asyncio.to_thread(composio.anahtar_kaydet, str(veri.get("anahtar", "")))
+
+    @app.delete("/api/composio/anahtar")
+    async def composio_anahtar_sil() -> dict:
+        return composio.anahtar_sil()
+
+    @app.get("/api/composio/uygulamalar")
+    async def composio_uygulamalar(arama: str = "", bagli: bool | None = None,
+                                   imlec: str = "") -> dict:  # fmt: skip
+        return await asyncio.to_thread(composio.uygulamalar, arama, bagli, imlec)
+
+    @app.post("/api/composio/baglan/{toolkit}")
+    async def composio_baglan(toolkit: str) -> dict:
+        """Onay adresini sistem tarayicisinda acar (pywebview icinde OAuth acilmaz)."""
+        sonuc = await asyncio.to_thread(composio.baglan, toolkit)
+        import webbrowser
+
+        await asyncio.to_thread(webbrowser.open, sonuc["adres"])
+        return sonuc
+
+    @app.delete("/api/composio/baglanti/{baglanti_id}")
+    async def composio_baglanti_kes(baglanti_id: str) -> dict:
+        return await asyncio.to_thread(composio.baglanti_kes, baglanti_id)
+
+    @app.get("/api/etkinlik")
+    async def etkinlik(adet: int = 200, yalniz_yan_etkili: bool = False) -> dict:
+        """OpenBot 'Activity': ajanlarin yaptigi islemler tek zaman cizelgesinde (denetim)."""
+        onay_kapsami = {o["id"]: o for o in politika.onaylar.gecmis(500)}
+        satirlar = []
+        for r in run_deposu.liste():
+            for a in r.adimlar:
+                if a.arac in ("plan_guncelle", "gorevi_bitir"):
+                    continue
+                if yalniz_yan_etkili and not a.yan_etkili:
+                    continue
+                o = onay_kapsami.get(a.onay_id) if a.onay_id else None
+                satirlar.append({
+                    "zaman": a.zaman, "run": r.id, "gorev": r.hedef[:120], "no": a.no,
+                    "arac": a.arac, "durum": str(a.durum.value), "yan_etkili": a.yan_etkili,
+                    "aciklama": a.aciklama[:200], "dosya": a.dosya,
+                    "onay": {"karar": o["karar"], "kapsam": o.get("kapsam", "tek")} if o else None,
+                })  # fmt: skip
+        satirlar.sort(key=lambda x: x["zaman"], reverse=True)
+        return {"etkinlik": satirlar[: max(1, min(adet, 1000))]}
+
+    @app.get("/api/onay-kurallari")
+    async def onay_kurallari() -> dict:
+        return {"kurallar": politika.onaylar.kurallar()}
+
+    @app.delete("/api/onay-kurallari/{onay_id}")
+    async def onay_kurali_sil(onay_id: str) -> dict:
+        politika.onaylar.kural_sil(onay_id)
+        return {"kurallar": politika.onaylar.kurallar()}
+
     @app.post("/api/onaylar/{onay_id}")
     async def onay_karar(onay_id: str, istek: OnayIstegi) -> dict:
-        sonuc = politika.onaylar.karar_ver(onay_id, istek.onayla).model_dump(mode="json")
+        sonuc = politika.onaylar.karar_ver(onay_id, istek.onayla, istek.kapsam).model_dump(
+            mode="json"
+        )
         for r in run_deposu.liste():  # bu onayi bekleyen ajan gorevi kaldigi yerden surer
             if r.durum is RunDurum.onay_bekliyor and any(a.onay_id == onay_id for a in r.adimlar):
                 await ajan.devam(r.id)
@@ -1698,7 +1787,8 @@ def uygulama_olustur(
     # ---- ajan gorevleri (A3) ----
     @app.post("/api/gorevler")
     async def gorev_baslat(istek: GorevIstegi) -> dict:
-        ajan_baglami(istek.hedef)  # proje yoksa hemen Turkce hata
+        # proje yoksa hemen Turkce hata; MCP soguk acilisi olay dongusunu kilitlemesin
+        await asyncio.to_thread(ajan_baglami, istek.hedef)
         dogrula(model_yetenegi(), araclar_gerekli=True, dusunme=ayarlar.oku().dusunme)
         izole_kur = None
         if istek.izole:
@@ -1726,6 +1816,8 @@ def uygulama_olustur(
         except Exception:  # noqa: BLE001 - silinmis run bitmis sayilir
             return "basarisiz"
 
+    HEDEF_ISARETI = "HEDEF_TAMAM"
+
     async def _tetikle(t: Tetik) -> None:
         z = next((x for x in zamanlayici.liste() if x.id == t.zamanlama), None)
         alan = sohbet.projeler.aktif() if sohbet.projeler else None
@@ -1739,9 +1831,19 @@ def uygulama_olustur(
             zamanlayici.baslatildi(t, "", "zamanlamanin projesi acik degil")
             return
         try:
+            hedef = f"[zamanlanmis: {z.ad}] {z.hedef}"
+            if z.davranis == "bildir":  # OpenBot check-in: yalniz bakar ve haber verir
+                hedef += (
+                    "\n\nYALNIZ BILDIR: dosya yazma, komut, gonderme gibi hicbir degisiklik "
+                    "yapma; yalniz incele ve kullanicinin bilmesi gerekenleri raporla."
+                )
+            if z.bitis_kosulu:  # OpenBot goal: hedefe ulasinca rutin durur
+                hedef += (
+                    f"\n\nBITIS KOSULU: {z.bitis_kosulu}\nBu kosul artik saglaniyorsa "
+                    f"raporunun ilk satirina tam olarak {HEDEF_ISARETI} yaz."
+                )
             run = await ajan.baslat(
-                f"[zamanlanmis: {z.ad}] {z.hedef}", [], Butce(max_adim=z.max_adim),
-                model=ayarlar.oku().aktif_model,
+                hedef, [], Butce(max_adim=z.max_adim), model=ayarlar.oku().aktif_model,
             )  # fmt: skip
             zamanlayici.baslatildi(t, run.id)
         except Exception as e:  # noqa: BLE001 - kaydedilir, dongu durmaz
@@ -1753,7 +1855,23 @@ def uygulama_olustur(
         )
         for t in tetikler:
             await _tetikle(t)
+        _hedefleri_kontrol_et(simdi or datetime.now(UTC))
         return tetikler
+
+    def _hedefleri_kontrol_et(simdi: datetime) -> None:
+        """Bitis kosullu rutin: son biten calismanin raporu hedefe ulasildi diyorsa durdur."""
+        for z in zamanlayici.liste():
+            if not (z.aktif and z.bitis_kosulu):
+                continue
+            son = next((t for t in reversed(zamanlayici.gecmis(z.id)) if t.get("run_id")), None)
+            if not son:
+                continue
+            try:
+                r = run_deposu.getir(son["run_id"])
+            except Exception:  # noqa: BLE001, S112 - silinmis run
+                continue
+            if r.durum in BITMIS_RUN and HEDEF_ISARETI in ((r.sonuc.ozet or "")[:200]):
+                zamanlayici.hedefe_ulasti(z.id, simdi)
 
     app.state.zamanlayici_tick = zamanlayici_tick
 
