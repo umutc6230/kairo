@@ -29,6 +29,7 @@ from typing import Any
 from loguru import logger
 from pydantic import BaseModel, Field
 
+from app.agent.hooks import HookSonucu
 from app.agent.ozet import mesaj_token, ozetle_gerekirse
 from app.agent.takim import SEMALAR as TAKIM_SEMALARI
 from app.agent.terminal import AKTIF_RUN, run_komutlarini_durdur
@@ -222,6 +223,7 @@ RUNNER_ARACLARI = [
 ]
 META = {"plan_guncelle", "gorevi_bitir"}
 
+
 def net_degisiklikler(adimlar: list) -> list:
     """Basarili dosya degisikligi adimlari; gorevin kendi yazip sonra sildigi gecici dosyalar
     (yaz ... sil, ayni yol) haric. Yoksa temizlik silmesi oncesindeki gercek kaniti gecersiz
@@ -413,6 +415,7 @@ class AgentRunner:
         self.hafiza = hafiza or (lambda: "")
         self.hooks = hooks
         self.araclar_kok: Callable[[str, str], tuple] | None = None
+        self.kok: Callable[[], str] | None = None  # aktif proje koku: hook'larin cwd'si
         # kalici ajan araclari (api baglar): run -> (semalar, isleyiciler)
         self.ajan_araclari: Callable[[Any], tuple[list, dict]] | None = None
         self.takim: Any = None  # TakimPanosu (api baglar)
@@ -468,20 +471,30 @@ class AgentRunner:
                     f"yine OKUYARAK dogrula):\n{run.gecmis}\n\n{gorev_metni}"
                 )
         run.mesajlar = [{"role": "user", "content": gorev_metni}]
-        await self._hook("run_baslangic", {"run": run.id, "hedef": run.hedef})  # engel: baslamaz
         if izole_kur is not None:  # A8.3: ayri worktree + ajan/<id> dali
             run.calisma_koku, run.dal = izole_kur(run.id)
+        h = await self._hook(  # engel: baslamaz
+            "run_baslangic", {"run": run.id, "hedef": run.hedef, "metin": run.hedef},
+            self._hook_kok(run),
+        )  # fmt: skip
+        if h.baglam:  # orn. brain DURUM.md + son ajan kayitlari
+            run.ek_sistem = "\n\n".join([run.ek_sistem, *h.baglam]).strip()
         self.depo.kaydet(run)
         self._calistir(run.id)
         return run
 
-    async def _hook(self, olay: str, veri: dict) -> None:
+    def _hook_kok(self, run: Run) -> Path | None:
+        kok = run.calisma_koku or (self.kok() if self.kok else "")
+        return Path(kok) if kok else None
+
+    async def _hook(self, olay: str, veri: dict, cwd: Path | None = None) -> HookSonucu:
         """Guvenlik hook'u engellerse islem UygulamaHatasi ile durur."""
         if self.hooks is None:
-            return
-        h = await asyncio.to_thread(self.hooks.tetikle, olay, veri)
+            return HookSonucu()
+        h = await asyncio.to_thread(self.hooks.tetikle, olay, veri, cwd=cwd)
         if not h.izin:
             raise UygulamaHatasi(h.neden)
+        return h
 
     def _calistir(self, run_id: str) -> None:
         if self.calisiyor_mu(run_id):
@@ -827,8 +840,11 @@ class AgentRunner:
             self._duraklat.discard(run_id)
             if self.hooks is not None and run.durum in BITMIS:  # bilgilendirme; hata yutulur
                 await asyncio.to_thread(
-                    self.hooks.tetikle, "run_bitis", {"run": run.id, "durum": str(run.durum)}
-                )
+                    self.hooks.tetikle, "run_bitis",
+                    {"run": run.id, "durum": str(run.durum), "metin": run.hedef,
+                     "cevap": run.sonuc.ozet or run.hata, "model": run.model},
+                    cwd=self._hook_kok(run),
+                )  # fmt: skip
             if self.uzantilar is not None and run.durum in BITMIS and not run.parent:
                 await asyncio.to_thread(
                     self.uzantilar.olay, "run_bitis",

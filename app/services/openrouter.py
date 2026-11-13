@@ -200,6 +200,41 @@ class OpenRouterDeposu:
         a = self.anahtar()
         return {"var": bool(a), "maskeli": maskele(a) if a else ""}
 
+    # ---- kalan limit (durum cubugu) ----
+    async def limit(self) -> dict:
+        """Anahtarin kalan limiti (/key) ve hesap bakiyesi (/credits). 60 sn bellekte tutulur.
+        Doner: {var, kalan, limit, kullanim, bakiye, ucretsiz, uyari}; tutarlar USD."""
+        onb = getattr(self, "_limit_onb", None)
+        if onb and time.time() - onb[0] < 60:
+            return onb[1]
+        a = self.anahtar()
+        if not a:
+            return {"var": False}
+        basliklar = {"Authorization": f"Bearer {a}"}
+        sonuc: dict = {"var": True, "uyari": ""}
+        try:
+            async with httpx.AsyncClient(timeout=10.0, transport=self.transport) as c:
+                r = await c.get(f"{self.adres}/key", headers=basliklar)
+                r.raise_for_status()
+                d = r.json().get("data") or {}
+                sonuc |= {
+                    "limit": d.get("limit"),  # None: limitsiz anahtar
+                    "kalan": d.get("limit_remaining"),
+                    "kullanim": d.get("usage"),
+                    "ucretsiz": bool(d.get("is_free_tier")),
+                }
+                r = await c.get(f"{self.adres}/credits", headers=basliklar)
+                if r.status_code == 200:
+                    k = r.json().get("data") or {}
+                    if isinstance(k.get("total_credits"), (int, float)):
+                        sonuc["bakiye"] = round(k["total_credits"] - (k.get("total_usage") or 0), 4)
+        except (httpx.HTTPError, ValueError, AttributeError) as e:
+            if onb:  # ag hatasi: eski deger + uyari
+                return onb[1] | {"uyari": f"Limit guncellenemedi ({type(e).__name__})."}
+            return {"var": True, "uyari": f"Limit okunamadi ({type(e).__name__})."}
+        self._limit_onb = (time.time(), sonuc)
+        return sonuc
+
     # ---- model listesi ----
     async def modeller(self, yenile: bool = False) -> dict:
         onb = json_oku(self.liste_yolu, None)

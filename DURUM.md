@@ -1,5 +1,5 @@
 # DURUM - kairo
-guncel: 2026-11-13 | son arac: Claude Code | dal: feature/ajan-katmani
+guncel: 2026-11-13 | son arac: Claude Code (diger hesaptan devam) | dal: feature/ajan-katmani
 
 - 2026-11-13 (16): commit a4fc316 pushlandi. (1) BUYUT: cercevesiz pencere maximize() ile gorev cubugunu kapliyordu -> main.py PencereApi._calisma_alanina_sigdir: form.Bounds = Screen.WorkingArea, durum gercek sinirdan (bayrak acilista tutmuyordu). Gercek pencerede UIA ile olculdu: buyuk 0,0-1920,1140, gorev cubugu 1140-1200 acik, geri alma eski boyut. (2) AD: proje klasoru Projects\kairo, exe Kairo.exe, teslim Desktop\Portable Programlar\Kairo (data tasindi), spec paketleme/kairo.spec, pyproject/MCP clientInfo/User-Agent/OpenRouter Referer/version anahtari 'kairo' (eski 'yerel_ai_studio' anahtari arka plan tespitinde hala taniniyor). Baslangic kisayolu yeni exe'ye cevrildi. GitHub reposu henuz yerel-ai-studio adinda. Gecmis kayitlar ve degerlendirme raporlari eski adla birakildi.
 - 2026-11-13 (15): TAM PAKET KOSULDU: 679 gecti, 3 atladi (test_a9_masaustu haric, 14.5 dk); test_a9_masaustu ayri 5/5; ruff temiz. Teslim exe (10:45) kaynaktan yeni, yeniden derleme gerekmedi. COMMIT YOK, push onayi bekliyor.
@@ -370,10 +370,36 @@ Python 3.12 + FastAPI + pywebview; arayuz vanilla JS. Paketleme: PORTABLE (kulla
   - [x] Ajan sonucunda Kopyala; basliktaki Paylas: tum sohbet (ajan turlari dahil) kopyala / .md kaydet (app.js sohbetMarkdown, main.py dosya_kaydet)
   - [x] Ajan kayitlari sunucuda kalici (Oturum.ajan_runlari, POST /api/oturumlar/{id}/ajan-run); eskiden port degisince kayboluyordu
   - [x] KAIRO.md: <veri>/KAIRO.md (eski AGENTS.md tasinir), @import, varsayilan BRAIN-POLICY importu, cift import tekillesir; projede KAIRO.md okunur
-  - [~] Sag panel Claude Code gibi (Ortam/Baglam/Baglayicilar/Arka plan isleri), gizle-goster, Dosyalar ayri yan panel
-  - [ ] Derle + teslim + gercek pencerede dene + commit (diger oturumun hooks/runner/api/test_a6 degisikliklerine dikkat)
+  - [x] Sag panel Claude Code gibi (Ortam/Baglam/Baglayicilar/Arka plan isleri), gizle-goster, Dosyalar ayri yan panel
+  - [x] Derlendi + teslim (data korundu, KAIRO.md olustu) + commit ffc1187 pushlandi. Tam paket 686 gecti; 2 ilgisiz: pano testi (gercek pano mesgul), paralel alt ajan (zamanlama, tek basina gecer)
   - [x] WrongStack incelendi -> OGRENEN-SISTEM-PLANI.md (A ders defteri, B dongu, C kanitli hafiza, D chimera, E CLI)
+  - [x] UI cilasi (commit YOK): baslik cubugu alt cizgisi; ayni ikonun farkli islerde kullanimi kaldirildi
+    (ikonlar.js: panelSag, yanSohbet, plan, gorevler, arkaPlan, kahve, eklenti, uzak); sag panel ayraclari kenardan kenara;
+    durum cubugu duz ogeler + ince ayraclar (app.css sonu)
+  - [x] OpenRouter kalan limit durum cubugunda (openrouter.py OpenRouterDeposu.limit: /key + /credits, 60 sn onbellek;
+    GET /api/openrouter/limit; sagpanel.js orLimitYenile). Canli anahtarla DENENMEDI.
+  - [x] KAIRO.md ana talimat: kaynak sirasi once KAIRO.md + importlari, sonra CLAUDE.md (istege bagli); Ayarlar ekrani buna gore
+    (index.html t-kairo-liste, skiller.js kaynaklariCiz). test_skiller sirasi guncellendi.
+  - [x] Uzak erisim CALISMIYORDU: varsayilan port 8443 tailscaled ile cakisiyordu, uvicorn sys.exit(1) TUM uygulamayi kapatiyordu. Duzeltme: SystemExit yutulur (uzak.py UzakSunucu.ac), varsayilan 8765 + kayitli 8443 tasinir (ayarlar.py UZAK_PORT). Canli: ac -> https://100.89.62.116:8765 302, kod uretildi, kapandi. test_uzak_port
+  - [x] Sag panel Baglam dokumu (Claude Code Context gibi): GET /api/oturumlar/{id}/baglam artik kalemler
+    (mesaj/sistem/talimat/proje/hafiza/skill/arac/mcp) + bos; sohbet.py baglam_hazirla son_parcalar saklar;
+    sagpanel.js baglamDetayCiz. Baglayicilar panelde acilir liste + "giris gerekli". test_baglam_dokumu.
+    BULGU: bos sohbet 16K'nin %67'si (skill listesi 4.1k, KAIRO.md+BRAIN-POLICY 3.8k, araclar 2.9k) -> kucuk
+    modelde ilk is bunu kucultmek (skill listesini 8K gibi uygun olanlarla sinirla?).
+  - [x] Bu turun degisiklikleri: test + derle + teslim + commit (diger oturumun hooks/runner/api/test_a6 hunk'larina dikkat)
+    2026-11-13 diger hesaptan devralindi: ruff temiz; tam paket (test_a9_masaustu haric) 690 gecti, 1 kaldi:
+    test_a8 paralel alt ajan esigi 1.6 sn bu makinede HEAD'de de 1.62-1.66 (sabit ek yuk ~0.45 sn) -> esik 1.8
+    (sirali en az 1.8 sn uyku; alti cakisma kaniti). test_servisler kacis uyarilari r"" ile giderildi. test_a9_masaustu 5/5.
+    Derlendi + teslim (data korundu, 373 MB), Baslat.bat ile acildi 18:18, ana sayfa 200. Commit bu maddeyle.
+  - [ ] Ogrenen sistem A: ders defteri (app/agent/dersler.py) - OGRENEN-SISTEM-PLANI.md; runner baglanti noktalari:
+    _adim_calistir hata dali (~sat. 1080), DONGU_DUR (~815), _bitir kanit reddi, finally run_bitis
+  - [ ] ERTELENDI (kullanici 2026-11-13): langchain-ai/social-media-agent varsayilan ajan olarak eklenmedi; istenirse once guvenlik taramasi, sonra kod kopyalamadan talimatli 'Sosyal Medya' ajani (paylasim onayli)
   - [ ] Claude Code / Codex / Antigravity CLI'larini sohbetten kullanma (cli_ajan.py'de claude+codex var, antigravity yok)
+- [x] BRAIN BAGLANTISI (2026-11-13, Claude Code, COMMIT YOK): Kairo ajan gorevleri brain kayit sistemine bagli.
+  - runner.py `_hook_kok`/`kok`: run_baslangic/run_bitis hook'larina cwd + hedef/ozet/model gider; SessionStart additionalContext run.ek_sistem'e eklenir (api.py `ajan.kok` = aktif proje koku).
+  - hooks.py: HookSonucu.baglam, `_ek_baglam`; `_async_mi` ilk stdout satirini artik geri veriyor (tek satirlik JSON kayboluyordu).
+  - data/hooks.json + portable data/hooks.json: "brain: DURUM + son kayitlar" (durum-context.py), "brain: ajan kaydi" (son-kayit.py kairo).
+  - Test: test_a6_hooks + test_a3_ajan 32 gecti; gercek script'lerle e2e dogrulandi. Portable exe YENIDEN DERLENMEDI (eski exe cwd gondermez -> kayit dusmez).
 - Commit + push (feature/ajan-katmani, ~42 dosya; kullanici onayi gerekli).
 - Gercek pencerede: onay kapsam dugmeleri, Etkinlik penceresi. Gercek Vercel girisi (kullanici). Telegram gercek botla.
 - Asagidaki eski maddeler (2026-11-09/10) hala gecerli ama oncelik dusuk:

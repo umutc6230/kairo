@@ -66,7 +66,7 @@ svg { display: block; }
 #kok { display: flex; flex-direction: column; height: 100vh; }
 
 /* ---- baslik cubugu ---- */
-.baslik { height: 44px; display: flex; align-items: center; flex-shrink: 0; user-select: none; }
+.baslik { height: 44px; border-bottom: 1px solid var(--cizgi2); box-sizing: border-box; display: flex; align-items: center; flex-shrink: 0; user-select: none; }
 .baslik-sol { width: var(--kenar-gen); display: flex; gap: 2px; padding-left: 8px; align-items: center; transition: width .2s; }
 .baslik-orta { flex: 1; height: 100%; display: flex; align-items: center; padding-left: 18px; color: var(--soluk); font-size: 15px; min-width: 0; }
 .baslik-orta span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -759,3 +759,39 @@ body.uzak-saglayici [data-yalniz-yerel] { display: none !important; }
 .sp-sag { display: flex; gap: 2px; }
 .ikon-btn[aria-pressed="true"] { background: var(--yuzey2); }
 @media (max-width: 1100px) { .dosya-panel { display: none; } }
+.yan-panel .sp-ayrac { margin: 6px -14px; }
+
+/* Durum cubugu: hapsiz, duz ogeler; esit yukseklik, ince ayraclar (VS Code / Claude gibi) */
+.durum-cubugu { height: 26px; gap: 0; padding: 0 6px; font-size: 12px; color: var(--soluk); }
+.durum-cubugu > * { height: 100%; display: inline-flex; align-items: center; gap: 6px; padding: 0 8px; white-space: nowrap; }
+.durum-cubugu .hap { height: 100%; padding: 0 8px; border-radius: 0; background: none; font-size: 12px; color: var(--soluk); }
+.durum-cubugu .hap:hover, .durum-cubugu .dc-tik:hover { background: var(--yuzey2); color: var(--metin); }
+.durum-cubugu > :not(.dc-bosluk):not([hidden]) + :not(.dc-bosluk):not([hidden]) { border-left: 1px solid var(--cizgi); }
+.durum-cubugu .dc-bosluk + * { border-left: 0 !important; }
+.durum-cubugu .hap svg { width: 14px; height: 14px; }
+.durum-cubugu .kucuk { font-size: 12px; }
+.durum-cubugu .dc-tik { cursor: pointer; background: none; border: 0; font: inherit; color: inherit; }
+.dc-limit.az { color: var(--uyari-metin); }
+
+/* Sag panel acilir ayrintilar (Claude Code Context / Connectors gibi) */
+.sp-satir.sp-tik .sp-ok svg { transition: transform .15s; }
+.sp-satir.sp-tik.acik .sp-ok svg { transform: rotate(90deg); }
+.sp-detay { display: flex; flex-direction: column; gap: 2px; padding: 4px 6px 8px; font-size: 12.5px; }
+.sp-detay[hidden] { display: none; }
+.sp-alt-satir { display: flex; align-items: center; gap: 8px; padding: 3px 0; min-height: 24px; }
+.sp-alt-satir .sp-ad { flex: 1; }
+.sp-durum { font-size: 12px; }
+.uyari-metin { color: var(--uyari-metin); }
+.yesil-metin { color: var(--yesil, #3fb950); }
+.sp-harf { width: 20px; height: 20px; border-radius: 5px; display: inline-grid; place-items: center; font-size: 11px; font-weight: 600; background: var(--yuzey2); color: var(--soluk); flex: none; }
+.sp-alt-bag { align-self: flex-start; margin-top: 4px; background: none; border: 0; color: var(--soluk); font: inherit; font-size: 12px; cursor: pointer; padding: 2px 0; }
+.sp-alt-bag:hover { color: var(--metin); text-decoration: underline; }
+.bk-ust { display: flex; justify-content: space-between; align-items: baseline; padding: 2px 0 6px; }
+.bk-cubuk { display: flex; height: 6px; border-radius: 3px; overflow: hidden; background: var(--yuzey2); margin-bottom: 8px; }
+.bk-cubuk > span { height: 100%; }
+.bk-nokta { width: 10px; height: 10px; border-radius: 2px; flex: none; }
+.bk-yuzde { width: 44px; text-align: right; color: var(--metin); font-variant-numeric: tabular-nums; }
+.bk-not { margin-top: 6px; }
+.bk-mesaj { background: #4c8bf5; } .bk-sistem { background: #d4a017; } .bk-talimat { background: #9b72cf; }
+.bk-proje { background: #c77dba; } .bk-hafiza { background: #8a8f98; } .bk-skill { background: #2bb39a; }
+.bk-arac { background: #6c757d; } .bk-mcp { background: #e8743b; } .bk-bos { background: var(--yuzey2); border: 1px solid var(--cizgi); }

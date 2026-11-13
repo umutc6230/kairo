@@ -535,15 +535,25 @@ class UzakSunucu:
             return
         cfg = uvicorn.Config(asgi, host=host, port=port, ssl_certfile=str(cert),
                              ssl_keyfile=str(key), log_level="warning", lifespan="off")  # fmt: skip
-        self.sunucu = _Sunucu(cfg)
-        self.gorev = asyncio.create_task(self.sunucu.serve())
+        sunucu = self.sunucu = _Sunucu(cfg)
+
+        async def _guvenli_serve() -> None:
+            # uvicorn port alamayinca sys.exit(1) cagirir; asyncio SystemExit'i loop'tan disari
+            # firlatip TUM uygulamayi kapatiyordu. Burada yutulur, ac() Turkce hata dondurur.
+            with contextlib.suppress(SystemExit):
+                await sunucu.serve()
+
+        self.gorev = asyncio.create_task(_guvenli_serve())
         for _ in range(100):
             if self.sunucu.started or self.gorev.done():
                 break
             await asyncio.sleep(0.05)
         if not self.sunucu.started:
             self.sunucu = None
-            raise OSError(f"{host}:{port} dinlenemedi (port kullanimda olabilir).")
+            raise OSError(
+                f"{host}:{port} dinlenemedi: port baska bir program (ya da acik baska bir Kairo)"
+                " tarafindan kullaniliyor. Ayarlar'dan uzak erisim portunu degistirin."
+            )
         self.adres = f"https://{host}:{port}/"
 
     async def kapat(self) -> None:

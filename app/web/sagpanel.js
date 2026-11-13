@@ -46,26 +46,69 @@ export function dosyaAgaciniYenile() {
   if (kap && !$("#dosya-panel").hidden) klasorCiz(kap, "");
 }
 
+const TOKEN = (n) => (n >= 1000 ? `${(n / 1000).toFixed(1)}k` : String(n));
+
+// Claude Code'daki gibi satir tiklaninca panelin icinde acilan ayrinti
+function detayAcKapa(satir, detay, acik) {
+  detay.hidden = !acik;
+  satir.setAttribute("aria-expanded", String(acik));
+  satir.classList.toggle("acik", acik);
+}
+
+let sonBaglayicilar = [];
 async function baglayicilariYenile() {
   try {
     const { sunucular } = await api("/api/mcp");
+    sonBaglayicilar = sunucular;
     const acik = sunucular.filter((s) => s.aktif !== false).length;
-    const metin = sunucular.length ? `${acik}/${sunucular.length}` : "yok";
+    const giris = sunucular.filter(girisGerekli).length;
+    const metin = !sunucular.length ? "yok" : giris ? `${giris} giriş gerekli` : `${acik}/${sunucular.length}`;
     $("#sp-baglayici").textContent = metin;
-    $("#dc-baglayici").textContent = `Bağlayıcı: ${metin}`;
+    $("#sp-baglayici").classList.toggle("uyari-metin", giris > 0);
+    $("#dc-baglayici").textContent = `Bağlayıcı: ${acik}/${sunucular.length}`;
+    if (!$("#sp-baglayici-detay").hidden) baglayiciDetayCiz();
   } catch { /* sessiz */ }
 }
+const girisGerekli = (s) => Boolean(s.uzak && s.oauth && !s.oauth.bagli);
 
+function baglayiciDetayCiz() {
+  const kap = $("#sp-baglayici-detay");
+  const sira = [...sonBaglayicilar].sort((a, b) => girisGerekli(b) - girisGerekli(a) || a.ad.localeCompare(b.ad, "tr"));
+  kap.innerHTML = sira.map((s) => {
+    const durumM = girisGerekli(s) ? '<span class="sp-durum uyari-metin">Giriş gerekli</span>'
+      : s.aktif === false ? '<span class="sp-durum soluk">kapalı</span>' : '<span class="sp-durum yesil-metin">açık</span>';
+    return `<div class="sp-alt-satir" title="${kacir(s.aciklama || s.ad)}"><span class="sp-harf">${kacir((s.ad || "?")[0].toUpperCase())}</span><span class="sp-ad">${kacir(s.ad)}</span>${durumM}</div>`;
+  }).join("") || '<div class="soluk kucuk">Bağlayıcı yok.</div>';
+  kap.append(el('<button class="sp-alt-bag" type="button">Bağlayıcıları yönet</button>'));
+  kap.lastChild.onclick = () => baglayiciAcGeri?.();
+}
+let baglayiciAcGeri = null;
+
+let sonBaglam = null;
 export async function baglamYenile() {
   const yazi = $("#sp-baglam");
   if (!yazi) return;
-  if (!durum.oturumId) { yazi.textContent = "-"; $("#sp-baglam-dolu").style.width = "0"; return; }
+  if (!durum.oturumId) { yazi.textContent = "-"; $("#sp-baglam-dolu").style.width = "0"; sonBaglam = null; return; }
   try {
-    const b = await api(`/api/oturumlar/${durum.oturumId}/baglam`);
+    const b = sonBaglam = await api(`/api/oturumlar/${durum.oturumId}/baglam`);
     yazi.textContent = `%${b.yuzde}`;
     yazi.title = `~${b.kullanilan} / ${b.boyut} token`;
     $("#sp-baglam-dolu").style.width = `${b.yuzde}%`;
+    if (!$("#sp-baglam-detay").hidden) baglamDetayCiz();
   } catch { /* sessiz */ }
+}
+
+function baglamDetayCiz() {
+  const kap = $("#sp-baglam-detay");
+  const b = sonBaglam;
+  if (!b) { kap.innerHTML = '<div class="soluk kucuk">Bir sohbet açınca bağlam dökümü görünür.</div>'; return; }
+  const kalemler = b.kalemler || [{ ad: "Mesajlar", tur: "mesaj", token: b.kullanilan, yuzde: b.yuzde }];
+  const cubuk = kalemler.map((k) => `<span class="bk-${kacir(k.tur)}" style="width:${Math.min(100, k.yuzde)}%"></span>`).join("");
+  kap.innerHTML = `<div class="bk-ust"><b>%${b.yuzde} kullanıldı</b><span class="soluk">${TOKEN(b.kullanilan)} / ${TOKEN(b.boyut)}</span></div>
+    <div class="bk-cubuk" role="img" aria-label="Bağlam %${b.yuzde} dolu">${cubuk}</div>
+    ${kalemler.map((k) => `<div class="sp-alt-satir"><span class="bk-nokta bk-${kacir(k.tur)}"></span><span class="sp-ad">${kacir(k.ad)}${k.sayi ? ` <span class="soluk">(${k.sayi})</span>` : ""}</span><span class="soluk">${TOKEN(k.token)}</span><span class="bk-yuzde">${k.yuzde}%</span></div>`).join("")}
+    <div class="sp-alt-satir"><span class="bk-nokta bk-bos"></span><span class="sp-ad">Boş alan</span><span class="soluk">${TOKEN(b.bos ?? 0)}</span><span class="bk-yuzde">${Math.max(0, 100 - b.yuzde)}%</span></div>
+    <div class="soluk kucuk bk-not">Tahmini; bir sonraki istekte modele gidecek parçalar.</div>`;
 }
 
 async function uzakYenile() {
@@ -101,25 +144,48 @@ async function islerYenile() {
     let biten = 0;
     for (const i of isler) {
       if (i.durum !== "calisiyor") { biten++; continue; }
-      satirlar.push(`<div class="sp-satir sp-is" title="${kacir(i.komut)}">${ikon("terminal")}<span class="sp-ad">${kacir(i.komut)}</span></div>`);
+      satirlar.push(`<div class="sp-satir sp-is" title="${kacir(i.komut)}">${ikon("arkaPlan")}<span class="sp-ad">${kacir(i.komut)}</span></div>`);
     }
     for (const g of gorevler) {
       if (!CALISAN.has(g.durum)) { biten++; continue; }
       const sn = g.kullanim?.sure_sn ?? 0;
-      satirlar.push(`<div class="sp-satir sp-is" title="${kacir(g.hedef || "")}">${ikon("liste")}<span class="sp-ad">${kacir(g.hedef || "Ajan görevi")}</span><span class="soluk kucuk">${SURE(sn)}</span></div>`);
+      satirlar.push(`<div class="sp-satir sp-is" title="${kacir(g.hedef || "")}">${ikon("gorevler")}<span class="sp-ad">${kacir(g.hedef || "Ajan görevi")}</span><span class="soluk kucuk">${SURE(sn)}</span></div>`);
     }
     if (biten) satirlar.push(`<div class="sp-satir soluk">${ikon("tik")}<span class="sp-ad">${biten} bitti</span></div>`);
     kap.innerHTML = satirlar.join("") || '<span class="soluk kucuk">Yok</span>';
   } catch { /* sessiz */ }
 }
 
+const DOLAR = (x) => `$${Number(x).toFixed(Math.abs(Number(x)) < 10 ? 2 : 0)}`;
+
+// Durum cubugu: OpenRouter kalan limiti/bakiyesi (anahtar sunucuda; buraya yalniz tutarlar gelir)
+export async function orLimitYenile() {
+  const b = $("#dc-or-limit");
+  if (!b) return;
+  if (durum.ayarlar?.saglayici !== "openrouter") { b.hidden = true; return; }
+  try {
+    const l = await api("/api/openrouter/limit");
+    if (!l.var) { b.hidden = true; return; }
+    const kalan = l.kalan ?? l.bakiye;
+    const parca = [l.kalan != null ? `Anahtar limiti: ${DOLAR(l.kalan)} / ${DOLAR(l.limit)}` : "Anahtar limiti: yok (sınırsız)"];
+    if (l.bakiye != null) parca.push(`Hesap bakiyesi: ${DOLAR(l.bakiye)}`);
+    if (l.kullanim != null) parca.push(`Kullanılan: ${DOLAR(l.kullanim)}`);
+    if (l.ucretsiz) parca.push("Ücretsiz katman");
+    if (l.uyari) parca.push(l.uyari);
+    b.textContent = kalan != null ? `OpenRouter: ${DOLAR(kalan)} kalan` : "OpenRouter: limitsiz";
+    b.title = parca.join(" · ");
+    b.classList.toggle("az", kalan != null && kalan < 1);
+    b.hidden = false;
+  } catch { b.hidden = true; }
+}
+
 export function sagPanelKur({ baglayiciAc, ayarAc }) {
   $("#sp-ayar").onclick = ayarAc;
-  $("#sp-baglam-satir").onclick = async () => {
-    try {
-      const y = await api("/api/model/yetenek");
-      bildir(`${y.model}: bağlam ${y.baglam} token. ${$("#sp-baglam").title || ""}`, "bilgi", 3000);
-    } catch (e) { bildir(e.message, "hata"); }
+  baglayiciAcGeri = baglayiciAc;
+  $("#sp-baglam-satir").onclick = (e) => {
+    const acik = $("#sp-baglam-detay").hidden;
+    detayAcKapa(e.currentTarget, $("#sp-baglam-detay"), acik);
+    if (acik) { baglamDetayCiz(); baglamYenile(); }
   };
   $("#sp-uzak").onchange = async (e) => {
     try {
@@ -135,7 +201,14 @@ export function sagPanelKur({ baglayiciAc, ayarAc }) {
   $("#sp-dosya-yenile").onclick = dosyaAgaciniYenile;
   dosyaPaneliAyarla(localStorage.getItem(DOSYA_ANAHTAR) === "1");
   setInterval(islerYenile, 4000);
-  $("#sp-baglayici-baslik").onclick = baglayiciAc;
+  setTimeout(orLimitYenile, 1500); // ayarlar yuklendikten sonra
+  setInterval(orLimitYenile, 60000);
+  $("#dc-or-limit").onclick = async () => { await orLimitYenile(); bildir($("#dc-or-limit").title, "bilgi", 5000); };
+  $("#sp-baglayici-baslik").onclick = (e) => {
+    const acik = $("#sp-baglayici-detay").hidden;
+    detayAcKapa(e.currentTarget, $("#sp-baglayici-detay"), acik);
+    if (acik) { baglayiciDetayCiz(); baglayicilariYenile(); }
+  };
   ikonlariYerlestir(document.getElementById("kok"));
   baglayicilariYenile();
   api("/api/bilgi").then((b) => { $("#dc-surum").textContent = `${b.urun} ${b.surum}`; }).catch(() => {});

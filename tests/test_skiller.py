@@ -151,7 +151,8 @@ def test_talimat_deposu(tmp_path, monkeypatch):
     assert d.uygulama_oku() == ""
     assert d.uygulama_yaz("  Kisa yaz.  ") == "Kisa yaz.\n"
     k = d.kaynaklar()
-    assert [x["tur"] for x in k] == ["claude", "uygulama"] and k[0]["kisaltildi"] is True
+    assert [x["tur"] for x in k] == ["uygulama", "claude"]  # KAIRO.md once
+    assert k[1]["kisaltildi"] is True
     assert '<talimat kaynak="CLAUDE.md">' in d.sistem_metni()
     assert d.sistem_metni(claude=False, uygulama=False) == ""
     assert d.uygulama_yaz("") == ""

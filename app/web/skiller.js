@@ -22,7 +22,7 @@ export function skillerKur(cb) {
   $("#t-kaydet").onclick = async () => {
     try {
       await api("/api/talimatlar", { method: "PUT", govde: { metin: $("#t-uygulama").value } });
-      bildir("Uygulama talimatı kaydedildi", "basari");
+      bildir("KAIRO.md kaydedildi", "basari");
       talimatlarYukle();
     } catch (e) { bildir(e.message, "hata"); }
   };
@@ -61,21 +61,26 @@ async function talimatlarYukle() {
   if (document.activeElement !== $("#t-uygulama")) $("#t-uygulama").value = t.uygulama;
   $("#t-uygulama").oninput();
   const toplam = t.claude.reduce((a, k) => a + k.token, 0);
-  $("#t-claude-ozet").textContent = t.claude.length ? `${t.claude.length} dosya · ~${sayi(toplam, 0)} token` : "bulunamadı (~/.claude/CLAUDE.md yok)";
-  const kap = $("#t-claude-liste");
+  const kairoToplam = (t.kairo || []).reduce((a, k) => a + k.token, 0);
+  $("#t-claude-ozet").textContent = t.claude.length ? `${t.claude.length} dosya · ~${sayi(toplam, 0)} token` : "eklenecek yeni dosya yok";
+  // KAIRO.md'nin import ettikleri (kendisi ustteki kutuda); CLAUDE.md ayri ve istege bagli
+  kaynaklariCiz($("#t-kairo-liste"), (t.kairo || []).slice(1));
+  kaynaklariCiz($("#t-claude-liste"), t.claude);
+  const oran = Math.round((((t.claude_acik ? toplam : 0) + (t.uygulama_acik ? kairoToplam : 0)) / t.baglam_token) * 100);
+  $("#t-baglam-not").innerHTML = oran > 30
+    ? `<span class="rozet sari">talimatlar bağlamın %${oran}'ini kullanıyor</span>`
+    : `<span class="rozet">talimatlar bağlamın %${oran}'i</span>`;
+}
+
+function kaynaklariCiz(kap, liste) {
   kap.innerHTML = "";
-  for (const k of t.claude) {
+  for (const k of liste) {
     const s = el(`<div class="kaynak-satir"><span data-ikon="dosya"></span><span class="ad">${kacir(k.yol.split(/[\\/]/).pop())}</span>
       <span class="soluk kucuk yol">${kacir(k.yol)}</span><span class="rozet">~${sayi(k.token, 0)} token</span>${k.kisaltildi ? '<span class="rozet sari">kısaltıldı</span>' : ""}
       <button class="btn kucuk">Göster</button></div>`);
     s.querySelector("button").onclick = () => modal({ baslik: k.yol, icerik: `<pre class="duz">${kacir(k.metin)}</pre>`, genis: true });
     kap.append(s);
   }
-  const baglam = t.baglam_token;
-  const oran = Math.round(((t.claude_acik ? toplam : 0) / baglam) * 100);
-  $("#t-baglam-not").innerHTML = oran > 30
-    ? `<span class="rozet sari">talimatlar bağlamın %${oran}'ini kullanıyor</span>`
-    : `<span class="rozet">talimatlar bağlamın %${oran}'i</span>`;
   ikonlariYerlestir(kap);
 }
 

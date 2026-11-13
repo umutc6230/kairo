@@ -454,14 +454,14 @@ async function baslat() {
   $("#baslik-menu").onclick = (e) => baslikMenusu(e.currentTarget);
   $("#btn-paylas").onclick = (e) => baslikMenusu(e.currentTarget);
   $("#btn-daha").onclick = (e) => menuAc(e.currentTarget, [
-    { metin: "Yan sohbet (Ctrl+;)", ikon: "liste", eylem: () => dockAcKapa("yan", true) },
-    { metin: "Plan", ikon: "liste", eylem: () => dockAcKapa("plan", true) },
-    { metin: "Arka plan işleri", ikon: "terminal", eylem: () => arkaPlanIsleri() },
-    { metin: "Ajan görevleri", ikon: "liste", eylem: () => git({ tur: "gorevler" }) },
+    { metin: "Yan sohbet (Ctrl+;)", ikon: "yanSohbet", eylem: () => dockAcKapa("yan", true) },
+    { metin: "Plan", ikon: "plan", eylem: () => dockAcKapa("plan", true) },
+    { metin: "Arka plan işleri", ikon: "arkaPlan", eylem: () => arkaPlanIsleri() },
+    { metin: "Ajan görevleri", ikon: "gorevler", eylem: () => git({ tur: "gorevler" }) },
     { metin: "Etkinlik (ne yapıldı)", ikon: "saat", eylem: () => etkinlikAc() },
-    { metin: uyanikAcik ? "Uyanık tutmayı kapat" : "Bilgisayarı uyanık tut", ikon: "guc", eylem: () => uyanikDegistir() },
+    { metin: uyanikAcik ? "Uyanık tutmayı kapat" : "Bilgisayarı uyanık tut", ikon: "kahve", eylem: () => uyanikDegistir() },
     "ayrac",
-    { metin: "Eklentiler (bağlayıcı, skill, plugin)", ikon: "sihir", eylem: () => git({ tur: "eklentiler" }) },
+    { metin: "Eklentiler (bağlayıcı, skill, plugin)", ikon: "eklenti", eylem: () => git({ tur: "eklentiler" }) },
     ...(uzakMi() ? [] : [{ metin: "Modeller", ikon: "model", eylem: () => git({ tur: "modeller" }) }]),
     { metin: "Ayarlar", ikon: "disli", eylem: () => ayarlarAc() },
     { metin: "Hakkında", ikon: "bilgi", eylem: () => ayarlarAc("hakkinda") },

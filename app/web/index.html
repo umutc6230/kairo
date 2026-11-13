@@ -18,7 +18,7 @@
       <div class="baslik-orta pywebview-drag-region"><button id="baslik-menu" class="baslik-dugme"><span id="sayfa-basligi">Yeni sohbet</span><span data-ikon="asagi"></span></button><button id="btn-paylas" class="ikon-btn" title="Paylaş: kopyala ya da dosyaya kaydet" aria-label="Sohbeti paylaş" data-ikon="dis"></button></div>
       <div class="baslik-sag">
         <div class="arac-cubugu">
-          <button class="ikon-btn" id="btn-sag-panel" title="Oturum paneli" data-ikon="liste"></button>
+          <button class="ikon-btn" id="btn-sag-panel" title="Oturum paneli" data-ikon="panelSag"></button>
           <button class="ikon-btn" data-dock="terminal" title="Terminal (Ctrl+`)" data-ikon="terminal"></button>
           <button class="ikon-btn" data-dock="degisiklik" title="Değişiklikler" data-ikon="diff"></button>
           <button class="ikon-btn" data-dock="tarayici" title="Tarayıcı" data-ikon="dunya"></button>
@@ -255,14 +255,15 @@
             <p class="soluk">Claude Code mantığı: talimatlar her sohbete eklenir. 16K ve üstü bağlamda tüm skill'lerin adı ve açıklaması modele listelenir (8K'da yalnız mesaja uygun olanlar); model uygun olanı <code>skill_kullan</code> ile yükler, mesajla çok güçlü eşleşen skill otomatik yüklenir. Skill'ler yalnız okunur, içlerindeki betikler çalıştırılmaz.</p>
 
             <div class="kart">
-              <div class="kart-baslik"><b>Talimatlar</b><span class="soluk kucuk">CLAUDE.md / AGENTS.md</span></div>
-              <div class="anahtar-satir"><div><div>Claude Code ve brain talimatları</div>
-                <div class="ayar-not">~/.claude/CLAUDE.md ve içindeki @import'lar (BRAIN-POLICY.md gibi). <span id="t-claude-ozet"></span></div></div>
+              <div class="kart-baslik"><b>Talimatlar</b><span class="soluk kucuk">KAIRO.md</span></div>
+              <div class="anahtar-satir"><div><div>Kairo talimatı (KAIRO.md)</div><div class="ayar-not">Her sohbete ve ajan görevine eklenir. Satır başındaki <code>@yol</code> başka dosyayı içine alır (BRAIN-POLICY gibi). <span id="t-uygulama-token"></span></div></div>
+                <label class="anahtar"><input type="checkbox" id="t-uygulama-acik"><span></span></label></div>
+              <textarea class="alan" id="t-uygulama" rows="7" placeholder="Örn: Her zaman Türkçe cevap ver.&#10;@~/Documents/brain/BRAIN-POLICY.md"></textarea>
+              <div id="t-kairo-liste" class="kaynak-liste"></div>
+              <div class="anahtar-satir"><div><div>Claude Code talimatı (isteğe bağlı)</div>
+                <div class="ayar-not">~/.claude/CLAUDE.md; KAIRO.md'nin zaten içe aldığı dosyalar tekrar eklenmez. <span id="t-claude-ozet"></span></div></div>
                 <label class="anahtar"><input type="checkbox" id="t-claude-acik"><span></span></label></div>
               <div id="t-claude-liste" class="kaynak-liste"></div>
-              <div class="anahtar-satir"><div><div>Uygulama talimatı (AGENTS.md)</div><div class="ayar-not">Yalnız bu uygulamadaki sohbetlere eklenir. <span id="t-uygulama-token"></span></div></div>
-                <label class="anahtar"><input type="checkbox" id="t-uygulama-acik"><span></span></label></div>
-              <textarea class="alan" id="t-uygulama" rows="5" placeholder="Örn: Her zaman Türkçe cevap ver. Hakediş sorularında önce hakedis-kontrol skill'ini kullan."></textarea>
               <div class="satir-arasi"><div class="satir"><label class="soluk kucuk" for="t-baglam">Bağlam</label>
                 <select class="secim" id="t-baglam"><option value="8192">8K token (en az RAM)</option><option value="16384">16K token (önerilen)</option><option value="32768">32K token (daha çok RAM)</option></select>
                 <span id="t-baglam-not"></span></div>
@@ -318,11 +319,13 @@
         <div class="sp-bolum">Ortam</div>
         <div class="sp-satir"><span data-ikon="ekran"></span><span class="sp-ad">Bu bilgisayar</span><button class="ikon-btn kucuk-ikon" id="sp-ayar" title="Ayarlar" data-ikon="disli"></button></div>
         <button class="sp-satir sp-tik" id="sp-proje"><span data-ikon="klasor"></span><span class="sp-ad" id="sp-proje-metni">Proje seç</span></button>
-        <label class="sp-satir"><span data-ikon="ekran"></span><span class="sp-ad">Uzak erişim</span><span class="anahtar"><input type="checkbox" id="sp-uzak"><span></span></span></label>
+        <label class="sp-satir"><span data-ikon="uzak"></span><span class="sp-ad">Uzak erişim</span><span class="anahtar"><input type="checkbox" id="sp-uzak"><span></span></span></label>
         <div class="sp-ayrac"></div>
-        <button class="sp-satir sp-tik" id="sp-baglam-satir" title="Bağlam ayrıntısı"><span class="sp-ad">Bağlam <span class="sp-ok" data-ikon="sag"></span></span><span id="sp-baglam" class="soluk kucuk">-</span><span class="baglam-cubuk"><span id="sp-baglam-dolu"></span></span></button>
+        <button class="sp-satir sp-tik" id="sp-baglam-satir" title="Bağlam ayrıntısı" aria-expanded="false" aria-controls="sp-baglam-detay"><span class="sp-ad">Bağlam <span class="sp-ok" data-ikon="sag"></span></span><span id="sp-baglam" class="soluk kucuk">-</span><span class="baglam-cubuk"><span id="sp-baglam-dolu"></span></span></button>
+        <div id="sp-baglam-detay" class="sp-detay" hidden></div>
         <div class="sp-ayrac"></div>
-        <button class="sp-satir sp-tik" id="sp-baglayici-baslik"><span class="sp-ad">Bağlayıcılar <span class="sp-ok" data-ikon="sag"></span></span><span id="sp-baglayici" class="soluk kucuk"></span></button>
+        <button class="sp-satir sp-tik" id="sp-baglayici-baslik" aria-expanded="false" aria-controls="sp-baglayici-detay"><span class="sp-ad">Bağlayıcılar <span class="sp-ok" data-ikon="sag"></span></span><span id="sp-baglayici" class="soluk kucuk"></span></button>
+        <div id="sp-baglayici-detay" class="sp-detay" hidden></div>
         <div class="sp-ayrac"></div>
         <div class="sp-bolum">Arka plan işleri</div>
         <div id="sp-isler" class="sp-isler"><span class="soluk kucuk">Yok</span></div>
@@ -341,6 +344,7 @@
           <span class="nokta" id="agecidi-nokta"></span><span id="agecidi-metni"></span></button>
         <span id="ram-metni" class="soluk kucuk" data-yalniz-yerel></span>
         <span class="dc-bosluk"></span>
+        <button id="dc-or-limit" class="dc-tik dc-limit" title="OpenRouter kalan limit" hidden></button>
         <span id="dc-baglayici" class="soluk kucuk"></span>
         <span id="dc-surum" class="soluk kucuk"></span>
     </footer>

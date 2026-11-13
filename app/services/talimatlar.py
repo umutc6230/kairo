@@ -100,12 +100,13 @@ class TalimatDeposu:
         """Etkin talimat kaynaklari: [{tur, yol, metin, token, kisaltildi}]."""
         sonuc: list[dict] = []
         ziyaret: set[Path] = set()  # ortak: ayni import (BRAIN-POLICY) iki kez eklenmez
-        if claude:
-            for k in importlari_coz(claude_md_yolu(), ziyaret):
-                sonuc.append({"tur": "claude", **k})
+        # once KAIRO.md (ana kaynak): ortak importlar (BRAIN-POLICY) onun altinda sayilir
         if uygulama:
             for k in importlari_coz(self.uygulama_yolu, ziyaret):
                 sonuc.append({"tur": "uygulama", **k})
+        if claude:
+            for k in importlari_coz(claude_md_yolu(), ziyaret):
+                sonuc.append({"tur": "claude", **k})
         for k in sonuc:
             k["kisaltildi"] = len(k["metin"]) > MAX_KAYNAK_KARAKTER
             k["metin"] = k["metin"][:MAX_KAYNAK_KARAKTER]

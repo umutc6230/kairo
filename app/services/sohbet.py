@@ -853,6 +853,14 @@ class SohbetServisi:
             skill_listesi,
             skill_metni,
         )  # sabit -> degisken
+        # Sag panel baglam dokumu icin parcalar (yalniz okunur; istek akisini degistirmez)
+        self.son_parcalar = {
+            "sistem": "\n\n".join(s for s in (parcalar[0], *parcalar[4:6]) if s),
+            "talimat": talimat,
+            "proje": proje_talimati,
+            "hafiza": hafiza,
+            "skill": "\n\n".join(s for s in parcalar[6:] if s),
+        }
         sistem = "\n\n".join(s for s in parcalar if s)
         if not ayar.sohbet_araclari and alan.id == VARSAYILAN_ALAN_ID:
             return sistem, [], {}, otomatik  # kullanici sohbette araclari kapatti

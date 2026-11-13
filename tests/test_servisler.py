@@ -311,8 +311,8 @@ def test_pencere_klasor_sec(monkeypatch):
             return self.sonuc
 
     api = PencereApi()
-    api._pencere = SahtePencere(("C:\Projeler\kairo",))
-    assert api.klasor_sec() == "C:\Projeler\kairo"
+    api._pencere = SahtePencere((r"C:\Projeler\kairo",))
+    assert api.klasor_sec() == r"C:\Projeler\kairo"
     assert api._pencere.tur == webview.FileDialog.FOLDER
     api._pencere = SahtePencere(None)  # iptal
     assert api.klasor_sec() == ""
@@ -331,7 +331,7 @@ def test_pencere_dosya_kaydet(tmp_path):
 
     api = PencereApi()
     api._pencere = SahtePencere(str(hedef))
-    assert api.dosya_kaydet("..\kotu/ad.md", "# Merhaba ç") == str(hedef)
+    assert api.dosya_kaydet(r"..\kotu/ad.md", "# Merhaba ç") == str(hedef)
     assert hedef.read_text(encoding="utf-8") == "# Merhaba ç"
     assert api._pencere.kw["save_filename"] == "ad.md"
     api._pencere = SahtePencere(None)  # iptal

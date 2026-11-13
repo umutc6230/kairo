@@ -173,5 +173,6 @@ def test_ayni_mesajdaki_alt_ajanlar_uzak_modelde_paralel_calisir(tmp_path) -> No
     assert run.durum is RunDurum.basarili, run.hata
     cocuklar = [depo.getir(c) for c in run.cocuklar]
     assert len(cocuklar) == 2 and all(c.durum is RunDurum.basarili for c in cocuklar)
-    # sirali: 2 cocuk x 2 cagri x 0.3 = 1.2 sn (+ebeveyn 0.6); paralel: ~0.6 + 0.6
-    assert sure < 1.6, f"alt ajanlar paralel kosmadi ({sure:.2f} sn)"
+    # sirali: yalniz uykular 2 cocuk x 2 cagri x 0.3 = 1.2 sn + ebeveyn 0.6 = en az 1.8 sn;
+    # paralel: ~0.6 + 0.6 + sabit ek yuk (yavas makinede ~0.45 sn). 1.8 alti = cakisma kaniti.
+    assert sure < 1.8, f"alt ajanlar paralel kosmadi ({sure:.2f} sn)"

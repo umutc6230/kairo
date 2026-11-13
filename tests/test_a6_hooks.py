@@ -149,3 +149,27 @@ def test_claude_async_hook_beklenmez(tmp_path) -> None:
     bas = time.monotonic()
     assert d.tetikle("pre_tool", {}, arac="x").izin
     assert time.monotonic() - bas < 5
+
+
+async def test_claude_hooklari_brain_baglami_ve_kayit(tmp_path) -> None:
+    """SessionStart baglami ek_sistem'e girer; Stop hook'u proje cwd'si + istek/cevap alir."""
+    proje = tmp_path / "proje"
+    proje.mkdir()
+    iz = tmp_path / "stop.json"
+    baslangic = _betik(tmp_path, "b", "import json; print(json.dumps({'hookSpecificOutput': "
+                       "{'additionalContext': 'DURUM: siradaki madde X'}}))")  # fmt: skip
+    bitis = _betik(
+        tmp_path, "s", f"import sys; open({str(iz)!r},'wb').write(sys.stdin.buffer.read())"
+    )
+    hooks = HookDeposu(tmp_path / "h")
+    hooks.ekle({"ad": "b", "olay": "run_baslangic", "bicim": "claude", "komut": baslangic})
+    hooks.ekle({"ad": "s", "olay": "run_bitis", "bicim": "claude", "komut": bitis})
+    model = SahteModel([cagri("gorevi_bitir", ozet="giris ekrani bitti", kanit_adimlari=[])])
+    runner, *_ = kur(tmp_path, proje, model, hooks=hooks)
+    runner.kok = lambda: str(proje)
+    run = await bitir(runner, (await runner.baslat("giris ekranini yap")).id)
+    assert "DURUM: siradaki madde X" in run.ek_sistem
+    govde = json.loads(iz.read_bytes().decode("utf-8"))
+    assert govde["hook_event_name"] == "Stop" and Path(govde["cwd"]) == proje
+    assert govde["prompt"] == "giris ekranini yap"
+    assert govde["last_assistant_message"] == "giris ekrani bitti"

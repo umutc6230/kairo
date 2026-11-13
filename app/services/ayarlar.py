@@ -60,6 +60,9 @@ def yerel_adres_dogrula(ham: str) -> str:
     return f"{ayri.scheme}://{netloc}{yol}"
 
 
+UZAK_PORT = 8765  # 8443 Tailscale'in kendi portuyla cakisiyordu
+
+
 class KullaniciAyarlari(BaseModel):
     model: str = VARSAYILAN_MODEL
     dusunme: str = "kapali"
@@ -89,7 +92,7 @@ class KullaniciAyarlari(BaseModel):
     masaustu_izinli: list[str] = Field(default=[], max_length=20)  # A9.5: exe adlari; bos=kapali
     uzak_ag: Literal["tailscale", "yerel_ag"] = "tailscale"  # A12: varsayilan yalniz tailnet
     uzak_port: int = Field(
-        default=8443, ge=1024, le=65535
+        default=UZAK_PORT, ge=1024, le=65535
     )  # A12: Remote Control (varsayilan kapali)
     saat_dilimi: str = "Europe/Istanbul"  # A11: zamanlamalarin varsayilani
     lsp_sunuculari: dict[str, str] = {}  # A10.1: {".py": "pylsp"}; yalniz kullanici tanimlar
@@ -117,6 +120,13 @@ class KullaniciAyarlari(BaseModel):
     @property
     def aktif_model(self) -> str:
         return self.or_model if self.saglayici == "openrouter" and self.or_model else self.model
+
+    @field_validator("uzak_port")
+    @classmethod
+    def _uzak_port(cls, v: int) -> int:
+        # 8443 eski varsayilandi; Tailscale (tailscaled) kendi IP'sinde bu portu dinler ve uzak
+        # erisim hic acilamiyordu. Kayitli eski deger yeni varsayilana tasinir.
+        return UZAK_PORT if v == 8443 else v
 
     @field_validator("model")
     @classmethod

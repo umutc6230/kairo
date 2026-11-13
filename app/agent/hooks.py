@@ -64,6 +64,7 @@ class HookSonucu(BaseModel):
     izin: bool = True
     neden: str = ""
     calisan: list[dict] = []
+    baglam: list[str] = []  # Claude SessionStart hook'larinin additionalContext'i (orn. DURUM.md)
 
 
 _yerel = threading.local()
@@ -80,9 +81,10 @@ def _oldur(p: subprocess.Popen) -> None:
         p.wait(timeout=5)
 
 
-def _async_mi(p: subprocess.Popen, zaman: float) -> bool | None:
+def _async_mi(p: subprocess.Popen, zaman: float) -> tuple[bool | None, bytes]:
     """Claude Code async hook sozlesmesi: ilk stdout satiri {"async": true} ise hook arka
-    planda surer (security-guidance ilk kurulumda ~2 dk paket kurar; beklemek sohbeti dondurur)."""
+    planda surer (security-guidance ilk kurulumda ~2 dk paket kurar; beklemek sohbeti dondurur).
+    Okunan ilk satir da doner: tek satirlik JSON cikti (additionalContext) kaybolmasin."""
     kutu: list[bytes] = []
     okuyucu = threading.Thread(target=lambda: kutu.append(p.stdout.readline()), daemon=True)
     okuyucu.start()
@@ -90,12 +92,13 @@ def _async_mi(p: subprocess.Popen, zaman: float) -> bool | None:
     if okuyucu.is_alive():  # ilk satir bile gelmedi: zaman asimi (cagiran communicate'te yakalar)
         _oldur(p)
         okuyucu.join(5)
-        return None
+        return None, b""
+    satir = kutu[0] if kutu else b""
     try:
-        ilk = json.loads((kutu[0] if kutu else b"").decode("utf-8", "replace").strip() or "{}")
+        ilk = json.loads(satir.decode("utf-8", "replace").strip() or "{}")
     except ValueError:
-        return False
-    return isinstance(ilk, dict) and ilk.get("async") is True
+        return False, satir
+    return isinstance(ilk, dict) and ilk.get("async") is True, satir
 
 
 def _bitir(p: subprocess.Popen, zaman: float, ad: str) -> None:
@@ -118,6 +121,15 @@ def _eslesir(desen: str, arac: str) -> bool:
         return any(a and re.fullmatch(desen, a) for a in adlar)
     except re.error:
         return desen in adlar
+
+
+def _ek_baglam(cikti: bytes) -> str:
+    """Claude Code hook stdout'u: {"hookSpecificOutput": {"additionalContext": ...}}; degilse bos."""
+    try:
+        ham = json.loads(cikti.decode("utf-8", "replace") or "{}")
+        return str((ham.get("hookSpecificOutput") or {}).get("additionalContext") or "")
+    except (ValueError, AttributeError):
+        return ""
 
 
 def _maskeli(x: object) -> object:
@@ -188,7 +200,8 @@ class HookDeposu:
             govde = {"hook_event_name": claude_olay, "session_id": str(veri.get("run", "")),
                      "cwd": str(cwd or ""), "tool_name": cc.TERS_ESLESME.get(arac, arac),
                      "tool_input": _maskeli(veri.get("argumanlar", {})), "prompt": veri.get("metin", ""),
-                     "message": veri.get("metin", "")}  # fmt: skip
+                     "message": veri.get("metin", ""),
+                     "last_assistant_message": veri.get("cevap", ""), "model": veri.get("model", "")}  # fmt: skip
         else:
             govde = {"surum": SOZLESME_SURUMU, "olay": olay, "veri": _maskeli(veri)}
         girdi = json.dumps(govde, ensure_ascii=False, default=str)
@@ -213,7 +226,7 @@ class HookDeposu:
             p.stdin.close()
         except OSError:
             pass
-        asenkron = _async_mi(p, h.timeout) if h.bicim == "claude" else False
+        asenkron, ilk_satir = _async_mi(p, h.timeout) if h.bicim == "claude" else (False, b"")
         if asenkron is None:
             return "hata", f"{h.timeout} sn zaman asimi"
         if asenkron:
@@ -222,12 +235,13 @@ class HookDeposu:
             return "izin", ""
         try:
             cikti, hata_b = p.communicate(timeout=h.timeout)
+            cikti = ilk_satir + cikti
         except subprocess.TimeoutExpired:
             _oldur(p)
             return "hata", f"{h.timeout} sn zaman asimi"
         hata = maskele(hata_b.decode("utf-8", "replace").strip())[:MAX_CIKTI]
         if p.returncode == 0:
-            return "izin", ""
+            return "izin", _ek_baglam(cikti) if h.bicim == "claude" else ""
         if p.returncode == 2:
             return "engel", hata or "Hook islemi engelledi."
         return "hata", f"cikis {p.returncode}: {hata}"
@@ -246,6 +260,9 @@ class HookDeposu:
                 if h.eslesen and not _eslesir(h.eslesen, arac):
                     continue
                 durum, mesaj = self._calistir(h, olay, veri, cwd)
+                if durum == "izin" and mesaj:
+                    sonuc.baglam.append(mesaj)
+                    mesaj = ""
                 sonuc.calisan.append({"hook": h.ad, "tur": h.tur, "durum": durum, "mesaj": mesaj})
                 if durum == "hata":
                     logger.warning("Hook hatasi ({}): {}", h.ad, mesaj)

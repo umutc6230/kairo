@@ -424,6 +424,7 @@ def uygulama_olustur(
         ),
     )
     ajan.araclar_kok = ajan_baglami_kok
+    ajan.kok = lambda: next(iter(sohbet.aktif_alan().kokler), "")
     ajan.paralel_model = lambda: ayarlar.oku().saglayici == "openrouter"
 
     # ---- kalici ajanlar (openbot tasarimindan): kimlik + kuyruk + ajanlar arasi mesaj ----
@@ -846,6 +847,10 @@ def uygulama_olustur(
     async def or_anahtar_sil() -> dict:
         return openrouter.anahtar_sil()
 
+    @app.get("/api/openrouter/limit")
+    async def or_limit() -> dict:
+        return await openrouter.limit()
+
     @app.get("/api/openrouter/modeller")
     async def or_modeller(yenile: bool = False) -> dict:
         return await openrouter.modeller(yenile)
@@ -925,11 +930,40 @@ def uygulama_olustur(
 
     @app.get("/api/oturumlar/{oturum_id}/baglam")
     async def oturum_baglam(oturum_id: str) -> dict:
-        """Sag panel 'Baglam' gostergesi: mesajlarin tahmini token'i / modelin baglami."""
+        """Sag panel 'Baglam' dokumu (Claude Code Context gibi): bir sonraki istekte modele
+        gidecek parcalarin tahmini token'i. Mesajlar + sistem + talimatlar + araclar + skill."""
         o = oturumlar.getir(oturum_id)
-        kullanilan = sum(tahmini_token(m.metin) + tahmini_token(m.dusunce) for m in o.mesajlar)
+        mesaj = sum(tahmini_token(m.metin) + tahmini_token(m.dusunce) for m in o.mesajlar)
+        ayar = ayarlar.oku()
+        try:
+            _, araclar, _, _ = await asyncio.to_thread(sohbet.baglam_hazirla, ayar, "", o.mesajlar)
+            p = getattr(sohbet, "son_parcalar", {})
+        except Exception as e:  # noqa: BLE001 - dokum gosterge; hesaplanamazsa yalniz mesajlar
+            logger.debug("Baglam dokumu hesaplanamadi: {}", e)
+            araclar, p = [], {}
+        tok = lambda x: tahmini_token(x) if x else 0  # noqa: E731
+        jtok = lambda x: tok(x and json.dumps(x, ensure_ascii=False))  # noqa: E731
+        mcp = [a for a in araclar if str(a.get("function", {}).get("name", "")).startswith("mcp")]
+        yerlesik = [a for a in araclar if a not in mcp]
+        kalemler = [
+            {"ad": "Mesajlar", "tur": "mesaj", "token": mesaj},
+            {"ad": "Sistem talimatı", "tur": "sistem", "token": tok(p.get("sistem"))},
+            {"ad": "KAIRO.md ve talimatlar", "tur": "talimat", "token": tok(p.get("talimat"))},
+            {"ad": "Proje talimatı", "tur": "proje", "token": tok(p.get("proje"))},
+            {"ad": "Hafıza", "tur": "hafiza", "token": tok(p.get("hafiza"))},
+            {"ad": "Skill'ler", "tur": "skill", "token": tok(p.get("skill"))},
+            {"ad": "Araçlar", "tur": "arac", "token": jtok(yerlesik),
+             "sayi": len(yerlesik)},
+            {"ad": "MCP araçları", "tur": "mcp", "token": jtok(mcp),
+             "sayi": len(mcp)},
+        ]  # fmt: skip
+        kalemler = [k for k in kalemler if k["token"] or k["tur"] == "mesaj"]
         boyut = model_yetenegi().baglam or 1
-        return {"kullanilan": kullanilan, "boyut": boyut,
+        kullanilan = sum(k["token"] for k in kalemler)
+        for k in kalemler:
+            k["yuzde"] = round(k["token"] * 100 / boyut, 1)
+        return {"kullanilan": kullanilan, "boyut": boyut, "kalemler": kalemler,
+                "bos": max(0, boyut - kullanilan),
                 "yuzde": min(100, round(kullanilan * 100 / boyut))}  # fmt: skip
 
     @app.get("/api/oturumlar/{oturum_id}")
@@ -1564,9 +1598,11 @@ def uygulama_olustur(
     @app.get("/api/talimatlar")
     async def talimat_oku() -> dict:
         a = ayarlar.oku()
-        kaynaklar = talimatlar.kaynaklar(claude=True, uygulama=False)
+        kaynaklar = talimatlar.kaynaklar(claude=True, uygulama=True)
+        kisa = lambda tur: [{**k, "metin": k["metin"][:4000]} for k in kaynaklar if k["tur"] == tur]  # noqa: E731
         return {
-            "claude": [{**k, "metin": k["metin"][:4000]} for k in kaynaklar],
+            "kairo": kisa("uygulama"),  # KAIRO.md + importlari (BRAIN-POLICY)
+            "claude": kisa("claude"),  # ~/.claude/CLAUDE.md'den yalniz KAIRO.md'de olmayanlar
             "claude_acik": a.claude_talimatlari,
             "uygulama": talimatlar.uygulama_oku(),
             "uygulama_acik": a.uygulama_talimati,
