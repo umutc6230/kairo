@@ -95,3 +95,25 @@ async def test_sohbet_tur_siniri_yok_ama_ayni_cagri_dongusu_durur():
                          max_tur=0)  # fmt: skip
     assert s["durum"] == "dongu" and [a["durum"] for a in s["araclar"]][-1] == "sonucsuz"
     assert any(o.get("kod") == "dongu" for o in olaylar)
+
+
+async def test_sohbet_projeye_ozgu_ve_proje_etkinlestirme(istemci, tmp_path):
+    kisisel = (await istemci.post("/api/oturumlar")).json()
+    assert kisisel["alan"] == "0" * 12  # proje kapaliyken kisisel alan
+    klasor = tmp_path / "proje"
+    klasor.mkdir()
+    p = (
+        await istemci.post("/api/projeler", json={"yol": str(klasor), "guven": "guvenilir"})
+    ).json()
+    o = (await istemci.post("/api/oturumlar")).json()
+    assert o["alan"] == p["id"]
+    alt = (await istemci.post(f"/api/oturumlar/{o['id']}/alt", json={"baslik": "x"})).json()
+    assert alt["alan"] == p["id"]  # alt oturum ana oturumun projesinde
+    liste = {x["id"]: x["alan"] for x in (await istemci.get("/api/oturumlar")).json()}
+    assert liste[o["id"]] == p["id"] and liste[kisisel["id"]] == "0" * 12
+    # kisisel sohbete donunce proje kapanir; proje sohbetine donunce ayarlariyla geri gelir
+    r = (await istemci.post(f"/api/projeler/{'0' * 12}/etkin")).json()
+    assert r["etkin"]["id"] == "0" * 12
+    r = (await istemci.post(f"/api/projeler/{p['id']}/etkin")).json()
+    assert r["etkin"]["id"] == p["id"] and r["etkin"]["guven"] == "guvenilir"  # guven sifirlanmaz
+    assert (await istemci.post("/api/projeler/abcdef123456/etkin")).status_code == 404

@@ -6,7 +6,7 @@ import { $, $$, api, bildir, durum, el, menuAc, modal, modelAdi, modelProfil, on
 import { artifactListesiCiz } from "./inceleme.js";
 import { sayfaModelleriniYenile, sayfalarKur } from "./sayfalar.js";
 import { modelSayfasiYukle, modellerKur } from "./modeller.js";
-import { projeAc, projeDurumu, projeKur } from "./proje.js";
+import { projeAc, projeDurumu, projeKur, projeYenile } from "./proje.js";
 import { skillSayfasiYukle, skillerKur } from "./skiller.js";
 import { eklentilerKur, yukle as eklentileriYukle } from "./eklentiler.js";
 import { gorevBildirimIzle, gorevSayfasiYukle, gorevlerKur } from "./gorevler.js";
@@ -131,6 +131,8 @@ async function oturumAc(id, kaydetme = false) {
   if (akisVar() && durum.oturumId !== id) durdur();
   try {
     const o = await api(`/api/oturumlar/${id}`);
+    // sohbet projeye ozgu: baska projenin sohbeti acilinca o proje etkin olur
+    if (o.alan && o.alan !== projeDurumu.etkin?.id) await projeyeGec(o.alan);
     durum.oturumId = o.id;
     gorunumGoster("sohbet");
     mesajlariCiz(o);
@@ -143,7 +145,23 @@ async function oturumAc(id, kaydetme = false) {
   }
 }
 
+async function projeyeGec(alan) {
+  try {
+    await api(`/api/projeler/${alan}/etkin`, { method: "POST" });
+    await projeYenile();
+  } catch { /* proje silinmis: sohbet yine acilir, etkin proje degismez */ }
+}
+
 // ---------------- oturum listesi ----------------
+const KISISEL = "0".repeat(12); // sunucudaki VARSAYILAN_ALAN_ID (proje kapali)
+let listeDuzeni = localStorage.getItem("listeDuzeni") === "proje" ? "proje" : "tarih";
+
+function projeAdi(alan) {
+  if (!alan) return "Proje yok";
+  if (alan === KISISEL) return "Kişisel klasörler";
+  return (projeDurumu.liste || []).find((a) => a.id === alan)?.ad || "Kapatılmış proje";
+}
+
 const kapaliGruplar = new Set(JSON.parse(localStorage.getItem("kapaliGruplar") || "[]"));
 const kapaliAltlar = new Set(JSON.parse(localStorage.getItem("kapaliAltlar") || "[]"));
 
@@ -202,6 +220,17 @@ function artifactPenceresi() {
 function oturumListesiCiz() {
   const kap = $("#oturum-listesi");
   kap.innerHTML = "";
+  // Claude Desktop gibi: sohbetler tarihe ya da projeye gore; projede "+" o projede yeni sohbet
+  const duzen = el(`<div class="liste-duzen" role="group" aria-label="Sohbetleri grupla">${[["tarih", "Tarih"], ["proje", "Proje"]]
+    .map(([k, m]) => `<button class="liste-duzen-btn" data-duzen="${k}" aria-pressed="${listeDuzeni === k}">${m}</button>`).join("")}</div>`);
+  duzen.querySelectorAll("[data-duzen]").forEach((b) => {
+    b.onclick = () => {
+      listeDuzeni = b.dataset.duzen;
+      localStorage.setItem("listeDuzeni", listeDuzeni);
+      oturumListesiCiz();
+    };
+  });
+  kap.append(duzen);
   const gruplar = new Map();
   const gorunur = durum.oturumlar.filter((o) => o.mesaj_sayisi || o.ajan_sayisi || o.id === durum.oturumId || ajanliOturum(o.id));
   const idler = new Set(gorunur.map((o) => o.id));
@@ -212,12 +241,23 @@ function oturumListesiCiz() {
   }
   for (const o of gorunur) {
     if (o.ust && idler.has(o.ust)) continue;
-    const g = grupAdi(o.guncelleme);
+    const g = listeDuzeni === "proje" ? `p:${o.alan || ""}` : grupAdi(o.guncelleme);
     if (!gruplar.has(g)) gruplar.set(g, []);
     gruplar.get(g).push(o);
   }
+  if (listeDuzeni === "proje") { // sohbeti olmayan projeler de gorunsun: "+" ile ilk sohbet acilir
+    for (const a of projeDurumu.liste || []) if (!gruplar.has(`p:${a.id}`)) gruplar.set(`p:${a.id}`, []);
+  }
   for (const [ad, liste] of gruplar) {
-    const grup = el(`<div class="grup ${kapaliGruplar.has(ad) ? "kapali" : ""}"><div class="grup-baslik"><span>${ad}</span><span data-ikon="asagi"></span></div><div class="grup-ogeler"></div></div>`);
+    const projeMi = ad.startsWith("p:");
+    const alan = projeMi ? ad.slice(2) : "";
+    const baslik = projeMi ? projeAdi(alan) : ad;
+    const grup = el(`<div class="grup ${kapaliGruplar.has(ad) ? "kapali" : ""}"><div class="grup-baslik"><span class="grup-ad" title="${kacir(baslik)}">${kacir(baslik)}</span><span class="grup-sag">${projeMi ? `<button class="ikon-btn grup-yeni" title="${kacir(baslik)}: yeni sohbet" aria-label="${kacir(baslik)} projesinde yeni sohbet" data-ikon="arti"></button>` : ""}<span data-ikon="asagi"></span></span></div><div class="grup-ogeler"></div></div>`);
+    grup.querySelector(".grup-yeni")?.addEventListener("click", async (e) => {
+      e.stopPropagation();
+      await projeyeGec(alan || KISISEL);
+      git({ tur: "yeni" });
+    });
     grup.querySelector(".grup-baslik").onclick = () => {
       grup.classList.toggle("kapali");
       kapaliGruplar[grup.classList.contains("kapali") ? "add" : "delete"](ad);

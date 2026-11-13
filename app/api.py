@@ -939,7 +939,7 @@ def uygulama_olustur(
 
     @app.post("/api/oturumlar")
     async def oturum_yeni() -> dict:
-        return oturumlar.olustur().model_dump()
+        return oturumlar.olustur(sohbet.aktif_alan().id).model_dump()  # sohbet projeye ozgu
 
     @app.get("/api/oturumlar/{oturum_id}/baglam")
     async def oturum_baglam(oturum_id: str) -> dict:
@@ -1743,6 +1743,15 @@ def uygulama_olustur(
     @app.post("/api/projeler")
     async def proje_ac(istek: ProjeIstegi) -> dict:
         return projeler.ac(istek.yol, istek.ad, istek.guven).model_dump(mode="json")
+
+    @app.post("/api/projeler/{alan_id}/etkin")
+    async def proje_etkin(alan_id: str) -> dict:
+        # Projeye ait sohbet acilinca o proje etkin olur; kisisel alan = proje kapali
+        if alan_id == VARSAYILAN_ALAN_ID:
+            projeler.kapat()
+        else:
+            projeler.etkinlestir(alan_id)
+        return {"etkin": sohbet.aktif_alan().model_dump(mode="json")}
 
     @app.post("/api/projeler/kapat")
     async def proje_kapat() -> dict:

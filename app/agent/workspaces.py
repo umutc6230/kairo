@@ -156,6 +156,14 @@ class WorkspaceDeposu:
         self._yaz(veri)
         return alan
 
+    def etkinlestir(self, alan_id: str) -> CalismaAlani:
+        """Kayitli projeyi ayarlarina (guven, mod) dokunmadan aktif yapar; sohbet secilince."""
+        alan = self.getir(alan_id)
+        veri = self._ham()
+        veri["aktif"] = alan.id
+        self._yaz(veri)
+        return alan
+
     def kapat(self) -> None:
         veri = self._ham()
         veri["aktif"] = ""

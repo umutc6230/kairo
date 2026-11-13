@@ -826,3 +826,15 @@ body.uzak-saglayici [data-yalniz-yerel] { display: none !important; }
 .oneri-gorev { white-space: pre-wrap; }
 .oneri-kart .dugme-sira { margin-top: 4px; align-items: center; }
 @media (prefers-reduced-motion: reduce) { .oturum .alt-ac svg { transition: none; } }
+
+/* ---- Sohbet listesi: tarih / proje gruplama + projede yeni sohbet ---- */
+.liste-duzen { display: flex; gap: 2px; margin: 6px 8px 0; padding: 2px; border-radius: 8px; background: var(--yuzey2); }
+.liste-duzen-btn { flex: 1; border: 0; background: none; color: var(--soluk); font: inherit; font-size: 12.5px; padding: 3px 6px; border-radius: 6px; cursor: pointer; }
+.liste-duzen-btn[aria-pressed="true"] { background: var(--yuzey); color: var(--metin); }
+.liste-duzen-btn:focus-visible { outline: 2px solid var(--mavi); outline-offset: 1px; }
+.grup-ad { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.grup-sag { display: flex; align-items: center; gap: 2px; flex-shrink: 0; }
+.grup-yeni { width: 22px; height: 22px; opacity: .55; }
+.grup-baslik:hover .grup-yeni, .grup-yeni:focus-visible { opacity: 1; }
+.grup-yeni svg { width: 14px; height: 14px; }
+.grup.kapali .grup-yeni svg { transform: none; }

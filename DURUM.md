@@ -417,6 +417,13 @@ Python 3.12 + FastAPI + pywebview; arayuz vanilla JS. Paketleme: PORTABLE (kulla
       duration'a da uyar. Claude Desktop filesystem uzantisi izinli klasorsuz aktariliyordu ("path outside allowed
       directories") -> mcp_ice._uzanti zorunlu ayari bos uzantiyi onermez + MCP roots (yukarida). klasor_listele reddi
       tasarim geregi (proje disi yol).
+  - [x] PROJEYE OZGU SOHBET (2026-11-13, commit + push bu maddeyle): Oturum.alan (olusturuldugu proje; alt oturum ana oturumdan alir;
+    /api/oturumlar listesi alan dondurur). Sohbet acilinca projesi etkin olur (POST /api/projeler/{id}/etkin,
+    workspaces.etkinlestir: guven/mod SIFIRLANMAZ; kisisel alan id'si = proje kapat). Kenar listesi ustunde Tarih|Proje
+    secici (localStorage listeDuzeni); Proje'de her grup basliginda "+" = o projede yeni sohbet, sohbeti olmayan
+    projeler de listelenir, eski kayitlar "Proje yok". Test: test_alt_oturum_ajan (+ api, a1_izinler 92 gecti).
+    Onizlemede: gruplar, sohbete tiklayinca proje gecisi, "+" ile termflow-lite'ta yeni sohbet, Tarih'e donus goruldu.
+    Derlendi + kuruldu (data korundu) 19:12, ana sayfa 200.
   - [ ] Ogrenen sistem A: ders defteri (app/agent/dersler.py) - OGRENEN-SISTEM-PLANI.md; runner baglanti noktalari:
     _adim_calistir hata dali (~sat. 1080), DONGU_DUR (~815), _bitir kanit reddi, finally run_bitis
   - [ ] ERTELENDI (kullanici 2026-11-13): langchain-ai/social-media-agent varsayilan ajan olarak eklenmedi; istenirse once guvenlik taramasi, sonra kod kopyalamadan talimatli 'Sosyal Medya' ajani (paylasim onayli)

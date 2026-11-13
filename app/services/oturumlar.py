@@ -46,6 +46,7 @@ class Oturum(BaseModel):
     # her acilista degisen port yuzunden kayboluyordu.
     ajan_runlari: list[dict] = []
     ust: str = ""  # alt oturumsa ana oturumun id'si (listede altinda acilir)
+    alan: str = ""  # olusturuldugu proje (calisma alani) id'si; bos = eski kayit / proje yok
     # model alt_oturum_oner ile onerdi; kullanici karari: kaynak -> alt oturum id | "reddedildi"
     oneri_kararlari: dict[str, str] = {}
 
@@ -65,8 +66,8 @@ class OturumDeposu:
             raise Bulunamadi("Sohbet bulunamadi.")
         return self.dizin / f"{oturum_id}.json"
 
-    def olustur(self) -> Oturum:
-        return self.kaydet(Oturum())
+    def olustur(self, alan: str = "") -> Oturum:
+        return self.kaydet(Oturum(alan=alan))
 
     def getir(self, oturum_id: str) -> Oturum:
         ham = json_oku(self._yol(oturum_id))
@@ -114,7 +115,7 @@ class OturumDeposu:
     def alt_olustur(self, ust_id: str, baslik: str, kaynak: str = "") -> Oturum:
         """Kullanici onayiyla alt oturum: bos gecmisle baslar, listede ana oturumun altinda."""
         ust = self.getir(ust_id)
-        alt = self.kaydet(Oturum(baslik=baslik_uret(baslik)[:80], ust=ust.id))
+        alt = self.kaydet(Oturum(baslik=baslik_uret(baslik)[:80], ust=ust.id, alan=ust.alan))
         if kaynak:
             ust.oneri_kararlari[kaynak[:64]] = alt.id
             self.kaydet(ust)
@@ -151,6 +152,7 @@ class OturumDeposu:
                     "mesaj_sayisi": len(ham.get("mesajlar", [])),
                     "ajan_sayisi": len(ham.get("ajan_runlari", [])),
                     "ust": ham.get("ust", ""),
+                    "alan": ham.get("alan", ""),
                 }
             )
         return sorted(sonuc, key=lambda o: o["guncelleme"], reverse=True)
