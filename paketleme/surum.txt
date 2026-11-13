@@ -4,12 +4,12 @@ VSVersionInfo(
   kids=[
     StringFileInfo([StringTable('041f04b0', [
       StringStruct('CompanyName', 'Umut Çelik'),
-      StringStruct('FileDescription', 'Yerel AI Studio - yerel model test uygulamasi'),
+      StringStruct('FileDescription', 'Kairo - yerel model test uygulamasi'),
       StringStruct('FileVersion', '0.1.0'),
-      StringStruct('InternalName', 'YerelAIStudio'),
+      StringStruct('InternalName', 'Kairo'),
       StringStruct('LegalCopyright', 'Ürün sahibi: Umut Çelik - x.com/umutc6230 - github.com/umutc6230'),
-      StringStruct('OriginalFilename', 'YerelAIStudio.exe'),
-      StringStruct('ProductName', 'Yerel AI Studio'),
+      StringStruct('OriginalFilename', 'Kairo.exe'),
+      StringStruct('ProductName', 'Kairo'),
       StringStruct('ProductVersion', '0.1.0')])]),
     VarFileInfo([VarStruct('Translation', [0x041f, 1200])])
   ]

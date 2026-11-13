@@ -1,4 +1,4 @@
-"""Yerel AI Studio ve Claude Code degerlendirme raporlarini yan yana karsilastirir.
+"""Kairo ve Claude Code degerlendirme raporlarini yan yana karsilastirir.
 
 Kullanim: python degerlendirme/karsilastir.py <cikti.md> --yerel R1.json [R2.json ...] --cc RCC.json
 Yerel tarafta verilen TUM raporlarin TUM kosulari birlikte sayilir (yalniz iyi kosular secilmez);
@@ -38,11 +38,11 @@ def rapor(yerel_r: list[dict], cc: dict) -> str:
     cg = {k["gorev"]: k for k in cc["kosular"]}
     olculen = [k for k in yerel if k["ajan_durumu"] not in OLCULEMEDI]
     s = [
-        f"# Yerel AI Studio ajan vs Claude Code: olculmus karsilastirma ({cc['zaman'][:8]})", "",
+        f"# Kairo ajan vs Claude Code: olculmus karsilastirma ({cc['zaman'][:8]})", "",
         "Gorev seti `degerlendirme/gorevler.py` (30 gorev; Python, TypeScript, JavaScript, C#).",
         "Basari = modelin gormedigi gizli kontroller; gorunur testler degerlendirmeden once",
         "orijinaline geri yuklenir. Ayni hedef metni, adim siniri ve 600 sn sure siniri.", "",
-        "## Kosullar", "", "| | Yerel AI Studio | Claude Code |", "|---|---|---|",
+        "## Kosullar", "", "| | Kairo | Claude Code |", "|---|---|---|",
         f"| Model | `{yerel_r[0]['surumler']['model']}` ({yerel_r[0]['surumler']['saglayici']}) "
         f"| `{cc['surumler']['model']}` |",
         f"| Surum | `feature/ajan-katmani` | {cc['surumler']['uygulama']} |",
@@ -50,7 +50,7 @@ def rapor(yerel_r: list[dict], cc: dict) -> str:
         "| Izinler | otomatik mod; onaylar harness tarafindan verildi ve SAYILDI | "
         "acceptEdits + Bash/Read/Edit/Write/Glob/Grep on-izinli |",
         f"| Istemci donanimi | {ortam.get('cpu')}, {ortam.get('ram_gb')} GB | ayni makine |", "",
-        "## Sonuc", "", "| Olcut | Yerel AI Studio | Claude Code |", "|---|---|---|",
+        "## Sonuc", "", "| Olcut | Kairo | Claude Code |", "|---|---|---|",
         f"| Basari (olculen kosular) | **%{oy['basari_yuzde']}** ({oy['kosu']}) "
         f"| **%{oc['basari_yuzde']}** ({oc['kosu']}) |",
         f"| Yanlis basari beyani | {oy['yanlis_basari_beyani']} | {oc['yanlis_basari_beyani']} |",
@@ -58,7 +58,7 @@ def rapor(yerel_r: list[dict], cc: dict) -> str:
         f"| Ortalama sure / kosu | {_ort_sure(olculen)} sn | {_ort_sure(cc['kosular'])} sn |",
         f"| Maliyet | 0 $ (ucretsiz model) | {oc.get('toplam_maliyet_usd', '?')} $ |",
         f"| Olculemedi | {oy['olculemedi']} (kota/harness) | {oc.get('olculemedi', 0)} |", "",
-        "## Kategori", "", "| Kategori | Yerel AI Studio | Claude Code | Fark (puan) |",
+        "## Kategori", "", "| Kategori | Kairo | Claude Code | Fark (puan) |",
         "|---|---|---|---|",
     ]  # fmt: skip
     gerileyen = []
@@ -83,7 +83,7 @@ def rapor(yerel_r: list[dict], cc: dict) -> str:
         f"- Genel fark **{fark:+} puan**. Onceden belirlenen esdegerlik olcutu (fark <= 5 puan ve",
         "  kritik kategoride gerileme yok) **SAGLANMADI**. Gerileyen kategoriler: "
         f"{', '.join(gerileyen) or 'yok'}.",
-        "- Fark urun ile modelin TOPLAMIDIR (farkli modeller). Ayni guclu modelle Yerel AI Studio",
+        "- Fark urun ile modelin TOPLAMIDIR (farkli modeller). Ayni guclu modelle Kairo",
         "  olculmeden farkin urun payi AYRISTIRILAMAZ.",
         f"- Yerel ilk surum kapisi (>= %80): {'GECTI' if oy['basari_yuzde'] >= 80 else 'GECMEDI'}"
         f" (%{oy['basari_yuzde']}). Yanlis basari beyani {oy['yanlis_basari_beyani']} kosu.",

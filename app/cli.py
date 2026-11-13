@@ -23,7 +23,7 @@ CIKIS = {"basarili": 0, "basarisiz": 1, "iptal": 1, "dogrulanmadi": 2, "duraklat
 
 
 def arg_ayristir(argv: list[str]) -> argparse.Namespace:
-    p = argparse.ArgumentParser(prog="YerelAIStudio agent", description=__doc__.split("\n")[0])
+    p = argparse.ArgumentParser(prog="Kairo agent", description=__doc__.split("\n")[0])
     p.add_argument("hedef", nargs="?", default="", help="Gorev hedefi")
     p.add_argument("--proje", help="Proje klasoru")
     p.add_argument("--guven", default="sinirli", choices=["guvenilmeyen", "sinirli", "guvenilir"])

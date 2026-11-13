@@ -199,7 +199,7 @@ def test_config_veri_dizini_portable(tmp_path, monkeypatch):
     monkeypatch.delenv("YAS_VERI_DIZINI", raising=False)  # baska testten sizan ortam
     hedef = tmp_path / "ozel"
     assert config.veri_dizini(config.OrtamAyarlari(veri_dizini=hedef)) == hedef and hedef.exists()
-    exe = tmp_path / "Portable" / "YerelAIStudio.exe"
+    exe = tmp_path / "Portable" / "Kairo.exe"
     exe.parent.mkdir()
     monkeypatch.setattr(config.sys, "frozen", True, raising=False)
     monkeypatch.setattr(config.sys, "executable", str(exe))
@@ -213,7 +213,7 @@ def test_varsayilan_llm_dizini_aday_sirasi(tmp_path, monkeypatch):
     monkeypatch.setenv("YEREL_LLM_DIZIN", str(tmp_path / "env"))
     assert config.varsayilan_llm_dizini() == tmp_path / "env"
     monkeypatch.delenv("YEREL_LLM_DIZIN")
-    kok = tmp_path / "Portable" / "YerelAIStudio"
+    kok = tmp_path / "Portable" / "Kairo"
     kok.mkdir(parents=True)
     monkeypatch.setattr(config, "uygulama_klasoru", lambda: kok)
     monkeypatch.setattr(config.Path, "home", classmethod(lambda cls: tmp_path / "ev"))

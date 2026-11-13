@@ -1,5 +1,5 @@
 [project]
-name = "yerel-ai-studio"
+name = "kairo"
 version = "0.1.0"
 description = "Yerel (llama.cpp) sansursuz modelleri sohbet, OCR, arac ve karsilastirma testleriyle deneme uygulamasi"
 requires-python = ">=3.12"

@@ -1,4 +1,4 @@
-"""Yerel AI Studio - yerel (llama.cpp) sansursuz modelleri sohbet, OCR, arac ve karsilastirma
+"""Kairo - yerel (llama.cpp) sansursuz modelleri sohbet, OCR, arac ve karsilastirma
 testleriyle deneme uygulamasi. Urun sahibi: Umut Celik."""
 
 __version__ = "0.1.0"

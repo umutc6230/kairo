@@ -1,4 +1,4 @@
-# OZELLIK-MATRISI - YerelAIStudio ajan yetenekleri
+# OZELLIK-MATRISI - Kairo ajan yetenekleri
 
 Kaynak is tanimi: `AGENT-GELISTIRME-TALIMATI.md`. Inceleme: `AGENT-INCELEME-2026-11-09.md`.
 Guncel: 2026-11-11 | dal: `feature/ajan-katmani`
@@ -9,7 +9,7 @@ Durum degerleri: **yok** / **kismi** / **uygulaniyor** / **test edildi** / **dis
 
 Kullanicinin 9 Kasim 2026 tarihli Claude Code ozellik listesi kapsam girdisidir; listedeki surum
 (v2.1.318) ve erisim iddialari bu belgede bagimsiz olarak dogrulanmamistir. Claude Code'un kapali
-servislerine erisim taklit edilmez; her satir YerelAIStudio'nun kendi calisan karsiligini tanimlar.
+servislerine erisim taklit edilmez; her satir Kairo'nun kendi calisan karsiligini tanimlar.
 
 ## A0 - Mevcut hatalar ve baslangic olcumu
 

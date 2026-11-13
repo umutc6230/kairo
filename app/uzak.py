@@ -224,7 +224,7 @@ def sertifika(dizin: Path, hostlar: list[str] | None = None) -> tuple[Path, Path
             cert_yol.unlink()
     if not (cert_yol.exists() and key_yol.exists()):
         anahtar = ec.generate_private_key(ec.SECP256R1())
-        ad = x509.Name([x509.NameAttribute(NameOID.COMMON_NAME, "Yerel AI Studio Uzak")])
+        ad = x509.Name([x509.NameAttribute(NameOID.COMMON_NAME, "Kairo Uzak")])
         simdi = dt.datetime.now(dt.UTC)
         san = [x509.DNSName("localhost")] + [
             x509.IPAddress(ipaddress.ip_address(i))

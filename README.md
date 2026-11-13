@@ -1,4 +1,4 @@
-# Yerel AI Studio
+# Kairo
 
 Bilgisayarındaki **yerel ve sansürsüz** dil modellerini (llama.cpp) sohbet, OCR, araç çağırma ve
 karşılaştırma testleriyle denemek için masaüstü uygulaması. Arayüz düzeni koyu temalı, solda sohbet
@@ -56,7 +56,7 @@ listesi, ortada sohbet ve altta mesaj kutusu olan bir masaüstü sohbet uygulama
   gerekir. Oyun/tarayıcı açıkken resim işleme "bellek yetmedi" hatası verebilir.
 
 ## Çalıştırma
-**Portable (önerilen):** `Baslat.bat` ya da `YerelAIStudio.exe`. Kurulum ve yönetici izni gerekmez;
+**Portable (önerilen):** `Baslat.bat` ya da `Kairo.exe`. Kurulum ve yönetici izni gerekmez;
 klasör istenen yere kopyalanır. Ayarlar, sohbetler ve ekler klasörün içindeki `data\` altında durur;
 registry, AppData ya da başlangıç girdisi yazılmaz. Kaldırmak için klasörü silmek yeterli.
 
@@ -78,7 +78,7 @@ Yalnız Windows'ta çalışır (llama-server.exe ve WebView2 Windows'a özel).
 pip install -r requirements-dev.txt
 ruff format . && ruff check .
 pytest --cov
-paketleme\derle.bat     :: temiz venv'de PyInstaller -> dist\YerelAIStudio\ (portable klasör)
+paketleme\derle.bat     :: temiz venv'de PyInstaller -> dist\Kairo\ (portable klasör)
 ```
 Model istemcisi `app/services/yerel_llm.py`, brain skill'i `yerel-llm-deepseek`'in kopyasıdır.
 

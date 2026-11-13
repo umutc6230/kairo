@@ -1,13 +1,13 @@
-# YerelAIStudio - Claude Code düzeyinde ajan geliştirme talimatı
+# Kairo - Claude Code düzeyinde ajan geliştirme talimatı
 
 Hazırlanma: 9 Kasım 2026. Bu belge uygulayıcı kodlama ajanına verilecek iş tanımıdır.
 Belgenin hazırlanması uygulamanın geliştirildiği anlamına gelmez. Aşağıdaki aşamalar henüz tamamlanmadı.
 
 ## 1. Görevin ve hedefin
 
-YerelAIStudio'yu mevcut özelliklerini koruyarak; proje okuyabilen, plan yapabilen, kod düzenleyebilen, terminal ve test çalıştırabilen, sonuçlarını doğrulayabilen, uzun görevleri sürdürebilen ve genişletilebilir bir masaüstü AI ajanına dönüştür.
+Kairo'yu mevcut özelliklerini koruyarak; proje okuyabilen, plan yapabilen, kod düzenleyebilen, terminal ve test çalıştırabilen, sonuçlarını doğrulayabilen, uzun görevleri sürdürebilen ve genişletilebilir bir masaüstü AI ajanına dönüştür.
 
-Claude Code'un özellik kategorilerini işlevsel referans al. Hedef yalnızca benzer sohbet arayüzü değil, gerçek ve ölçülmüş görev tamamlama yeteneğidir. Claude'a özgü kapalı servisleri veya marka isimlerini taklit ederek destek varmış gibi gösterme; bunların YerelAIStudio'ya ait çalışan karşılıklarını geliştir.
+Claude Code'un özellik kategorilerini işlevsel referans al. Hedef yalnızca benzer sohbet arayüzü değil, gerçek ve ölçülmüş görev tamamlama yeteneğidir. Claude'a özgü kapalı servisleri veya marka isimlerini taklit ederek destek varmış gibi gösterme; bunların Kairo'ya ait çalışan karşılıklarını geliştir.
 
 Üç ayrı sonuç raporla:
 
@@ -20,7 +20,7 @@ Küçük bir yerel modele araç eklemenin tek başına Claude model kalitesi sa�
 ## 2. Başlangıçta oku ve doğrula
 
 - Ortak kurallar: `C:\Users\umuti\Documents\brain\BRAIN-POLICY.md`.
-- Uygulama: `C:\Users\umuti\Projects\yerel-ai-studio`.
+- Uygulama: `C:\Users\umuti\Projects\kairo`.
 - Model altyapısı: `C:\Users\umuti\Projects\llm`.
 - Uygulamanın `AGENTS.md`, `DURUM.md`, `PROJE-REHBER.md` dosyaları.
 - `AGENT-INCELEME-2026-11-09.md` inceleme raporu.
@@ -331,21 +331,21 @@ Güvenilir şekilde geçmeyen modele izin genişleterek veya testleri gevşetere
 6. Gerekirse fixture, ekran görüntüsü, diff, örnek CLI/SDK komutu ve benchmark raporu. Gerçek sır/konuşma içeriği rapora kopyalanmasın.
 7. Son mesaj: yapılan iş, test, açık risk/engel ve sıradaki aşama. Test edilmemiş kapsam için bitti deme.
 
-Portable derleme ve teslim, kaynak geliştirmeden ayrı son aşamadır. Kullanıcının mevcut yetkilendirmesini kontrol et; onay yoksa çalışan/test edilmiş sonucu hazırlayıp paketleme/push/teslim için somut onay iste. Seçim zaten portable olduğundan biçimi yeniden sorma. Teslimde `Desktop\Portable Programlar\YerelAIStudio` içindeki `data/` korunsun, temiz klasöre kopyalanmış paket ve gerçek başlatıcı test edilsin. Sürümü veya mevcut release'i kullanıcı kararı olmadan değiştirme. Yapılmamış build/push/kurulum için başarı bildirme.
+Portable derleme ve teslim, kaynak geliştirmeden ayrı son aşamadır. Kullanıcının mevcut yetkilendirmesini kontrol et; onay yoksa çalışan/test edilmiş sonucu hazırlayıp paketleme/push/teslim için somut onay iste. Seçim zaten portable olduğundan biçimi yeniden sorma. Teslimde `Desktop\Portable Programlar\Kairo` içindeki `data/` korunsun, temiz klasöre kopyalanmış paket ve gerçek başlatıcı test edilsin. Sürümü veya mevcut release'i kullanıcı kararı olmadan değiştirme. Yapılmamış build/push/kurulum için başarı bildirme.
 
 ## 8. Başlatma metni
 
 Aşağıdaki metin bu dosyayla birlikte uygulayıcı ajana verilebilir:
 
-> `C:\Users\umuti\Projects\yerel-ai-studio\AGENT-GELISTIRME-TALIMATI.md` dosyasını oku ve uygulama iş tanımı olarak kullan. Önce ortak/proje kurallarını, mevcut DURUM.md'yi ve çalışma ağacını incele; mevcut değişiklikleri koru. Özellik matrisini oluştur, A0 regresyonlarından başlayarak aşamaları bağımlılık sırasıyla uygula. Çekirdek görev tamamlama ve güvenlik testleri geçmeden ileri yetenekleri açma. Yalnız plan sunup durma; yetkilendirilmiş yerel geliştirmeyi çalışan ve test edilmiş dilimler hâlinde tamamla. Her aşamada gerçek test kanıtı, özellik matrisi ve durum notunu güncelle. Model kalite eşitliğini benchmark olmadan iddia etme. Dış hesap, ücretli kaynak veya yayınlama için mevcut yetkilendirmeyi aşma. Oturum sınırına geldiğinde sonraki ajanın doğrudan devam edebileceği somut durum bırak.
+> `C:\Users\umuti\Projects\kairo\AGENT-GELISTIRME-TALIMATI.md` dosyasını oku ve uygulama iş tanımı olarak kullan. Önce ortak/proje kurallarını, mevcut DURUM.md'yi ve çalışma ağacını incele; mevcut değişiklikleri koru. Özellik matrisini oluştur, A0 regresyonlarından başlayarak aşamaları bağımlılık sırasıyla uygula. Çekirdek görev tamamlama ve güvenlik testleri geçmeden ileri yetenekleri açma. Yalnız plan sunup durma; yetkilendirilmiş yerel geliştirmeyi çalışan ve test edilmiş dilimler hâlinde tamamla. Her aşamada gerçek test kanıtı, özellik matrisi ve durum notunu güncelle. Model kalite eşitliğini benchmark olmadan iddia etme. Dış hesap, ücretli kaynak veya yayınlama için mevcut yetkilendirmeyi aşma. Oturum sınırına geldiğinde sonraki ajanın doğrudan devam edebileceği somut durum bırak.
 
 ## 9. Dayanak ve sınırlar
 
 - Yerel kaynak incelemesi: `AGENT-INCELEME-2026-11-09.md`.
 - Kullanıcının 9 Kasım 2026 tarihli Claude Code özellik listesi: kapsam girdisi; sürüm iddialarının tümü yeniden doğrulanmadı.
 - [Ajan türleri](https://code.claude.com/docs/en/agents): alt ajan, Agent View, Teams, workflow ve projects farklı koordinasyon biçimleri.
-- [Agent Teams](https://code.claude.com/docs/en/agent-teams): resmî belgede deneysel/varsayılan kapalı olarak tanımlanıyor; YerelAIStudio için bağımsız kabul testleri gerekir.
-- [Mods](https://code.claude.com/docs/en/plugins/mods/overview): Claude Code içindeki arayüz/davranış uzantısı; burada önerilen sistem YerelAIStudio'nun kendi uzantı API'sidir.
+- [Agent Teams](https://code.claude.com/docs/en/agent-teams): resmî belgede deneysel/varsayılan kapalı olarak tanımlanıyor; Kairo için bağımsız kabul testleri gerekir.
+- [Mods](https://code.claude.com/docs/en/plugins/mods/overview): Claude Code içindeki arayüz/davranış uzantısı; burada önerilen sistem Kairo'nun kendi uzantı API'sidir.
 - [Özellik erişimi](https://code.claude.com/docs/en/feature-availability): hesap/sağlayıcı koşulları vardır; yerel model geçidi bu erişimleri otomatik kazandırmaz.
 
-Yukarıdaki aşamalar YerelAIStudio için önerilen mühendislik tasarımıdır; Claude Code'un kapalı iç mimarisinin birebir açıklaması veya aynı kaliteyi garanti eden reçete değildir.
+Yukarıdaki aşamalar Kairo için önerilen mühendislik tasarımıdır; Claude Code'un kapalı iç mimarisinin birebir açıklaması veya aynı kaliteyi garanti eden reçete değildir.

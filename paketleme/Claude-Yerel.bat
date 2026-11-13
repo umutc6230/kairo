@@ -1,15 +1,15 @@
 @echo off
 setlocal
-rem Claude Code'u Yerel AI Studio'daki yerel modelle acar (bulut yok, API anahtari yok).
+rem Claude Code'u Kairo'daki yerel modelle acar (bulut yok, API anahtari yok).
 rem Kullanim: Claude-Yerel.bat [model]   (varsayilan gemma4-e4b-heretic)
 rem Studio acik olmali (pencere ya da Sunucu.bat). Calisilacak klasorde acin.
 set "MODEL=%~1"
 if "%MODEL%"=="" set "MODEL=gemma4-e4b-heretic"
 if "%PORT%"=="" set "PORT=11434"
-curl -s -m 3 http://127.0.0.1:%PORT%/api/version | find "yerel_ai_studio" >nul
+curl -s -m 3 http://127.0.0.1:%PORT%/api/version | find "kairo" >nul
 if errorlevel 1 (
-  echo Yerel AI Studio calismiyor. Sunucu.bat ile baslatiliyor...
-  start "" "%~dp0YerelAIStudio.exe" --sunucu
+  echo Kairo calismiyor. Sunucu.bat ile baslatiliyor...
+  start "" "%~dp0Kairo.exe" --sunucu
   timeout /t 8 >nul
 )
 where claude >nul 2>nul

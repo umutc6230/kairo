@@ -44,12 +44,47 @@ class PencereApi:
         self._pencere.minimize()
 
     def buyut(self) -> bool:
-        if self._buyuk:
-            self._pencere.restore()
-        else:
-            self._pencere.maximize()
+        if not self._calisma_alanina_sigdir():
+            # yedek: native maximize (cercevesiz pencerede gorev cubugunu da kaplar)
+            if self._buyuk:
+                self._pencere.restore()
+            else:
+                self._pencere.maximize()
         self._buyuk = not self._buyuk
         return self._buyuk
+
+    def _calisma_alanina_sigdir(self) -> bool:
+        """Cercevesiz pencereyi bulundugu ekranin calisma alanina (gorev cubugu haric) oturtur;
+        ikinci cagrida eski boyutuna doner."""
+        try:
+            from System import Action
+            from System.Drawing import Rectangle
+            from System.Windows.Forms import Screen
+
+            form = self._pencere.native
+
+            def uygula() -> None:
+                alan = Screen.FromControl(form).WorkingArea
+                # durum bayraktan degil gercek sinirdan: pencere zaten alani kapliyorsa geri al
+                if form.Bounds.Equals(alan):
+                    eski = getattr(self, "_eski_sinir", None)
+                    if eski is None or eski.Equals(alan):
+                        g, y = int(alan.Width * 0.75), int(alan.Height * 0.8)
+                        eski = Rectangle(
+                            alan.X + (alan.Width - g) // 2, alan.Y + (alan.Height - y) // 2, g, y
+                        )
+                    form.Bounds = eski
+                    self._buyuk = True  # buyut() tersine cevirir -> False
+                else:
+                    self._eski_sinir = form.Bounds
+                    form.Bounds = alan
+                    self._buyuk = False
+
+            form.Invoke(Action(uygula))
+            return True
+        except Exception as e:  # noqa: BLE001 - WinForms yoksa native maximize
+            logger.debug("Calisma alanina sigdirilamadi: {}", e)
+            return False
 
     def kapat(self) -> None:
         if self._tepside:

@@ -328,7 +328,7 @@ def main(argv: list[str]) -> int:
     p.add_argument("--rapor", default=str(KOK / "degerlendirme" / "raporlar"))
     p.add_argument("--sure", type=int, default=KOSU_SURESI, help="Kosu basina saniye siniri")
     p.add_argument("--sakla", action="store_true", help="Kosu klasorlerini silme (inceleme)")
-    p.add_argument("--ajan", choices=["yerel-ai-studio", "claude-code"], default="yerel-ai-studio")
+    p.add_argument("--ajan", choices=["kairo", "claude-code"], default="kairo")
     p.add_argument("--cc-butce-usd", type=float, default=3.0, help="Claude Code kosu basi tavan")
     p.add_argument("--cc-model", default="", help="Claude Code modeli (bos: varsayilan)")
     args = p.parse_args(argv)

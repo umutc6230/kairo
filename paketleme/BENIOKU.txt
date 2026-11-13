@@ -1,4 +1,4 @@
-Yerel AI Studio - portable
+Kairo - portable
 
 ==========================
 
@@ -6,7 +6,7 @@ Urun sahibi: Umut Celik  |  X: https://x.com/umutc6230  |  GitHub: https://githu
 
 
 
-Calistirma: Baslat.bat (ya da YerelAIStudio.exe). Kurulum ve yonetici izni gerekmez.
+Calistirma: Baslat.bat (ya da Kairo.exe). Kurulum ve yonetici izni gerekmez.
 
 Klasoru istediginiz yere kopyalayabilirsiniz; ayarlar, sohbetler ve ekler data\ klasorunde durur.
 

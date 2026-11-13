@@ -1,4 +1,4 @@
-"""Python SDK (A10.4): calisan Yerel AI Studio'ya (ya da ayni surecteki uygulamaya) baglanir.
+"""Python SDK (A10.4): calisan Kairo'ya (ya da ayni surecteki uygulamaya) baglanir.
 
 Ayri bir ajan motoru YOKTUR: tum cagrilar ayni /api uclarina gider; izin motoru, butce, onay ve
 checkpoint kurallari arayuzdekiyle birebir aynidir. Oturum anahtari olmadan API kullanilamaz.

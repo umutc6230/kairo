@@ -248,7 +248,7 @@ def agecidi_uygulamasi(
 
     @app.get("/api/version")
     async def surum() -> dict:
-        return {"version": OLLAMA_SURUMU, "yerel_ai_studio": __version__}
+        return {"version": OLLAMA_SURUMU, "kairo": __version__}
 
     @app.get("/api/tags")
     async def etiketler(request: Request) -> dict:
@@ -405,7 +405,7 @@ def agecidi_uygulamasi(
                 {
                     "id": p.anahtar,
                     "object": "model",
-                    "owned_by": "yerel-ai-studio",
+                    "owned_by": "kairo",
                     "type": "model",  # Anthropic /v1/models bicimi (Claude Code model kesfi)
                     "display_name": p.ad,
                     "name": p.ad,
@@ -550,7 +550,7 @@ async def portu_kim_kullaniyor(port: int) -> str:
             v = r.json()
     except (httpx.HTTPError, ValueError):
         return "baska bir program"
-    if "yerel_ai_studio" in v:
+    if "kairo" in v or "yerel_ai_studio" in v:  # eski surumler eski anahtari doner
         return "arka planda calisan baska bir Kairo"
     if "version" in v:
         return f"Ollama (surum {v['version']})"

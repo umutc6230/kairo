@@ -1,4 +1,4 @@
-# PROJE-REHBER - yerel-ai-studio
+# PROJE-REHBER - kairo
 
 ## Mimari
 ```

@@ -153,7 +153,7 @@ class _HttpBaglanti:
         with self.kilit:
             if self.hazir:
                 return
-            istemci = {"name": "yerel-ai-studio", "version": "0.1"}
+            istemci = {"name": "kairo", "version": "0.1"}
             ilk = {"protocolVersion": PROTOKOL, "capabilities": {}, "clientInfo": istemci}
             sonuc = self._istek("initialize", ilk)
             if not isinstance(sonuc, dict) or "capabilities" not in sonuc:
@@ -227,7 +227,7 @@ class _Baglanti:
         sonuc = self._istek("initialize", {
             "protocolVersion": PROTOKOL,
             "capabilities": {},
-            "clientInfo": {"name": "yerel-ai-studio", "version": "0.1"},
+            "clientInfo": {"name": "kairo", "version": "0.1"},
         })  # fmt: skip
         if not isinstance(sonuc, dict) or "capabilities" not in sonuc:
             raise McpHatasi(f"'{self.s.ad}' gecersiz initialize cevabi verdi.")

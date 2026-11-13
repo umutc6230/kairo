@@ -105,7 +105,7 @@ def _ham_getir(url: str, izin, transport: Any, yerel_kontrol) -> dict:
                 izin(h, f"Web (yonlendirme): {adres[:200]}")
                 host = h
             try:
-                with c.stream("GET", adres, headers={"User-Agent": "YerelAIStudio/0.1"}) as r:
+                with c.stream("GET", adres, headers={"User-Agent": "Kairo/0.1"}) as r:
                     if r.is_redirect and r.headers.get("location"):
                         adres = urljoin(adres, r.headers["location"])
                         continue

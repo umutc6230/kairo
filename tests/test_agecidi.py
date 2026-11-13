@@ -58,7 +58,7 @@ def gridmind_govdesi(**ek) -> dict:
 async def test_kok_surum_etiketler_ve_show(gi):
     assert (await gi.get("/")).text.startswith("Ollama is running")
     v = (await gi.get("/api/version")).json()
-    assert v["version"] == ag.OLLAMA_SURUMU and "yerel_ai_studio" in v
+    assert v["version"] == ag.OLLAMA_SURUMU and "kairo" in v
     adlar = [m["name"] for m in (await gi.get("/api/tags")).json()["models"]]
     assert adlar == [
         "deepseek-heretic:latest",
@@ -230,7 +230,7 @@ async def test_gercek_port_acma_cakisma_ve_kapatma(gecit):
     assert await g1.baslat(port) and g1.acik
     async with httpx.AsyncClient() as c:
         v = (await c.get(f"http://127.0.0.1:{port}/api/version")).json()
-    assert "yerel_ai_studio" in v
+    assert "kairo" in v
     d = g1.durum()
     assert d["ollama_adres"] == f"http://127.0.0.1:{port}" and d["openai_adres"].endswith("/v1")
     g2 = ag.AgGecidi(gecit)

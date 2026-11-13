@@ -20,9 +20,9 @@ exe = EXE(
     a.scripts,
     [],
     exclude_binaries=True,
-    name="YerelAIStudio",
+    name="Kairo",
     console=False,
     icon=str(KOK / "paketleme" / "ikon.ico"),
     version=str(KOK / "paketleme" / "surum.txt"),
 )
-coll = COLLECT(exe, a.binaries, a.datas, name="YerelAIStudio")
+coll = COLLECT(exe, a.binaries, a.datas, name="Kairo")
