@@ -58,6 +58,9 @@ function rozet(durum) {
 }
 
 function cubuk(etiket, deger, sinir, birim = "") {
+  if (!sinir) { // 0 = sinirsiz (adim butcesi varsayilani): cubuk yok, yalniz sayi
+    return `<div class="butce-satir"><span class="soluk kucuk">${kacir(etiket)}</span><span class="kucuk">${kacir(sayi(deger, 0))}${kacir(birim)} · sınırsız</span></div>`;
+  }
   const yuzde = Math.min(100, Math.round((100 * deger) / Math.max(1, sinir)));
   return `<div class="butce-satir" title="${kacir(etiket)}: ${kacir(deger)} / ${kacir(sinir)}">
     <span class="soluk kucuk">${kacir(etiket)}</span>
@@ -102,6 +105,84 @@ function adimSatiri(a) {
   </li>`;
 }
 
+// ---- Sohbet akisi Claude Code gibi: ardisik arac adimlari tek katlanir grup
+// ("2 komut çalıştırıldı ›"); her adim okunur baslik, acilinca kutuda "$ komut" + cikti. ----
+const KOMUTLAR = new Set(["komut_calistir", "komut_girdi", "skill_scripti"]);
+function adimTuru(a) {
+  if (KOMUTLAR.has(a.arac) || /(powershell|bash|shell|terminal|cmd)$/i.test(a.arac)) return "komut";
+  if (YAZAN.has(a.arac)) return "yaz";
+  if (/oku$/.test(a.arac)) return "oku";
+  if (/(ara|glob|listele)$/.test(a.arac)) return "ara";
+  return "diger";
+}
+const TUR_AD = { komut: "komut çalıştırıldı", oku: "dosya okundu", yaz: "dosyada değişiklik", ara: "arama yapıldı", diger: "araç kullanıldı" };
+const SURUYOR = new Set(["sirada", "niyet", "onay_bekliyor", "cevap_bekliyor"]);
+
+function adimBasligi(a) {
+  const g = a.argumanlar || {};
+  if (g.aciklama) return String(g.aciklama);
+  const tur = adimTuru(a);
+  if (tur === "komut") return String(g.komut || g.command || g.metin || a.arac);
+  if (g.yol) return `${{ oku: "Okundu", yaz: "Değiştirildi" }[tur] || a.arac}: ${g.yol}`;
+  if (g.desen) return `Arandı: ${g.desen}`;
+  return `${a.arac} ${argOzet(a)}`.trim();
+}
+
+function ccAdim(a) {
+  const g = a.argumanlar || {};
+  const acik = acikAdimlar.has(a.no);
+  const komut = adimTuru(a) === "komut";
+  const giris = komut ? `$ ${g.komut || g.command || g.metin || ""}` : argOzet(a);
+  const durumRozet = a.durum === "tamam" ? "" : `<span class="rozet ${{ hata: "kirmizi", reddedildi: "kirmizi" }[a.durum] || "sari"}">${kacir(ADIM_TR[a.durum] || a.durum)}</span>`;
+  const kod = a.cikis_kodu ? `<span class="rozet kirmizi">çıkış ${kacir(a.cikis_kodu)}</span>` : "";
+  return `<li class="cc-adim">
+    <button class="cc-baslik" aria-expanded="${acik}" data-ac="${kacir(a.no)}">
+      <span class="cc-ad">${kacir(adimBasligi(a))}</span>${durumRozet}${kod}<span class="cc-ok" aria-hidden="true">›</span>
+    </button>
+    ${acik ? `<div class="cc-kutu">
+      ${giris ? `<pre class="cc-giris">${kacir(giris)}</pre>` : ""}
+      ${a.sonuc ? `<pre class="cc-cikti">${kacir(sonucMetni(a))}</pre>` : ""}
+      ${a.checkpoint ? `<button class="btn kucuk" data-diff="${kacir(a.checkpoint)}"><span data-ikon="dosya"></span>Diff ve geri alma</button>` : ""}
+    </div>` : ""}
+  </li>`;
+}
+
+function ccGrup(adimlar, sonGrupCalisiyor) {
+  const sayac = new Map();
+  for (const a of adimlar) sayac.set(adimTuru(a), (sayac.get(adimTuru(a)) || 0) + 1);
+  const ozet = [...sayac].map(([t, n]) => `${n} ${TUR_AD[t]}`).join(", ");
+  const anahtar = `g${adimlar[0].no}`;
+  // calisan/onay bekleyen son grup acik baslar; kullanici tiklarsa varsayilanin tersi
+  const varsayilan = sonGrupCalisiyor || adimlar.some((a) => a.durum === "onay_bekliyor");
+  const acik = varsayilan !== acikAdimlar.has(anahtar);
+  const hata = adimlar.some((a) => ["hata", "reddedildi"].includes(a.durum) || a.cikis_kodu);
+  const suruyor = adimlar.some((a) => SURUYOR.has(a.durum));
+  return `<li class="cc-grup">
+    <button class="cc-grup-baslik" aria-expanded="${acik}" data-grup="${anahtar}">
+      <span>${kacir(ozet)}</span>${suruyor ? '<span class="parilti kucuk">sürüyor</span>' : ""}${hata ? '<span class="rozet kirmizi">hata</span>' : ""}<span class="cc-ok" aria-hidden="true">›</span>
+    </button>
+    ${acik ? `<ol class="cc-liste">${adimlar.map(ccAdim).join("")}</ol>` : ""}
+  </li>`;
+}
+
+function ccAkis(adimlar, calisiyor) {
+  const parcalar = [];
+  let grup = [];
+  const kapat = (son = false) => {
+    if (grup.length) parcalar.push(ccGrup(grup, son && calisiyor));
+    grup = [];
+  };
+  for (const a of adimlar) {
+    if (a.aciklama) {
+      kapat();
+      parcalar.push(`<li class="ajan-aciklama">${md(a.aciklama)}</li>`);
+    }
+    grup.push(a);
+  }
+  kapat(true);
+  return parcalar.join("");
+}
+
 function kontroller(r) {
   const b = (is, ad, kosul, tehlike = false) =>
     `<button class="btn kucuk ${tehlike ? "tehlike" : ""}" data-islem="${is}" ${kosul ? "" : "disabled"}>${ad}</button>`;
@@ -122,7 +203,7 @@ function onayOnizleme(a) {
     return `<div class="diff">${satir("-", g.eski_metin || "")}${satir("+", g.yeni_metin || "")}</div>`;
   }
   if (a.arac === "proje_dosya_yaz") return `<pre class="adim-cikti">${kacir(sinirla(g.icerik || ""))}</pre>`;
-  if (a.arac === "komut_calistir" || a.arac === "komut_girdi") return `<pre class="adim-cikti">${kacir(g.komut || g.metin || "")}</pre>`;
+  if (a.arac === "komut_calistir" || a.arac === "komut_girdi") return `<pre class="adim-cikti">${kacir(g.komut || g.command || g.metin || "")}</pre>`;
   return "";
 }
 
@@ -170,8 +251,7 @@ function sohbetCiz(r) {
     .filter((g) => !g.startsWith("Kullanici:") && !g.startsWith("Onay bekleniyor") && ![...aciklamalar].some((x) => x.startsWith(g.slice(0, 200))))
     .slice(-2);
   const calisiyor = !BITMIS.has(r.durum);
-  const akis = r.adimlar.filter((a) => a.arac !== "plan_guncelle" && a.arac !== "gorevi_bitir").map((a) =>
-    `${a.aciklama ? `<li class="ajan-aciklama">${md(a.aciklama)}</li>` : ""}${adimSatiri(a)}`).join("");
+  const akis = ccAkis(r.adimlar.filter((a) => a.arac !== "plan_guncelle" && a.arac !== "gorevi_bitir"), calisiyor);
   kap.innerHTML = `
     <ol class="adim-liste sade">${akis}</ol>
     ${notlar.map((g) => `<div class="ajan-not md">${md(g)}</div>`).join("")}
@@ -248,7 +328,7 @@ async function altAjanlariCiz(idler) {
     <div>${rozet(c.durum)} ${kacir(c.hedef.slice(0, 70))}</div>
     <div class="soluk kucuk">Yazabilir: ${kacir(c.sahip_dosyalar.join(", ") || "hiçbir dosya")}</div>
     <div class="soluk kucuk">Araçlar: ${kacir(c.izinli_araclar.join(", "))}</div>
-    <div class="soluk kucuk">Adım ${kacir(c.kullanim.adim)}/${kacir(c.butce.max_adim)}${c.sonuc?.ozet ? ` · ${kacir(c.sonuc.ozet.slice(0, 80))}` : ""}</div></div>`).join("");
+    <div class="soluk kucuk">Adım ${kacir(c.kullanim.adim)}${c.butce.max_adim ? `/${kacir(c.butce.max_adim)}` : ""}${c.sonuc?.ozet ? ` · ${kacir(c.sonuc.ozet.slice(0, 80))}` : ""}</div></div>`).join("");
 }
 
 function detayCiz(r) {
@@ -327,6 +407,14 @@ function baglantilar(r) {
       if (acikAdimlar.has(no)) acikAdimlar.delete(no); else acikAdimlar.add(no);
       detayCiz(r);
       $(`[data-ac="${no}"]`, kap)?.focus();
+    };
+  });
+  $$("[data-grup]", kap).forEach((b) => {
+    b.onclick = () => {
+      const k = b.dataset.grup;
+      if (acikAdimlar.has(k)) acikAdimlar.delete(k); else acikAdimlar.add(k);
+      detayCiz(r);
+      $(`[data-grup="${k}"]`, kap)?.focus();
     };
   });
   $$("[data-diff]", kap).forEach((b) => { b.onclick = () => diffAc(b.dataset.diff); });
@@ -469,7 +557,7 @@ async function baslat() {
   const hedef = $("#gr-hedef").value.trim();
   if (!hedef) { bildir("Görev hedefini yazın.", "uyari"); return; }
   const kabul = $("#gr-kabul").value.split("\n").map((s) => s.trim()).filter(Boolean);
-  const butce = { max_adim: Number($("#gr-adim").value) || 40, max_sure_sn: (Number($("#gr-sure").value) || 30) * 60 };
+  const butce = { max_adim: Number($("#gr-adim").value) || 0, max_sure_sn: (Number($("#gr-sure").value) || 30) * 60 };
   const b = $("#gr-baslat");
   b.disabled = true;
   try {

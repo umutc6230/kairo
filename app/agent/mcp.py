@@ -16,12 +16,14 @@ shortcut: OAuth akisi yok; kimlik basligi (Bearer/API key) elle girilir, 401'de 
 from __future__ import annotations
 
 import concurrent.futures as cf
+import contextlib
 import json
 import re
 import shutil
 import subprocess
 import sys
 import threading
+import time
 from pathlib import Path
 from typing import Any
 from urllib.parse import urlsplit
@@ -194,6 +196,28 @@ class _Baglanti:
         self.sayac = 0
         self.surec: subprocess.Popen[bytes] | None = None
         self.araclar: list[dict] = []
+        self.kokler: Any = lambda: []  # aktif proje klasorleri (yonetici baglar)
+        self._son_kokler: list[dict] = []
+        self._roots_soruldu = threading.Event()
+
+    def _kok_listesi(self) -> list[dict]:
+        """MCP roots: aktif proje klasorleri + sunucunun kendi argumanindaki klasorler.
+        filesystem sunucusu roots gelince izinli klasorlerini bununla DEGISTIRIR; kendi
+        argumanlari da eklenir ki onceden klasor verilmis sunucu onlari kaybetmesin."""
+        adaylar = [*self.kokler(), *self.s.argumanlar]
+        sonuc, gorulen = [], set()
+        for a in adaylar:
+            try:
+                p = Path(str(a))
+                if not p.is_absolute() or not p.is_dir():
+                    continue
+                uri = p.resolve().as_uri()
+            except (OSError, ValueError):
+                continue
+            if uri not in gorulen:
+                gorulen.add(uri)
+                sonuc.append({"uri": uri, "name": p.name or str(p)})
+        return sonuc
 
     def _baslat(self) -> None:
         ortam = ortam_allowlist() | self.s.ortam
@@ -224,9 +248,10 @@ class _Baglanti:
             )
         except OSError as e:
             raise McpHatasi(f"MCP sunucusu '{self.s.ad}' baslatilamadi: {e}") from e
+        self._son_kokler = self._kok_listesi()
         sonuc = self._istek("initialize", {
             "protocolVersion": PROTOKOL,
-            "capabilities": {},
+            "capabilities": {"roots": {"listChanged": False}},
             "clientInfo": {"name": "kairo", "version": "0.1"},
         })  # fmt: skip
         if not isinstance(sonuc, dict) or "capabilities" not in sonuc:
@@ -238,6 +263,11 @@ class _Baglanti:
         if not isinstance(araclar, list):
             raise McpHatasi(f"'{self.s.ad}' gecersiz tools/list cevabi verdi.")
         self.araclar = [a for a in araclar if _gecerli_arac(a)]
+        if self._son_kokler and self._roots_soruldu.is_set():  # tools/list sirasinda soruldu
+            # shortcut: sunucu roots'u eszamansiz uygular (filesystem: realpath dogrulamasi); ilk
+            # arac cagrisi erken gelirse "outside allowed directories" aliyordu. Sabit kisa pay;
+            # sunucu "uygulandi" bildirmedigi icin daha kesin bir sinyal yok.
+            time.sleep(0.3)
 
     def _yaz(self, mesaj: dict) -> None:
         assert self.surec and self.surec.stdin
@@ -279,6 +309,9 @@ class _Baglanti:
                 m = json.loads(satir)
             except json.JSONDecodeError:
                 continue  # sunucu stdout'a log basmis: yok say
+            if isinstance(m, dict) and isinstance(m.get("method"), str) and "id" in m:
+                self._sunucu_istegi(m)  # sunucudan istemciye istek (roots/list, ping)
+                continue
             if not isinstance(m, dict) or m.get("id") != no:
                 continue  # bildirim ya da baska istek
             if "error" in m:
@@ -288,12 +321,29 @@ class _Baglanti:
                 cikti["deger"] = m.get("result")
             return
 
+    def _sunucu_istegi(self, m: dict) -> None:
+        if m["method"] == "roots/list":
+            self._roots_soruldu.set()
+            cevap: dict = {"result": {"roots": self._son_kokler}}
+        elif m["method"] == "ping":
+            cevap = {"result": {}}
+        else:
+            cevap = {"error": {"code": -32601, "message": "Desteklenmiyor"}}
+        # baglanti koptuysa bekleyen istek kendi hatasini verir
+        with contextlib.suppress(McpHatasi):
+            self._yaz({"jsonrpc": "2.0", "id": m["id"], **cevap})
+
     def hazirla(self) -> None:
         with self.kilit:
             if self.surec is None or self.surec.poll() is not None:  # yok ya da kopmus: yeniden
                 self._baslat()
 
     def cagir(self, arac: str, argumanlar: dict) -> Any:
+        if self.surec is not None and self._kok_listesi() != self._son_kokler:
+            # Proje degisti: roots/list_changed sonrasi sunucu yeni klasorleri eszamansiz uygular ve
+            # hemen gelen cagri eski klasorlerle calisiyordu. Yeniden baslatma kesin (seyrek olay).
+            with self.kilit:
+                self.kapat()
         self.hazirla()
         with self.kilit:
             return self._istek(
@@ -321,11 +371,18 @@ class _Baglanti:
 
 
 def arac_suresi(argumanlar: dict) -> float:
-    """Arac argumaninda timeout (sn) varsa ona + 15 sn pay tanir (en az 30, en cok 600).
-    Sabit 30 sn, timeout=120 isteyen PowerShell komutlarini yarida kesip sunucuyu olduruyordu."""
-    t = argumanlar.get("timeout") if isinstance(argumanlar, dict) else None
-    if isinstance(t, (int, float)) and not isinstance(t, bool) and t > 0:
-        return min(600.0, max(ZAMAN_ASIMI, float(t) + 15))
+    """Arac argumaninda timeout ya da duration (sn) varsa ona + 15 sn pay tanir (en az 30, en cok
+    600). Sabit 30 sn, timeout=120 isteyen PowerShell komutlarini ve Wait(duration=45)'i yarida
+    kesip sunucuyu olduruyordu."""
+    if not isinstance(argumanlar, dict):
+        return float(ZAMAN_ASIMI)
+    sureler = [
+        float(t)
+        for t in (argumanlar.get("timeout"), argumanlar.get("duration"))
+        if isinstance(t, (int, float)) and not isinstance(t, bool) and t > 0
+    ]
+    if sureler:
+        return min(600.0, max(ZAMAN_ASIMI, max(sureler) + 15))
     return float(ZAMAN_ASIMI)
 
 
@@ -465,6 +522,9 @@ class McpYoneticisi:
     def __init__(self, veri_dizini: Path, transport: Any = None) -> None:
         self.yol = veri_dizini / "mcp.json"
         self.ek_kaynak = lambda: []  # plugin .mcp.json tanimlari (api baglar)
+        self.kokler = (
+            lambda: []
+        )  # aktif proje klasorleri -> stdio sunuculara MCP roots (api baglar)
         self.transport = transport  # testlerde sahte uzak sunucu
         self._baglantilar: dict[str, _Baglanti] = {}
 
@@ -557,6 +617,8 @@ class McpYoneticisi:
             b = self._baglantilar[s.ad] = (
                 _HttpBaglanti(s, self.transport) if s.url else _Baglanti(s)
             )
+            if isinstance(b, _Baglanti):
+                b.kokler = lambda: self.kokler()
         return b
 
     def test(self, ad: str) -> dict:

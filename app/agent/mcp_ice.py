@@ -146,6 +146,10 @@ def _uzanti(kok: Path, ayar_dizini: Path) -> tuple[str, dict] | None:
     kullanici = (_json(ayar_dizini / f"{kok.name}.json").get("userConfig")) or {}
     for k, v in (m.get("user_config") or {}).items():
         kullanici.setdefault(k, v.get("default") if isinstance(v, dict) else None)
+        if isinstance(v, dict) and v.get("required") and kullanici.get(k) in (None, "", []):
+            # Zorunlu ayar (or. filesystem'in izinli klasorleri) Claude Desktop'ta secilmemis:
+            # bos aktarilan sunucu her istegi reddediyordu ("path outside allowed directories").
+            return None
 
     def ac(s: str) -> list[str]:
         s = s.replace("${__dirname}", str(kok))

@@ -69,3 +69,17 @@ async def test_api_ice_aktar(istemci, tmp_path, monkeypatch) -> None:
     r = (await istemci.post("/api/mcp/ice-aktar", json={"anahtarlar": ["k:a"]})).json()
     assert r["eklenen"] == ["aaa"]
     assert (await istemci.get("/api/mcp/ice-aktar")).json()["bulunan"][0]["var"] is True
+
+
+def test_zorunlu_ayari_bos_uzanti_aktarilmaz(tmp_path) -> None:
+    """Claude Desktop'ta izinli klasoru secilmemis filesystem uzantisi bos klasorle aktarilinca
+    her istegi 'path outside allowed directories' ile reddediyordu; artik onerilmez."""
+    ev, ad = tmp_path / "ev", tmp_path / "appdata"
+    ev.mkdir()
+    kok = ad / "Claude" / "Claude Extensions" / "ant.dir.x.dosyasis"
+    kok.mkdir(parents=True)
+    (kok / "manifest.json").write_text(json.dumps({
+        "server": {"mcp_config": {"command": "node", "args": ["${__dirname}/i.js", "${user_config.dirs}"]}},
+        "user_config": {"dirs": {"required": True, "default": []}},
+    }), "utf-8")  # fmt: skip
+    assert "dosyasis" not in {x["ad"] for x in mcp_ice.bul(ev, ad)}

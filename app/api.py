@@ -212,6 +212,15 @@ class AjanRunKaydi(BaseModel):
     metin: str = ""
 
 
+class AltOturumIstegi(BaseModel):
+    baslik: str = Field(min_length=1, max_length=200)
+    kaynak: str = Field(default="", max_length=64)  # onerinin arac cagrisi id'si
+
+
+class OneriRedIstegi(BaseModel):
+    kaynak: str = Field(min_length=1, max_length=64)
+
+
 class AnahtarIstegi(BaseModel):
     anahtar: str = Field(max_length=300)
 
@@ -338,6 +347,9 @@ def uygulama_olustur(
         return ek
 
     mcp.ek_kaynak = _mcp_ek
+    # filesystem gibi sunucular izinli klasoru MCP roots'tan alir (klasorsuz aktarilan sunucu
+    # her dosyayi "path outside allowed directories" ile reddediyordu)
+    mcp.kokler = lambda: [str(k) for k in sohbet.aktif_alan().izinli_kokler]
     sohbet.uzantilar = uzantilar
     sohbet.tarayici = Tarayici(veri_dizini)
     sohbet.masaustu = Masaustu(
@@ -429,6 +441,7 @@ def uygulama_olustur(
 
     # ---- kalici ajanlar (openbot tasarimindan): kimlik + kuyruk + ajanlar arasi mesaj ----
     ajan_deposu = AjanDeposu(veri_dizini)
+    sohbet.ajan_olusturucu = ajan_deposu.olustur  # sohbette ajan_olustur araci
     ajan_dinleyicileri: list = []  # (ajan, is, run) -> None; Telegram cevabi vb.
 
     def _ajan_araclari(run) -> tuple[list, dict]:
@@ -974,6 +987,14 @@ def uygulama_olustur(
     @app.post("/api/oturumlar/{oturum_id}/catal")
     async def oturum_catal(oturum_id: str) -> dict:
         return oturumlar.catal(oturum_id).model_dump()
+
+    @app.post("/api/oturumlar/{oturum_id}/alt")
+    async def oturum_alt(oturum_id: str, istek: AltOturumIstegi) -> dict:
+        return oturumlar.alt_olustur(oturum_id, istek.baslik, istek.kaynak).model_dump()
+
+    @app.post("/api/oturumlar/{oturum_id}/oneri-reddet")
+    async def oturum_oneri_reddet(oturum_id: str, istek: OneriRedIstegi) -> dict:
+        return {"oneri_kararlari": oturumlar.oneri_reddet(oturum_id, istek.kaynak).oneri_kararlari}
 
     @app.post("/api/oturumlar/{oturum_id}/temizle")
     async def oturum_temizle(oturum_id: str) -> dict:

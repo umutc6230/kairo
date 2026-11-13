@@ -196,7 +196,7 @@
               <label class="proje-alan">Kabul koşulları (her satır bir koşul, isteğe bağlı)
                 <textarea class="alan" id="gr-kabul" rows="2" placeholder="pytest -q tests çıkış kodu 0"></textarea></label>
               <div class="satir">
-                <label class="soluk kucuk" for="gr-adim">En fazla adım</label><input class="alan" id="gr-adim" type="number" min="1" max="500" value="40" style="max-width:90px">
+                <label class="soluk kucuk" for="gr-adim">En fazla adım</label><input class="alan" id="gr-adim" type="number" min="0" placeholder="sınırsız" title="Boş ya da 0: sınırsız" style="max-width:90px">
                 <label class="soluk kucuk" for="gr-sure">Süre (dk)</label><input class="alan" id="gr-sure" type="number" min="1" max="1440" value="30" style="max-width:90px">
                 <button class="btn ana" id="gr-baslat"><span data-ikon="oynat"></span>Görevi başlat</button>
                 <span class="soluk kucuk">Ctrl+Enter</span>

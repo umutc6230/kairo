@@ -391,6 +391,32 @@ Python 3.12 + FastAPI + pywebview; arayuz vanilla JS. Paketleme: PORTABLE (kulla
     test_a8 paralel alt ajan esigi 1.6 sn bu makinede HEAD'de de 1.62-1.66 (sabit ek yuk ~0.45 sn) -> esik 1.8
     (sirali en az 1.8 sn uyku; alti cakisma kaniti). test_servisler kacis uyarilari r"" ile giderildi. test_a9_masaustu 5/5.
     Derlendi + teslim (data korundu, 373 MB), Baslat.bat ile acildi 18:18, ana sayfa 200. Commit bu maddeyle.
+  - [x] 2026-11-13 PAKETI (commit + push bu maddeyle). Kullanici istegiyle TAM PAKET KOSULMADI: yalniz degisen alanlarin 15 test dosyasi
+    (203 gecti: alt_oturum_ajan, a3, a8, a2, a0, sohbet_plan, sohbet_araclari, a4, baglam_dokumu, api, a7_mcp, mcp_sure,
+    mcp_oauth, arac_paketleri, masaustu_ayarlari); ruff temiz, JS --check. Derlendi + teslim (data korundu) 18:59,
+    Baslat ile acildi, ana sayfa 200, yeni JS pakette.
+    - [x] SOHBET TUR SINIRI KALDIRILDI: cevap_akit max_tur=0 sinirsiz (sohbet 20 ve 6 tur yok); ayni arac cagrisi ust uste
+      3 kez -> durum "dongu", son cagri calistirilmaz, uyari kod "dongu". test_alt_oturum_ajan.
+    - [x] read_media_file KOK COZUM: MCP roots. mcp._Baglanti initialize'da roots ilan eder, roots/list ve ping'e cevap verir;
+      roots = aktif projenin izinli_kokler'i + sunucunun kendi arguman klasorleri (api.py mcp.kokler). Proje degisince
+      stdio baglanti yeniden baslar (list_changed sonrasi sunucu eszamansiz uyguluyordu). Gercek filesystem uzantisi
+      (2026.7.10) ile 3/3 ilk cagrida PNG okundu, proje disi yol reddedildi. Mevcut klasorsuz 'filesystem' kaydi artik calisir.
+    - [x] SOHBET ADIM GORUNUMU Claude Code gibi: gorevler.js ccAkis/ccGrup/ccAdim (ardisik adimlar "2 komut çalıştırıldı ›",
+      adim basligi, acilinca kutuda "$ komut" + cikti; MCP PowerShell/bash da komut sayilir); app.css .cc-*;
+      araclar.py komut_calistir'a istege bagli `aciklama` basligi. Onizlemede goruldu.
+    - [x] ALT OTURUMLAR: Oturum.ust + oneri_kararlari; POST /api/oturumlar/{id}/alt ve /oneri-reddet; sohbet araci
+      alt_oturum_oner (yalniz oneri, sohbet.js altOturumKarti: "Alt oturumda başlat" -> alt oturum + gorev ilk mesaj /
+      "Gerek yok"); app.js listede alt oturumlar ana oturumun altinda, ok ile katlanir (localStorage kapaliAltlar).
+      Onizlemede liste, katlama, kart ve ret goruldu; "Başlat" onizlemede basilmadi (gercek modeli acar), API testle dogrulandi.
+    - [x] SOHBETTEN AJAN OLUSTURMA: ajan_olustur araci (ad, avatar enum 12, aciklama, talimat, klasor, saglayici, model);
+      politika YanEtki.yaz (onayli modda sorar); api.py sohbet.ajan_olusturucu = ajan_deposu.olustur. Gercek modelle DENENMEDI.
+    - [x] ADIM BUTCESI KALDIRILDI (kullanici istegi): Butce.max_adim varsayilan 0 = sinirsiz; donguyu ayni hata/ilerlemesiz/
+      ardisik ret korumalari durdurur; sure butcesi (1800 sn) ve alt ajan butcesi (25) duruyor; rutin/webhook kendi max_adim'i.
+      Arayuz "sınırsız" gosterir. (Purge gorevi 8d847b67c836 41. adimda bu sinira takilmisti.)
+    - [x] HATA DUZELTMELERI (Purge testindeki hatalar): MCP Wait(duration=45) 30 sn'de kesiliyordu -> mcp.arac_suresi
+      duration'a da uyar. Claude Desktop filesystem uzantisi izinli klasorsuz aktariliyordu ("path outside allowed
+      directories") -> mcp_ice._uzanti zorunlu ayari bos uzantiyi onermez + MCP roots (yukarida). klasor_listele reddi
+      tasarim geregi (proje disi yol).
   - [ ] Ogrenen sistem A: ders defteri (app/agent/dersler.py) - OGRENEN-SISTEM-PLANI.md; runner baglanti noktalari:
     _adim_calistir hata dali (~sat. 1080), DONGU_DUR (~815), _bitir kanit reddi, finally run_bitis
   - [ ] ERTELENDI (kullanici 2026-11-13): langchain-ai/social-media-agent varsayilan ajan olarak eklenmedi; istenirse once guvenlik taramasi, sonra kod kopyalamadan talimatli 'Sosyal Medya' ajani (paylasim onayli)

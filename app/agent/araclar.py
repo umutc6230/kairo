@@ -110,8 +110,9 @@ KOMUT_SEMALARI = [
         "Proje klasorunde bir kabuk komutu calistirir (test, lint, build). Cikti ve GERCEK cikis "
         "kodu doner. Uzun surecek is icin arka_plan=true kullan, sonra komut_durumu ile bak. "
         "Windows'ta Git Bash varsa bash ile calisir (; && | heredoc); yoksa cmd.exe (&& kullan). "
-        "Cok satirli kodu python -c yerine betik dosyasina yazip calistir.",
-        {"komut": S, "klasor": S, "timeout": I, "arka_plan": B},
+        "Cok satirli kodu python -c yerine betik dosyasina yazip calistir. `aciklama`: kullaniciya "
+        "gosterilen 3-8 kelimelik Turkce baslik (or. 'Testleri calistir').",
+        {"komut": S, "aciklama": S, "klasor": S, "timeout": I, "arka_plan": B},
         ["komut"],
     ),
     _fonk(
@@ -226,7 +227,12 @@ class AjanAracKaydi:
         return asyncio.run(coro)  # loop yoksa (test/CLI) tek seferlik
 
     def komut_calistir(
-        self, komut: str, klasor: str = "", timeout: int = 120, arka_plan: bool = False
+        self,
+        komut: str,
+        klasor: str = "",
+        timeout: int = 120,
+        arka_plan: bool = False,
+        aciklama: str = "",  # yalniz arayuz basligi; calismayi etkilemez
     ) -> dict:
         return self._komut(komut, klasor, timeout, arka_plan)
 

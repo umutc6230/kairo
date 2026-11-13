@@ -391,6 +391,61 @@ PLAN_ARACI = {
 }
 
 
+ALT_OTURUM_ARACI = {
+    "type": "function",
+    "function": {
+        "name": "alt_oturum_oner",
+        "description": "Bu sohbetten ayri yurutulmesi daha iyi, kendi basina bir isi kullaniciya "
+        "ALT OTURUM olarak onerir. Oturumu ACMAZ: kullanici karttan onaylarsa acilir ve `gorev` "
+        "orada ilk mesaj olur. Kucuk isler icin onerme; oneriden sonra o isi burada yapma.",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "baslik": {"type": "string", "description": "Kisa baslik (<60 karakter)"},
+                "gorev": {"type": "string", "description": "Ilk mesaj: is, dosyalar, bitti olcutu"},
+            },
+            "required": ["baslik", "gorev"],
+        },
+    },
+}  # fmt: skip
+
+
+def alt_oturum_isleyici(baslik: str = "", gorev: str = "") -> dict:
+    """Yalniz oneri: arayuz arac cagrisindan onay karti cizer, oturum kullanici onayiyla acilir."""
+    baslik, gorev = str(baslik).strip()[:80], str(gorev).strip()[:4000]
+    if not baslik or not gorev:
+        return {"hata": "baslik ve gorev gerekli."}
+    return {
+        "oneri": {"baslik": baslik, "gorev": gorev},
+        "not": "Kullaniciya onay karti gosterildi; onaylarsa alt oturum acilir. Burada yapma.",
+    }
+
+
+AVATARLAR = ("🤖", "🦉", "🧠", "🛠️", "🔎", "✍️", "📊", "🧪", "🕵️", "🎨", "📦", "⚙️")
+AJAN_OLUSTUR_ARACI = {
+    "type": "function",
+    "function": {
+        "name": "ajan_olustur",
+        "description": "Kullanici isterse kalici bir ajan (Ajanlar sayfasi) olusturur: kendi adi, "
+        "avatari, talimati ve calisma klasoru olan, isleri siraya alan calisma arkadasi. Talimati "
+        "rol, kurallar ve cikti bicimiyle yaz. Kullanici istemeden olusturma.",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "ad": {"type": "string", "description": "Harf, rakam, bosluk, nokta, tire (<=40)"},
+                "avatar": {"type": "string", "enum": list(AVATARLAR)},
+                "aciklama": {"type": "string", "description": "Diger ajanlarin gordugu tek cumle"},
+                "talimat": {"type": "string"},
+                "klasor": {"type": "string", "description": "Tam yol; bos: Kairo klasoru"},
+                "saglayici": {"type": "string", "enum": ["kairo", "claude", "codex"]},
+                "model": {"type": "string", "description": "Bos: varsayilan model"},
+            },
+            "required": ["ad", "avatar", "aciklama", "talimat"],
+        },
+    },
+}  # fmt: skip
+
+
 def plan_isleyici(adimlar: list | None = None) -> dict:
     """Plani dogrular ve normallestirir; arayuz arac cagrisindan cizer."""
     temiz = []

@@ -12,7 +12,49 @@ import {
 
 const bekleyenEkler = []; // {id?, ad, tur, onizleme, yukleniyor}
 let akisKontrol = null; // AbortController
-let geriCagri = { oturumlarYenile: async () => {}, baslikAyarla: () => {} };
+let geriCagri = { oturumlarYenile: async () => {}, baslikAyarla: () => {}, oturumAc: async () => {} };
+let oneriKararlari = {}; // acik oturumun alt oturum onerisi kararlari: kaynak -> alt id | "reddedildi"
+
+// Claude Code gibi: model alt oturum ONERIR, kullanici onaylarsa acilir ve gorev orada ilk mesaj olur.
+function altOturumKarti(o, kap) {
+  const g = o.argumanlar || {};
+  const ust = durum.oturumId;
+  const kart = el(`<div class="oneri-kart" data-id="${kacir(o.id)}"><div class="oneri-ust soluk kucuk"><span data-ikon="yanSohbet"></span>Alt oturum önerisi</div>
+    <b class="oneri-baslik">${kacir(g.baslik || "")}</b><div class="oneri-gorev soluk kucuk">${kacir(String(g.gorev || "").slice(0, 400))}</div>
+    <div class="dugme-sira"></div></div>`);
+  const sira = kart.querySelector(".dugme-sira");
+  const ciz = () => {
+    const karar = oneriKararlari[o.id];
+    if (karar === "reddedildi") { sira.innerHTML = '<span class="soluk kucuk">Geçildi</span>'; return; }
+    if (karar) {
+      sira.innerHTML = '<span class="rozet yesil">Açıldı</span><button class="btn kucuk">Alt oturuma git</button>';
+      sira.querySelector("button").onclick = () => geriCagri.oturumAc(karar, true);
+      return;
+    }
+    sira.innerHTML = '<button class="btn ana kucuk" data-ac>Alt oturumda başlat</button><button class="btn kucuk" data-red>Gerek yok</button>';
+    sira.querySelector("[data-ac]").onclick = async (e) => {
+      e.currentTarget.disabled = true;
+      try {
+        const alt = await api(`/api/oturumlar/${ust}/alt`, { method: "POST", govde: { baslik: g.baslik || "Alt oturum", kaynak: o.id } });
+        oneriKararlari[o.id] = alt.id;
+        await geriCagri.oturumAc(alt.id, true);
+        $("#girdi").value = String(g.gorev || "");
+        gonder();
+      } catch (hata) { bildir(hata.message, "hata"); ciz(); }
+    };
+    sira.querySelector("[data-red]").onclick = async () => {
+      try {
+        await api(`/api/oturumlar/${ust}/oneri-reddet`, { method: "POST", govde: { kaynak: o.id } });
+        oneriKararlari[o.id] = "reddedildi";
+        ciz();
+      } catch (hata) { bildir(hata.message, "hata"); }
+    };
+  };
+  ciz();
+  kap.append(kart);
+  ikonlariYerlestir(kart);
+  return kart;
+}
 
 export function sohbetKur(cb) {
   geriCagri = cb;
@@ -236,6 +278,10 @@ function asistanMesaji() {
     aracCagrisi(o) {
       this.durum("");
       if (this.sayacDurdur) this.mod("calisiyor");
+      if (o.ad === "alt_oturum_oner") {
+        if (this.sayac) this.dusunceBitir();
+        return altOturumKarti(o, d.querySelector(".arac-adimlari"));
+      }
       if (o.ad === "plan_guncelle") {
         if (this.sayac) this.dusunceBitir();
         this.planCiz(o.argumanlar?.adimlar);
@@ -254,6 +300,10 @@ function asistanMesaji() {
       return a;
     },
     aracSonucu(o) {
+      if (o.ad === "alt_oturum_oner") { // canli akista kart cagrida cizildi; kayitli mesajda burada
+        if (![...d.querySelectorAll(".oneri-kart")].some((x) => x.dataset.id === o.id)) this.aracCagrisi(o);
+        return;
+      }
       const a = [...d.querySelectorAll(".arac-adim")].find((x) => x.dataset.id === o.id) || this.aracCagrisi(o);
       if (o.ad === "plan_guncelle") {
         try { this.planCiz(JSON.parse(o.sonuc).plan); } catch { /* hata/kesik: arguman cizimi kalir */ }
@@ -319,6 +369,7 @@ export function bosDurum(goster) {
 const PENCERE = 40;
 
 export function mesajlariCiz(oturum) {
+  oneriKararlari = { ...(oturum?.oneri_kararlari || {}) };
   $("#mesajlar .mesaj-sutun")?.remove();
   if (!oturum || !oturum.mesajlar.length) { bosDurum(true); return; }
   const s = sutun();

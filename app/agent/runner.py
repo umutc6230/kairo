@@ -105,7 +105,9 @@ class AdimDurum(StrEnum):
 
 
 class Butce(BaseModel):
-    max_adim: int = Field(default=40, ge=1, le=500)
+    # 0 = sinirsiz (varsayilan; kullanici "adim butcesi doldu" ile yarida kalmak istemiyor).
+    # Sonsuz donguyu adim sayisi degil ayni hata / ilerlemesiz / ardisik ret korumalari durdurur.
+    max_adim: int = Field(default=0, ge=0, le=100_000)
     max_sure_sn: int = Field(default=1800, ge=10, le=24 * 3600)
     # cagri basina gonderilen baglamin TOPLAMI; 32K baglamda ~60 cagri
     max_token: int = Field(default=10_000_000, ge=1000, le=20_000_000)
@@ -660,7 +662,7 @@ class AgentRunner:
 
     def _butce_asildi(self, run: Run) -> str:
         b, k = run.butce, run.kullanim
-        if k.adim >= b.max_adim:
+        if b.max_adim and k.adim >= b.max_adim:
             return f"Adim butcesi doldu ({b.max_adim})."
         if k.sure_sn >= b.max_sure_sn:
             return f"Sure butcesi doldu ({b.max_sure_sn} sn)."
@@ -740,7 +742,7 @@ class AgentRunner:
                         run.sonuc = Sonuc(ozet="KISMI (butce doldu): " + " | ".join(notlar[-4:]))
                     break
                 kalan = run.butce.max_adim - run.kullanim.adim
-                if kalan == 2 and not run.butce_uyarildi:
+                if run.butce.max_adim and kalan == 2 and not run.butce_uyarildi:
                     # Claude Code alt ajanlari gibi: butce bitmeden bulgulari raporla
                     run.butce_uyarildi = True
                     run.mesajlar.append({"role": "user", "content": (
@@ -1128,7 +1130,8 @@ class AgentRunner:
             araclar = araclar or profil["araclar"] or ["proje_dosya_oku", "proje_ara", "proje_glob"]
         dosyalar = [str(x) for x in g.get("dosyalar") or []][:50]
         # paralel kardesler kalan butceyi PAYLASIR (toplam ebeveyni asmaz)
-        kalan_adim = (run.butce.max_adim - run.kullanim.adim) // max(1, int(g.get("_pay") or 1))
+        ebeveyn_kalan = (run.butce.max_adim - run.kullanim.adim) if run.butce.max_adim else 10**6
+        kalan_adim = ebeveyn_kalan // max(1, int(g.get("_pay") or 1))
         kalan_token = run.butce.max_token - run.kullanim.token
         hata = ""
         if not gorev or not araclar:

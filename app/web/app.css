@@ -795,3 +795,34 @@ body.uzak-saglayici [data-yalniz-yerel] { display: none !important; }
 .bk-mesaj { background: #4c8bf5; } .bk-sistem { background: #d4a017; } .bk-talimat { background: #9b72cf; }
 .bk-proje { background: #c77dba; } .bk-hafiza { background: #8a8f98; } .bk-skill { background: #2bb39a; }
 .bk-arac { background: #6c757d; } .bk-mcp { background: #e8743b; } .bk-bos { background: var(--yuzey2); border: 1px solid var(--cizgi); }
+
+/* ---- Sohbet adim akisi Claude Code gibi: katlanir grup + adim basligi + komut/cikti kutusu ---- */
+.adim-liste.sade { gap: 2px; }
+.cc-grup { list-style: none; }
+.cc-grup-baslik, .cc-baslik { display: flex; align-items: center; gap: 8px; width: 100%; background: none; border: 0; color: var(--soluk); font: inherit; font-size: 13.5px; padding: 4px 6px; border-radius: 6px; cursor: pointer; text-align: left; }
+.cc-grup-baslik:hover, .cc-baslik:hover, .cc-grup-baslik:focus-visible, .cc-baslik:focus-visible { color: var(--metin); background: var(--yuzey2); }
+.cc-ok { display: inline-block; flex-shrink: 0; transition: transform .15s; font-size: 15px; line-height: 1; }
+.cc-grup-baslik > .rozet, .cc-baslik > .rozet { flex-shrink: 0; }
+[aria-expanded="true"] > .cc-ok { transform: rotate(90deg); }
+.cc-liste { list-style: none; margin: 2px 0 6px; padding: 4px; border: 1px solid var(--cizgi); border-radius: 8px; display: flex; flex-direction: column; gap: 2px; }
+.cc-ad { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.cc-kutu { margin: 2px 4px 6px; border: 1px solid var(--cizgi); border-radius: 8px; background: var(--kod); overflow: hidden; display: flex; flex-direction: column; }
+.cc-kutu pre { margin: 0; padding: 8px 12px; font: 12.5px/1.5 var(--mono); white-space: pre-wrap; word-break: break-word; max-height: 320px; overflow: auto; }
+.cc-giris { color: var(--metin); }
+.cc-giris + .cc-cikti { border-top: 1px solid var(--cizgi); color: var(--soluk); }
+.cc-kutu > .btn { align-self: flex-start; margin: 0 12px 8px; }
+@media (prefers-reduced-motion: reduce) { .cc-ok { transition: none; } }
+
+/* ---- Alt oturumlar (Claude Desktop gibi): ana oturumun altinda girintili, acilir/kapanir ---- */
+.oturum .alt-ac { width: 22px; height: 22px; flex-shrink: 0; color: var(--soluk); }
+.oturum .alt-ac svg { width: 14px; height: 14px; transition: transform .15s; }
+.oturum .alt-ac.kapali svg { transform: rotate(-90deg); }
+.oturum.alt-oturum { margin-left: 14px; padding-left: 20px; font-size: 13.5px; color: var(--soluk); }
+.oturum.alt-oturum.aktif, .oturum.alt-oturum:hover { color: var(--metin); }
+.oturum.alt-oturum::before { content: ""; position: absolute; left: 7px; top: 4px; width: 8px; height: 12px; border-left: 1px solid var(--cizgi2); border-bottom: 1px solid var(--cizgi2); border-bottom-left-radius: 5px; }
+.oneri-kart { border: 1px solid var(--cizgi); border-radius: 10px; padding: 10px 12px; margin: 6px 0; display: flex; flex-direction: column; gap: 4px; background: var(--yuzey); }
+.oneri-ust { display: flex; align-items: center; gap: 6px; }
+.oneri-ust svg { width: 14px; height: 14px; }
+.oneri-gorev { white-space: pre-wrap; }
+.oneri-kart .dugme-sira { margin-top: 4px; align-items: center; }
+@media (prefers-reduced-motion: reduce) { .oturum .alt-ac svg { transition: none; } }

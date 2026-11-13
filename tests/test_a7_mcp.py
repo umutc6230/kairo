@@ -31,7 +31,8 @@ def _izinsiz(*_a):
 def test_kesif_ad_ayirma_ve_bozuk_araclar(yon) -> None:
     s, isl = yon.semalar_ve_isleyiciler(_izinsiz)
     adlar = {x["function"]["name"] for x in s}
-    assert adlar == {"mcp__test__selam", "mcp__test__kotu", "mcp__test__coz", "mcp__test__sir"}
+    assert adlar == {"mcp__test__selam", "mcp__test__kotu", "mcp__test__coz", "mcp__test__sir",
+                     "mcp__test__kokler"}  # fmt: skip
     assert arac_adi("a", "b.c") == "mcp__a__b_c"
     assert isl["mcp__test__selam"](ad="Umut")["metin"] == "Merhaba Umut"
 
@@ -180,3 +181,27 @@ def test_http_adres_dogrulama() -> None:
     with pytest.raises(ValueError):
         McpSunucu(ad="x", url="https://a/mcp", komut="python")
     assert McpSunucu(ad="x", url="http://127.0.0.1:9000/mcp").disari()["uzak"]
+
+
+def test_mcp_roots_aktif_proje_klasoru_ve_degisiklik(tmp_path) -> None:
+    """filesystem gibi sunucular izinli klasoru MCP roots'tan alir; klasorsuz aktarilan sunucu
+    her dosyayi reddediyordu. Proje degisince roots/list_changed ile yeniden sorulur."""
+    import json
+
+    a, b = tmp_path / "proje-a", tmp_path / "proje-b"
+    a.mkdir()
+    b.mkdir()
+    y = McpYoneticisi(tmp_path)
+    aktif = [str(a), str(tmp_path / "yok")]  # olmayan klasor roots'a girmez
+    y.kokler = lambda: aktif
+    y.ekle({"ad": "fs", "komut": sys.executable, "argumanlar": ["-I", SUNUCU],
+            "izinli_araclar": ["kokler"]})  # fmt: skip
+    try:
+        _, isl = y.semalar_ve_isleyiciler(_izinsiz)
+        ilk = json.loads(isl["mcp__fs__kokler"]()["metin"])
+        assert [k["uri"] for k in ilk] == [a.resolve().as_uri()]
+        aktif[:] = [str(b)]
+        sonra = json.loads(isl["mcp__fs__kokler"]()["metin"])
+        assert [k["uri"] for k in sonra] == [b.resolve().as_uri()]
+    finally:
+        y.kapat()

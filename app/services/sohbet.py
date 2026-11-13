@@ -27,9 +27,12 @@ from app.services.model_yonetici import ModelYonetici
 from app.services.oturumlar import EkOzet, Mesaj, OturumDeposu, baslik_uret
 from app.services.sohbet_araclari import (
     AJAN_NOTU,
+    AJAN_OLUSTUR_ARACI,
+    ALT_OTURUM_ARACI,
     PLAN_ARACI,
     SISTEM_NOTU,
     DosyaAraclari,
+    alt_oturum_isleyici,
     plan_isleyici,
     sonuc_ozeti,
     varsayilan_kokler,
@@ -525,7 +528,9 @@ async def cevap_akit(
     Sonunda {metin, dusunce, araclar, istatistik, durum} dondurur.
 
     `baglam_token` verilirse HER tur oncesi baglam butcesi yeniden hesaplanir (A0.6).
-    `durum`: tamam | tur_siniri (UI akisinin bitmesi gorev basarisi degildir).
+    `durum`: tamam | tur_siniri | dongu (UI akisinin bitmesi gorev basarisi degildir).
+    `max_tur` 0 = sinirsiz; o zaman sonsuz donguyu ayni arac cagrisinin 3 kez ust uste
+    tekrarlanmasi durdurur.
     """
     etiket = etiket or {}
     bas, ilk = time.perf_counter(), None
@@ -535,7 +540,8 @@ async def cevap_akit(
     mesajlar = list(mesajlar)
     durum = "tamam"
     tur, plan_turu = 0, 0
-    while tur < max_tur:
+    son_imza, tekrar = "", 0
+    while not max_tur or tur < max_tur:
         cagrilar: list[dict] = []
         tur_metni: list[str] = []
         mesajlar = baglami_darat(mesajlar, baglam_token, rezerv, gonder)
@@ -554,8 +560,16 @@ async def cevap_akit(
                 cagrilar = o["cagrilar"]
         if not cagrilar:
             break
-        if tur == max_tur - 1:  # son tur: araci CALISTIRMA, sonucsuz cagri olarak kaydet (A0.5)
-            durum = "tur_siniri"
+        imza = json.dumps(
+            [(c["function"]["name"], c["function"].get("arguments")) for c in cagrilar],
+            sort_keys=True,
+            default=str,
+        )
+        tekrar = tekrar + 1 if imza == son_imza else 0
+        son_imza = imza
+        sinirda = bool(max_tur) and tur == max_tur - 1
+        if sinirda or tekrar >= 2:  # araci CALISTIRMA, sonucsuz cagri olarak kaydet (A0.5)
+            durum = "tur_siniri" if sinirda else "dongu"
             for c in cagrilar:
                 ham_arg = c["function"].get("arguments") or "{}"
                 try:  # arayuz sozluk bekler: ham JSON metni harf harf gorunur
@@ -566,7 +580,7 @@ async def cevap_akit(
                     "id": c["id"],
                     "ad": c["function"]["name"],
                     "argumanlar": arg,
-                    "ozet": "tur siniri: calistirilmadi",
+                    "ozet": f"{'tur siniri' if sinirda else 'tekrar'}: calistirilmadi",
                     "sonuc": "",
                     "durum": "sonucsuz",
                     "sure_ms": 0,
@@ -576,9 +590,12 @@ async def cevap_akit(
             gonder(
                 {
                     "tur": "uyari",
-                    "kod": "tur_siniri",
+                    "kod": durum,
                     "metin": f"Model {max_tur} turda araç kullanımını bitiremedi; "
-                    "son araç çağrıları çalıştırılmadı.",
+                    "son araç çağrıları çalıştırılmadı."
+                    if sinirda
+                    else "Model aynı araç çağrısını üst üste 3 kez tekrarladı; döngü "
+                    "durduruldu, son çağrı çalıştırılmadı.",
                 }
             )
             break
@@ -640,6 +657,7 @@ class SohbetServisi:
         self.hafiza = None  # HafizaDeposu (api baglar)
         self.mcp = None  # McpYoneticisi (api baglar)
         self.uzantilar = None  # UzantiYoneticisi (api baglar)
+        self.ajan_olusturucu = None  # AjanDeposu.olustur (api baglar): sohbetten kalici ajan
         self.tarayici = None  # Tarayici (api baglar)
         self.masaustu = None  # Masaustu (api baglar)
         self.kod_zekasi: dict[str, Any] = {}  # alan id -> KodZekasi (dil sunuculari surer)
@@ -834,6 +852,11 @@ class SohbetServisi:
             # Claude Code gibi: cok adimli iste gorunur yapilacaklar listesi (arayuz canli cizer)
             araclar.append(PLAN_ARACI)
             isleyiciler["plan_guncelle"] = plan_isleyici
+            araclar.append(ALT_OTURUM_ARACI)  # yalniz oneri; kullanici karttan onaylar
+            isleyiciler["alt_oturum_oner"] = alt_oturum_isleyici
+            if self.ajan_olusturucu is not None and self.politika is not None:
+                araclar.append(AJAN_OLUSTUR_ARACI)
+                isleyiciler["ajan_olustur"] = self._ajan_olustur_isleyici(alan)
             skill_metni = skill_metni.replace(skl.SINIR, skl.SINIR_AJAN)
         else:
             not_ = f"{SISTEM_NOTU}\n{kapsam_notu(alan)}" if ayar.sohbet_araclari else ""
@@ -865,6 +888,26 @@ class SohbetServisi:
         if not ayar.sohbet_araclari and alan.id == VARSAYILAN_ALAN_ID:
             return sistem, [], {}, otomatik  # kullanici sohbette araclari kapatti
         return sistem, araclar, isleyiciler, otomatik
+
+    def _ajan_olustur_isleyici(self, alan: CalismaAlani):
+        from app.agent.yazma import sonuc_veya_hata
+
+        olustur, politika = self.ajan_olusturucu, self.politika
+
+        def yap(**kw) -> dict:
+            veri = {k: str(v) for k, v in kw.items() if v not in (None, "")}
+            # yeni kalici ajan = yan etki: onayli modda kullaniciya sorulur
+            politika.uygula(
+                Istek(arac="ajan_olustur", yan_etki=YanEtki.yaz,
+                      ozet=f"Yeni ajan: {veri.get('avatar', '')} {veri.get('ad', '')}".strip(),
+                      komut=json.dumps(veri, sort_keys=True, ensure_ascii=False)[:4000]),
+                alan,
+            )  # fmt: skip
+            a = olustur(veri)
+            return {"olusturuldu": {"id": a.id, "ad": a.ad, "avatar": a.avatar},
+                    "not": "Ajanlar sayfasinda gorunur; is oradan verilir."}  # fmt: skip
+
+        return lambda **kw: sonuc_veya_hata(yap, **kw)
 
     def ajan_araclari(self, alan: CalismaAlani) -> AjanAracKaydi | None:
         """A2 arac kaydi: YALNIZ gercek bir proje aciksa. Kisisel klasorlerde kod araci verilmez.
@@ -1020,7 +1063,7 @@ class SohbetServisi:
                     araclar=araclar or None,
                     isleyiciler=isleyiciler,
                     # ajan araclari varsa (yaz/komut) cok adimli is: 6 tur yetmiyordu (canli)
-                    max_tur=20 if "plan_guncelle" in isleyiciler else 6,
+                    max_tur=0,  # sinirsiz; donguyu tekrar korumasi durdurur
                     baglam_token=ayar.baglam_token,
                     rezerv=GUVENLIK_TOKEN + ayrilan_token(ayar.max_tokens, seviye),
                 )
@@ -1043,6 +1086,8 @@ class SohbetServisi:
                     asistan.araclar = otomatik_kayit + sonuc["araclar"]
                     if sonuc.get("durum") == "tur_siniri":
                         asistan.hata = asistan.hata or "Tur siniri: gorev tamamlanmadi."
+                    elif sonuc.get("durum") == "dongu":
+                        asistan.hata = asistan.hata or "Döngü durduruldu: görev tamamlanmadı."
                     continue
                 if olay["tur"] == "parca":
                     yarim.append(olay["metin"])

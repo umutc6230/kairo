@@ -45,6 +45,9 @@ class Oturum(BaseModel):
     # Sohbetten baslatilan ajan gorevleri ({run, metin}); eskiden yalniz tarayici deposundaydi ve
     # her acilista degisen port yuzunden kayboluyordu.
     ajan_runlari: list[dict] = []
+    ust: str = ""  # alt oturumsa ana oturumun id'si (listede altinda acilir)
+    # model alt_oturum_oner ile onerdi; kullanici karari: kaynak -> alt oturum id | "reddedildi"
+    oneri_kararlari: dict[str, str] = {}
 
 
 def baslik_uret(metin: str) -> str:
@@ -108,6 +111,20 @@ class OturumDeposu:
             oturum = self.kaydet(oturum)
         return oturum
 
+    def alt_olustur(self, ust_id: str, baslik: str, kaynak: str = "") -> Oturum:
+        """Kullanici onayiyla alt oturum: bos gecmisle baslar, listede ana oturumun altinda."""
+        ust = self.getir(ust_id)
+        alt = self.kaydet(Oturum(baslik=baslik_uret(baslik)[:80], ust=ust.id))
+        if kaynak:
+            ust.oneri_kararlari[kaynak[:64]] = alt.id
+            self.kaydet(ust)
+        return alt
+
+    def oneri_reddet(self, ust_id: str, kaynak: str) -> Oturum:
+        ust = self.getir(ust_id)
+        ust.oneri_kararlari[kaynak[:64]] = "reddedildi"
+        return self.kaydet(ust)
+
     def yeniden_adlandir(self, oturum_id: str, baslik: str) -> Oturum:
         oturum = self.getir(oturum_id)
         oturum.baslik = baslik.strip()[:80] or "Yeni sohbet"
@@ -133,6 +150,7 @@ class OturumDeposu:
                     "guncelleme": ham.get("guncelleme", ""),
                     "mesaj_sayisi": len(ham.get("mesajlar", [])),
                     "ajan_sayisi": len(ham.get("ajan_runlari", [])),
+                    "ust": ham.get("ust", ""),
                 }
             )
         return sorted(sonuc, key=lambda o: o["guncelleme"], reverse=True)

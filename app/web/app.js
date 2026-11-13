@@ -145,6 +145,7 @@ async function oturumAc(id, kaydetme = false) {
 
 // ---------------- oturum listesi ----------------
 const kapaliGruplar = new Set(JSON.parse(localStorage.getItem("kapaliGruplar") || "[]"));
+const kapaliAltlar = new Set(JSON.parse(localStorage.getItem("kapaliAltlar") || "[]"));
 
 function grupAdi(iso) {
   const t = new Date(iso);
@@ -202,8 +203,15 @@ function oturumListesiCiz() {
   const kap = $("#oturum-listesi");
   kap.innerHTML = "";
   const gruplar = new Map();
-  for (const o of durum.oturumlar) {
-    if (!o.mesaj_sayisi && !o.ajan_sayisi && o.id !== durum.oturumId && !ajanliOturum(o.id)) continue;
+  const gorunur = durum.oturumlar.filter((o) => o.mesaj_sayisi || o.ajan_sayisi || o.id === durum.oturumId || ajanliOturum(o.id));
+  const idler = new Set(gorunur.map((o) => o.id));
+  // Claude Desktop gibi: alt oturumlar ana oturumun altinda acilir/kapanir (ana gorunmuyorsa ustte)
+  const altlar = new Map();
+  for (const o of gorunur) {
+    if (o.ust && idler.has(o.ust)) altlar.set(o.ust, [...(altlar.get(o.ust) || []), o]);
+  }
+  for (const o of gorunur) {
+    if (o.ust && idler.has(o.ust)) continue;
     const g = grupAdi(o.guncelleme);
     if (!gruplar.has(g)) gruplar.set(g, []);
     gruplar.get(g).push(o);
@@ -215,23 +223,41 @@ function oturumListesiCiz() {
       kapaliGruplar[grup.classList.contains("kapali") ? "add" : "delete"](ad);
       localStorage.setItem("kapaliGruplar", JSON.stringify([...kapaliGruplar]));
     };
-    for (const o of liste) {
-      const s = el(`<div class="oturum ${durum.gorunum === "sohbet" && o.id === durum.oturumId ? "aktif" : ""}" data-id="${o.id}">
-        <span class="ad" title="${kacir(o.baslik)}">${kacir(o.baslik)}</span><button class="ikon-btn daha" title="Diger" data-ikon="daha"></button></div>`);
-      s.onclick = () => oturumAc(o.id);
-      s.querySelector(".daha").onclick = (e) => {
+    const satir = (o, alt = false) => {
+      const cocuk = altlar.get(o.id) || [];
+      const kapali = kapaliAltlar.has(o.id) && !cocuk.some((c) => c.id === durum.oturumId);
+      const s = el(`<div class="oturum ${alt ? "alt-oturum" : ""} ${durum.gorunum === "sohbet" && o.id === durum.oturumId ? "aktif" : ""}" data-id="${o.id}">
+        <span class="ad" title="${kacir(o.baslik)}">${kacir(o.baslik)}</span>${cocuk.length ? `<button class="ikon-btn alt-ac ${kapali ? "kapali" : ""}" title="Alt oturumlar (${cocuk.length})" aria-label="Alt oturumları ${kapali ? "göster" : "gizle"}" aria-expanded="${!kapali}" data-ikon="asagi"></button>` : ""}<button class="ikon-btn daha" title="Diger" data-ikon="daha"></button></div>`);
+      s.querySelector(".alt-ac")?.addEventListener("click", (e) => {
         e.stopPropagation();
-        menuAc(e.currentTarget, [
-          { metin: "Yeniden adlandır", ikon: "kalem", eylem: () => yenidenAdlandir(o) },
-          { metin: "Sil", ikon: "cop", tehlike: true, eylem: () => oturumSil(o) },
-        ]);
-      };
-      grup.querySelector(".grup-ogeler").append(s);
-    }
+        kapaliAltlar[kapali ? "delete" : "add"](o.id);
+        localStorage.setItem("kapaliAltlar", JSON.stringify([...kapaliAltlar]));
+        oturumListesiCiz();
+      });
+      return [s, kapali ? [] : cocuk];
+    };
+    const ekle = (o, alt = false) => {
+      const [s, cocuk] = satir(o, alt);
+      oturumSatiriBagla(s, o, grup);
+      cocuk.forEach((c) => ekle(c, true));
+    };
+    liste.forEach((o) => ekle(o));
     kap.append(grup);
   }
   if (!gruplar.size) kap.append(el(`<div class="ayar-not" style="padding:16px 10px">Henüz sohbet yok.</div>`));
   ikonlariYerlestir(kap);
+}
+
+function oturumSatiriBagla(s, o, grup) {
+  s.onclick = () => oturumAc(o.id);
+  s.querySelector(".daha").onclick = (e) => {
+    e.stopPropagation();
+    menuAc(e.currentTarget, [
+      { metin: "Yeniden adlandır", ikon: "kalem", eylem: () => yenidenAdlandir(o) },
+      { metin: "Sil", ikon: "cop", tehlike: true, eylem: () => oturumSil(o) },
+    ]);
+  };
+  grup.querySelector(".grup-ogeler").append(s);
 }
 
 async function yenidenAdlandir(o) {
@@ -437,7 +463,7 @@ async function baslat() {
   gorunumUygula(durum.ayarlar);
   gorevBildirimIzle();
   await durumYenile();
-  sohbetKur({ oturumlarYenile: oturumlariYenile, baslikAyarla });
+  sohbetKur({ oturumlarYenile: oturumlariYenile, baslikAyarla, oturumAc });
   ayarlarKur(hepsiniYenile);
   sayfalarKur();
   projeKur();
