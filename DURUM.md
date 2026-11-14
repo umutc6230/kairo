@@ -424,6 +424,9 @@ Python 3.12 + FastAPI + pywebview; arayuz vanilla JS. Paketleme: PORTABLE (kulla
     projeler de listelenir, eski kayitlar "Proje yok". Test: test_alt_oturum_ajan (+ api, a1_izinler 92 gecti).
     Onizlemede: gruplar, sohbete tiklayinca proje gecisi, "+" ile termflow-lite'ta yeni sohbet, Tarih'e donus goruldu.
     Derlendi + kuruldu (data korundu) 19:12, ana sayfa 200.
+  - [x] MODEL BILGISI TEK YERDE (2026-11-13, commit + push bu maddeyle): model adi yalniz mesaj kutusu seciciside (#hap-model-metni);
+    durum cubugu "OpenRouter" / "Yerel model · Hazir" (yerel model adi ipucunda), sag paneldeki #sp-model satiri kaldirildi.
+    Mesaj altindaki istatistik cipindeki model (hangi model cevapladi) duruyor. Onizlemede goruldu, derlendi + kuruldu 22:38.
   - [ ] Ogrenen sistem A: ders defteri (app/agent/dersler.py) - OGRENEN-SISTEM-PLANI.md; runner baglanti noktalari:
     _adim_calistir hata dali (~sat. 1080), DONGU_DUR (~815), _bitir kanit reddi, finally run_bitis
   - [ ] ERTELENDI (kullanici 2026-11-13): langchain-ai/social-media-agent varsayilan ajan olarak eklenmedi; istenirse once guvenlik taramasi, sonra kod kopyalamadan talimatli 'Sosyal Medya' ajani (paylasim onayli)

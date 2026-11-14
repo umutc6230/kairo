@@ -180,10 +180,6 @@ function grupAdi(iso) {
 }
 
 function sagPanelOrtam() {
-  const a = durum.ayarlar || {};
-  const model = a.saglayici === "openrouter" && a.or_model ? a.or_model : modelAdi(a.model);
-  const m = $("#sp-model");
-  if (m) m.textContent = `Model: ${model || "-"}`;
   const p = $("#sp-proje-metni");
   if (p) p.textContent = projeDurumu.aktif?.ad || "Proje seç (açınca sohbet ajan olur)";
 }
@@ -339,7 +335,8 @@ async function durumYenile() {
   document.body.classList.toggle("uzak-saglayici", uzakMi());
   if (uzakMi()) {
     $("#sunucu-nokta").className = `nokta ${a.or_model ? "hazir" : "hata"}`;
-    $("#sunucu-metni").textContent = a.or_model ? `OpenRouter · ${a.or_model}` : "OpenRouter · model seçilmedi";
+    // model adi yalniz mesaj kutusunun altindaki secicide (tekrar etmesin); burada baglanti durumu
+    $("#sunucu-metni").textContent = a.or_model ? "OpenRouter" : "OpenRouter · model seçilmedi";
     $("#hap-model-metni").textContent = a.or_model || "Model seç";
     const dus0 = durum.bilgi.dusunme_secenekleri.find((d) => d.deger === a.dusunme);
     $("#hap-dusunme-metni").textContent = dus0 ? dus0.kisa : a.dusunme;
@@ -350,7 +347,8 @@ async function durumYenile() {
   }
   $("#sunucu-nokta").className = `nokta ${s.durum}`;
   $("#hap-nokta").className = `nokta buyuk ${s.durum}`;
-  $("#sunucu-metni").textContent = s.durum === "kapali" ? "Model kapalı" : `${modelAdi(aktif)} · ${DURUM_METNI[s.durum] || s.durum}`;
+  $("#sunucu-metni").textContent = s.durum === "kapali" ? "Model kapalı" : `Yerel model · ${DURUM_METNI[s.durum] || s.durum}`;
+  $("#sunucu-metni").title = s.durum === "kapali" ? "" : modelAdi(aktif);
   const b = s.bellek || {};
   $("#ram-metni").textContent = b.bos_gb != null ? `RAM ${sayi(b.bos_gb)}/${sayi(b.toplam_gb, 0)} GB boş` : "";
   $("#hap-model-metni").textContent = a.saglayici === "openrouter" && a.or_model ? a.or_model : modelAdi(a.model);
