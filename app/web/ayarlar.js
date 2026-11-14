@@ -362,14 +362,25 @@ export function ayarlarAc(sekme = "ai") {
               if (alan.innerHTML && b) { alan.innerHTML = ""; return; } // ikinci tiklama: araclari gizle
               if (b) b.disabled = true;
               const t = await api(`/api/mcp/${ad}/test`, { method: "POST" });
-              alan.innerHTML = `<div class="mc-arac-liste">${t.araclar.map((a) => `<label class="onay"><input type="checkbox" data-arac="${kacir(a)}" ${s.izinli_araclar.includes(a) ? "checked" : ""}> ${kacir(a)}</label>`).join("")}</div>`
+              alan.innerHTML = (t.araclar.length > 1 ? `<label class="onay mc-tumu"><input type="checkbox" data-tumu> Tümünü seç <span class="soluk kucuk">(${t.araclar.length} araç)</span></label>` : "")
+                + `<div class="mc-arac-liste">${t.araclar.map((a) => `<label class="onay"><input type="checkbox" data-arac="${kacir(a)}" ${s.izinli_araclar.includes(a) ? "checked" : ""}> ${kacir(a)}</label>`).join("")}</div>`
                 + (s.uzak ? '<div class="soluk kucuk">Uzak sunucu: her araç çağrısı onay ister (veri dışarı gider).</div>' : '<div class="soluk kucuk">İşaretli araçlar onaysız çalışır (yalnız okuma yapan araçları işaretle).</div>') + (t.kaynaklar?.length ? `<div class="soluk kucuk">Kaynaklar: ${kacir(t.kaynaklar.join(", "))}</div>` : "");
-              $$("[data-arac]", alan).forEach((c) => {
-                c.onchange = async () => {
-                  const izinli = $$("[data-arac]:checked", alan).map((x) => x.dataset.arac);
-                  try { await api(`/api/mcp/${ad}`, { method: "PUT", govde: { izinli_araclar: izinli } }); s.izinli_araclar = izinli; } catch (err) { bildir(err.message, "hata"); }
-                };
-              });
+              const tumu = $("[data-tumu]", alan);
+              const tumuGuncelle = () => {
+                if (!tumu) return;
+                const n = $$("[data-arac]:checked", alan).length;
+                tumu.checked = n === t.araclar.length;
+                tumu.indeterminate = n > 0 && n < t.araclar.length;
+              };
+              const kaydetIzinli = async () => {
+                const izinli = $$("[data-arac]:checked", alan).map((x) => x.dataset.arac);
+                try { await api(`/api/mcp/${ad}`, { method: "PUT", govde: { izinli_araclar: izinli } }); s.izinli_araclar = izinli; } catch (err) { bildir(err.message, "hata"); }
+              };
+              $$("[data-arac]", alan).forEach((c) => { c.onchange = () => { tumuGuncelle(); kaydetIzinli(); }; });
+              if (tumu) {
+                tumu.onchange = () => { $$("[data-arac]", alan).forEach((c) => { c.checked = tumu.checked; }); tumuGuncelle(); kaydetIzinli(); };
+                tumuGuncelle();
+              }
               if (b) b.disabled = false;
               return;
             }

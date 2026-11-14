@@ -903,3 +903,4 @@ body.uzak-saglayici [data-yalniz-yerel] { display: none !important; }
 .thread-yonlendir { display: flex; gap: 6px; margin-top: 6px; } .thread-yonlendir .alan { flex: 1; }
 .ajan-inceleme summary { cursor: pointer; }
 .inceleme-bulgu { margin: 6px 0; }
+.mc-tumu { display: inline-flex; margin-bottom: 6px; font-weight: 600; }

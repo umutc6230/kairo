@@ -363,6 +363,7 @@ Python 3.12 + FastAPI + pywebview; arayuz vanilla JS. Paketleme: PORTABLE (kulla
   ozyineleme (alt cizgili ad); adres /v1 cift ekleniyordu; "İ".lower() hatasi; durdur kilitte asiliydi.
 
 ## Siradaki adim
+- 2026-11-14: Baglayici arac listesine "Tumunu sec" (ara durum, tek PUT) eklendi (ayarlar.js); onizlemede denendi, derlendi + teslim, commit edildi.
 - WRONGSTACK B-E (kullanici istegi 2026-11-14, OGRENEN-SISTEM-PLANI.md). Onceki tur (GitHub + thread'ler) derlendi + teslim 09:40, acildi. B-E sonrasi tam paket gecti (test_a9_masaustu haric), derlendi + teslim 09:59 (data korundu), acildi. Commit 3691830 pushlandi (46ea14f dahil):
   - [x] B dongu tespiti: runner.py _periyot_tekrari (2-3'luk desen >=3 tur -> DONGU_UYAR gibi atlanir) + _koc (ayni hata imzasi farkli argumanla 3 kez -> 'koc' notu; yazma sonrasi 'dogrula' notu). tests/test_ogrenen_b.py
   - [x] C kanitli hafiza: Hafiza.dayanak ('yol::metin', dosya metni kaybedince not sisteme girmez), yararli/eski/yanlis + revizyon, ilgili() sorgu kelimesine gore en iyi 6 / 800 krk, yanlis>=2 dusurur; hafiza_yargila araci (hafiza_acik), hafizaya_ekle dayanak alir. tests/test_ogrenen_c.py
