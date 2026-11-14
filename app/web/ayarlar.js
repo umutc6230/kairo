@@ -87,6 +87,11 @@ export function ayarlarAc(sekme = "ai") {
           <button class="btn kucuk" id="ay-gorsel-yenile" title="Listeyi OpenRouter'dan yeniden al">Yenile</button></div>
         <datalist id="ay-gorsel-liste"></datalist>
         <div class="ayar-not" id="ay-gorsel-not">Sohbette "logo çiz", "görsel üret" gibi isteklerde ajan resim üretip projeye kaydeder. Codex abonelik kotanı kullanır (~1-2 dk); OpenRouter anahtar ve model ister.</div></div>
+      <div class="ayar-grup"><label for="ay-video-model">Video üretim modeli (ücretli)</label>
+        <div class="satir"><input class="alan" id="ay-video-model" list="ay-video-liste" value="${kacir(a.video_model || "")}" placeholder="Boş = video üretme kapalı" style="flex:1" maxlength="200">
+          <button class="btn kucuk" id="ay-video-yenile" title="Listeyi OpenRouter'dan yeniden al">Yenile</button></div>
+        <datalist id="ay-video-liste"></datalist>
+        <div class="ayar-not" id="ay-video-not">Sohbette "video üret", "kısa klip" gibi isteklerde ajan bu modelle mp4 üretir. Her video OpenRouter bakiyenden ücret düşer; her seferinde onay sorulur.</div></div>
       <div class="ayar-grup" data-yerel><label>Test</label>
         <div class="satir"><button class="btn" id="ay-test"><span data-ikon="oynat"></span>Seçili modeli test et</button><span id="ay-test-sonuc" class="ayar-not">Uygulamanın kullandığı biçimde (JSON şema) kısa bir istek atar.</span></div></div>
       <h3 class="ay-bolum" id="ay-b-dusunme">Düşünme (effort)</h3>
@@ -814,7 +819,7 @@ export function ayarlarAc(sekme = "ai") {
   }).catch(() => {});
   const gorselListe = async (yenile = false) => {
     try {
-      const v = await api(`/api/openrouter/modeller?gorsel=true${yenile ? "&yenile=true" : ""}`);
+      const v = await api(`/api/openrouter/modeller?cikti=image${yenile ? "&yenile=true" : ""}`);
       const ucretsiz = $("#ay-gorsel-ucretsiz", govde).checked;
       $("#ay-gorsel-liste", govde).innerHTML = v.modeller.filter((m) => !ucretsiz || m.ucretsiz)
         .map((m) => `<option value="${kacir(m.id)}">${kacir(m.ad)}${m.ucretsiz ? " (ücretsiz)" : ""}</option>`).join("");
@@ -822,6 +827,17 @@ export function ayarlarAc(sekme = "ai") {
     } catch (err) { $("#ay-gorsel-not", govde).textContent = `Görsel model listesi alınamadı: ${err.message}`; }
   };
   $("#ay-gorsel-ucretsiz", govde).onchange = () => gorselListe();
+  alanKaydet("#ay-video-model", "video_model", (v) => v.trim());
+  const videoListe = async (yenile = false) => {
+    try {
+      const v = await api(`/api/openrouter/modeller?cikti=video${yenile ? "&yenile=true" : ""}`);
+      $("#ay-video-liste", govde).innerHTML = v.modeller
+        .map((m) => `<option value="${kacir(m.id)}">${kacir(m.ad)}</option>`).join("");
+      if (v.uyari) $("#ay-video-not", govde).textContent = v.uyari;
+    } catch (err) { $("#ay-video-not", govde).textContent = `Video model listesi alınamadı: ${err.message}`; }
+  };
+  $("#ay-video-yenile", govde).onclick = () => videoListe(true);
+  videoListe();
   $("#ay-gorsel-yenile", govde).onclick = () => gorselListe(true);
   gorselListe();
   alanKaydet("#ay-sicaklik", "sicaklik", Number);

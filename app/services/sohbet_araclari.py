@@ -529,6 +529,25 @@ GORSEL_URET_ARACI = {
     },
 }  # fmt: skip
 
+VIDEO_URET_ARACI = {
+    "type": "function",
+    "function": {
+        "name": "video_uret",
+        "description": "Metinden kisa VIDEO klibi uretir (UCRETLI, 1-5 dk surer) ve projeye mp4 "
+        "kaydeder. istem: ayrintili Ingilizce sahne tarifi (konu, hareket, kamera, isik, stil). "
+        "sure_sn: 4-8. yol: bos = videolar/video-<zaman>.mp4.",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "istem": {"type": "string"},
+                "sure_sn": {"type": "integer"},
+                "yol": {"type": "string"},
+            },
+            "required": ["istem"],
+        },
+    },
+}  # fmt: skip
+
 UZANTI_YAZ_ARACI = {
     "type": "function",
     "function": {

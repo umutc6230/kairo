@@ -416,6 +416,8 @@ function bantGuncelle() {
 // Claude Code "New session" gibi: ortada PROJE secici (model/dusunme alttaki cubukta kalir).
 // Son kullanilan projeler, acik olan tikli; fazlasi "Daha fazla" menusunde; altta klasor sec.
 const ILK_PROJE = 4;
+const ONERI_TAZE_MS = 60_000;
+const oneriOnbellek = { zaman: 0, liste: [] };
 function bosDurumKartlari() {
   const kap = $("#model-kartlari");
   const etkin = projeDurumu.etkin?.id;
@@ -428,6 +430,11 @@ function bosDurumKartlari() {
     b.onclick = async () => { await projeyeGec(p.id); bosDurumKartlari(); };
     return b;
   };
+  // Durum yoklamasi bunu birkac saniyede bir cagirir: veri ayniysa DOM'a dokunma (titreme/hover kaybi)
+  if (Date.now() - oneriOnbellek.zaman > ONERI_TAZE_MS) onerileriYenile();
+  const imza = JSON.stringify([etkin, projeler.map((p) => [p.id, p.ad]), oneriOnbellek.liste]);
+  if (kap.dataset.imza === imza && kap.childElementCount) return;
+  kap.dataset.imza = imza;
   kap.innerHTML = "";
   kap.append(el('<div class="kart-baslik-satir soluk kucuk">Hangi projede çalışalım?</div>'));
   projeler.slice(0, ILK_PROJE).forEach((p) => kap.append(satir(p)));
@@ -450,14 +457,17 @@ function bosDurumKartlari() {
   onerileriCiz(kap);
 }
 
-// Proaktif oneriler (Grok Bot gibi): DURUM.md yarim/acik maddeleri, seni bekleyen thread'ler, yaklasan rutinler
-let oneriSayac = 0;
+// Proaktif oneriler (Grok Bot gibi): DURUM.md yarim/acik maddeleri, seni bekleyen thread'ler, yaklasan rutinler.
+// Onbellekten senkron cizilir (bos -> dolu ziplamasi yok); sunucudan en fazla dakikada bir yenilenir.
 const ONERI_IKON = { durum: "plan", thread: "logo", rutin: "saat" };
-async function onerileriCiz(kap) {
-  const no = ++oneriSayac;
-  let liste = [];
-  try { liste = (await api("/api/oneriler")).oneriler; } catch { return; }
-  if (no !== oneriSayac || !liste.length || !kap.isConnected) return; // bu arada yeniden cizildi
+async function onerileriYenile() {
+  oneriOnbellek.zaman = Date.now(); // istek surerken tekrar tetiklenmesin
+  try { oneriOnbellek.liste = (await api("/api/oneriler")).oneriler; } catch { return; }
+  if (!$("#bos-durum")?.hidden) bosDurumKartlari(); // degistiyse imza farkli -> bir kez cizilir
+}
+function onerileriCiz(kap) {
+  const liste = oneriOnbellek.liste;
+  if (!liste.length) return;
   kap.append(el('<div class="kart-ayrac"></div>'), el('<div class="kart-baslik-satir soluk kucuk">Öneriler</div>'));
   for (const o of liste) {
     const b = el(`<button class="kart-satir" title="${kacir(o.metin)}"><span data-ikon="${ONERI_IKON[o.tur] || "bilgi"}"></span>

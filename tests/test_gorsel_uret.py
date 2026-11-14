@@ -53,7 +53,7 @@ async def test_gorsel_model_listesi(tmp_path):
         modeller = [{"id": "a/b:free", "name": "B"}, {"id": "c/d", "name": "D"}]  # fiyat yok
         return httpx.Response(200, json={"data": modeller})
 
-    v = await depo(tmp_path, isleyici).modeller(gorsel=True)
+    v = await depo(tmp_path, isleyici).modeller(cikti="image")
     assert {m["id"]: m["ucretsiz"] for m in v["modeller"]} == {"a/b:free": True, "c/d": False}
     assert (tmp_path / "openrouter-gorsel-modeller.json").exists()
     assert not (tmp_path / "openrouter-modeller.json").exists()  # metin listesi ayri kalir

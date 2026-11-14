@@ -38,6 +38,7 @@ from app.services.sohbet_araclari import (
     PLAN_ARACI,
     SISTEM_NOTU,
     UZANTI_YAZ_ARACI,
+    VIDEO_URET_ARACI,
     DosyaAraclari,
     alt_oturum_isleyici,
     is_emri_isleyicileri,
@@ -960,6 +961,18 @@ class SohbetServisi:
             if uretim_istendi and self.politika is not None and self._gorsel_saglayici(ayar):
                 araclar.append(GORSEL_URET_ARACI)
                 isleyiciler["gorsel_uret"] = self._gorsel_uret_isleyici(alan, ayar)
+            video_istendi = re.search(
+                r"video|klip|animasyon|animation|clip", (istek_metni or "").lower()
+            )
+            if (
+                video_istendi
+                and self.politika is not None
+                and self.openrouter is not None
+                and getattr(ayar, "video_model", "")
+                and self.openrouter.anahtar()
+            ):
+                araclar.append(VIDEO_URET_ARACI)
+                isleyiciler["video_uret"] = self._video_uret_isleyici(alan, ayar)
             if self.politika is not None:
                 araclar.append(CLI_ARACI)
                 isleyiciler["cli_ye_yaptir"] = self._cli_isleyici(alan, ayar)
@@ -1112,6 +1125,41 @@ class SohbetServisi:
             return {"yol": str(hedef), "model": model, "boyut_kb": round(len(r["veri"]) / 1024),
                     "maliyet_usd": r["maliyet_usd"],
                     "not": "Gorsel kaydedildi; kullaniciya yolunu soyle."}  # fmt: skip
+
+        return lambda **kw: sonuc_veya_hata(yap, **kw)
+
+    def _video_uret_isleyici(self, alan: CalismaAlani, ayar):
+        """OpenRouter /videos ile klip uretir (UCRETLI). Tek onay: 'odeme' turu dis eylem oldugu
+        icin tam yetkide de sorulur; hedef yol ayni istekte kapsam denetiminden gecer."""
+        from datetime import datetime
+        from pathlib import Path
+
+        from app.agent.yazma import sonuc_veya_hata
+
+        politika, depo, model = self.politika, self.openrouter, ayar.video_model
+
+        def yap(istem: str = "", sure_sn: int = 5, yol: str = "") -> dict:
+            istem = str(istem).strip()[:4000]
+            if not istem:
+                return {"hata": "istem gerekli (sahneyi tarif et)."}
+            sure = max(2, min(int(sure_sn or 5), 10))
+            yol = str(yol).strip() or f"videolar/video-{datetime.now():%Y%m%d-%H%M%S}.mp4"
+            s = politika.uygula(
+                Istek(arac="video_uret", yan_etki=YanEtki.dis, yol=yol,
+                      ozet=f"Ücretli ödeme: {model} ile {sure} sn video -> {yol}: {istem[:100]}",
+                      komut=f"{model} {sure}s\n{istem}"[:4000]),
+                alan,
+            )  # fmt: skip
+            try:
+                r = depo.video_uret(model, istem, sure)
+            except YerelLLMHatasi as e:
+                return {"hata": str(e), "karar": "hata"}
+            hedef = Path(s.cozulmus_yol or yol)
+            hedef.parent.mkdir(parents=True, exist_ok=True)
+            hedef.write_bytes(r["veri"])
+            return {"yol": str(hedef), "model": model, "sure_sn": sure,
+                    "boyut_kb": round(len(r["veri"]) / 1024), "maliyet_usd": r["maliyet_usd"],
+                    "not": "Video kaydedildi; kullaniciya yolunu ve maliyeti soyle."}  # fmt: skip
 
         return lambda **kw: sonuc_veya_hata(yap, **kw)
 

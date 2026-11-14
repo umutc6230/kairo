@@ -1317,8 +1317,8 @@ def uygulama_olustur(
         return await openrouter.limit()
 
     @app.get("/api/openrouter/modeller")
-    async def or_modeller(yenile: bool = False, gorsel: bool = False) -> dict:
-        return await openrouter.modeller(yenile, gorsel)
+    async def or_modeller(yenile: bool = False, cikti: str = "") -> dict:
+        return await openrouter.modeller(yenile, cikti)
 
     @app.post("/api/openrouter/test")
     async def or_test(istek: ModelIstegi) -> dict:

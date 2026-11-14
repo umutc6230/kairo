@@ -86,6 +86,8 @@ class KullaniciAyarlari(BaseModel):
     gorsel_model: str = Field(default="recraft/recraft-v4.1-flash-v2:free", max_length=200)
     # otomatik: Codex CLI kuruluysa ChatGPT aboneligiyle Codex, degilse OpenRouter
     gorsel_saglayici: Literal["otomatik", "codex", "openrouter"] = "otomatik"
+    # video_uret araci (OpenRouter /videos, UCRETLI); bos = arac kapali
+    video_model: str = Field(default="", max_length=200)
     izolasyon: Literal["yok", "konteyner"] = "yok"  # A1.8: komutlar nerede calisir
     hafiza_acik: bool = True  # kayitli notlar sisteme eklenir
     ag_acik: bool = True  # web_ara/web_getir; tam yetkide onaysiz, degilse istek basina onay

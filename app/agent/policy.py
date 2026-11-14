@@ -235,8 +235,8 @@ def _tur(*kelimeler: str) -> re.Pattern:
 
 EYLEM_TURLERI: dict[str, re.Pattern] = {
     "odeme": _tur("pay", "payment", "checkout", "purchase", "buy", "order", "invoice", "refund",
-                  "transfer", "payout", "withdraw", "charge", "subscribe", "ödeme", "öde", "ode",
-                  "satın al", "sipariş", "siparis"),
+                  "transfer", "payout", "withdraw", "charge", "subscribe", "ödeme", "odeme",
+                  "öde", "ode", "satın al", "sipariş", "siparis"),
     "kimlik": _tur("password", "passwd", "2fa", "two.factor", "credentials?", "parola", "şifre",
                    "sifre"),
     "silme": _tur("delete", "destroy", "erase", "purge", "wipe", "trash", "discard", "sil",
