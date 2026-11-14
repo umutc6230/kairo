@@ -364,6 +364,14 @@ Python 3.12 + FastAPI + pywebview; arayuz vanilla JS. Paketleme: PORTABLE (kulla
   ozyineleme (alt cizgili ad); adres /v1 cift ekleniyordu; "İ".lower() hatasi; durdur kilitte asiliydi.
 
 ## Siradaki adim
+- GROK BOT KARSILASTIRMASI (kullanici istegi 2026-11-14): var olanlar: hafiza, bilgisayar kullanimi, coklu ajan + mesaj,
+  rutinler/webhook, GitHub, MCP/plugin/Composio, artifact, uzak erisim + Telegram, onay kapsamlari. EKLENECEK:
+  - [ ] Hafiza ice aktarma (baska asistandan yapistir -> satir satir not; sir/tekrar atlanir) + Ayarlar>Hafiza dugmesi
+  - [ ] Proaktif oneriler: projelerin DURUM.md [ ]/[~] maddeleri, yaklasan tarihler, insan bekleyen thread'ler -> yeni sohbet ekraninda oneri
+  - [ ] gorsel_uret araci (OpenRouter gorsel modeli, ayar gorsel_model) -> projeye PNG
+  - Video URETILMEDI: OpenRouter'da video modeli yok (ayri ucretli servis gerekir).
+- BOS EKRAN + ALT CUBUK (2026-11-14): ortada model/effort yerine proje secici (son 4 + Daha fazla + Proje olmadan + Klasor sec);
+  mod menusu simge + ad + aciklama (menuAc 'aciklama'), cubukta kisa ad; model hapinda kisa ad.
 - AI AYARLARI YENIDEN TASARIM (2026-11-14, Cursor/Open WebUI/Jan ornekleri): ustte 'Kullanilan model' ozet karti (baglam,
   fiyat, yetenekler, uyari; Degistir + Dene, test sonucu kartta), saglayici iki hap, API anahtari tek satir (Degistir/Sil,
   anahtar yoksa giris acik), 'Model sec' katlanir secici: arama + cipler (Ucretsiz, Arac, Gorsel, Dusunur), tek satirlik

@@ -200,7 +200,7 @@ export function menuAc(capa, ogeler, { yukari = false, sagaHizali = false } = {}
     if (o === "ayrac") { m.append(el(`<div class="menu-ayrac"></div>`)); continue; }
     if (o.baslik) { m.append(el(`<div class="menu-baslik">${kacir(o.baslik)}</div>`)); continue; }
     const b = el(`<button class="menu-oge ${o.secili ? "secili" : ""} ${o.tehlike ? "tehlike" : ""}" ${o.pasif ? "disabled" : ""}>
-      ${o.ikon ? `<span data-ikon="${o.ikon}"></span>` : ""}<span>${kacir(o.metin)}</span>
+      ${o.ikon ? `<span data-ikon="${o.ikon}"></span>` : ""}${o.aciklama ? `<span class="menu-metin"><span>${kacir(o.metin)}</span><small>${kacir(o.aciklama)}</small></span>` : `<span>${kacir(o.metin)}</span>`}
       ${o.sag ? `<span class="sag">${kacir(o.sag)}</span>` : ""}${o.secili ? `<span class="tik sag" data-ikon="tik"></span>` : ""}</button>`);
     b.onclick = (e) => { e.stopPropagation(); menuKapat(); o.eylem?.(); };
     m.append(b);

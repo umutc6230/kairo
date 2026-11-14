@@ -4,10 +4,10 @@ import { kacir } from "./md.js";
 import { $, api, bildir, durum, el, menuAc, modal, onayla } from "./ortak.js";
 
 const MOD_TR = {
-  sohbet: { ad: "Sohbet", aciklama: "Dosya yazma ve komut yok; yalnız okuma ve sohbet." },
-  planla: { ad: "Planla", aciklama: "Salt okunur: inceler, plan önerir, hiçbir değişiklik uygulamaz." },
-  onayli: { ad: "Onaylı uygulama", aciklama: "Her yan etkili adım için sizden onay ister." },
-  otomatik: { ad: "Politika kapsamında otomatik", aciklama: "Onay istemeden uygular; yine de kök dışına, gizli dosyalara ve dış ağa dokunamaz." },
+  sohbet: { ad: "Sohbet", kisa: "Sohbet", ikon: "yanSohbet", aciklama: "Yalnız okur ve konuşur; dosya yazmaz, komut çalıştırmaz." },
+  planla: { ad: "Planla", kisa: "Planla", ikon: "plan", aciklama: "İnceler ve plan önerir; hiçbir değişiklik uygulamaz." },
+  onayli: { ad: "Onaylı uygulama", kisa: "Onaylı", ikon: "kalem", aciklama: "Her dosya değişikliği ve komut için onayını ister." },
+  otomatik: { ad: "Politika kapsamında otomatik", kisa: "Otomatik", ikon: "guc", aciklama: "Sormadan uygular; kök dışı, gizli dosyalar ve tehlikeli komutlar yine korunur." },
 };
 const GUVEN_TR = {
   guvenilir: { ad: "Güvenilir", aciklama: "Projenin kendi KAIRO.md/AGENTS.md/CLAUDE.md talimatı okunur." },
@@ -217,11 +217,14 @@ function modHapiCiz() {
     iz.onclick = () => { const a = iz.getAttribute("aria-pressed") !== "true"; iz.setAttribute("aria-pressed", String(a)); iz.classList.toggle("secili", a); };
   }
   if (!aktif) return;
-  $("#hap-mod-metni").textContent = MOD_TR[projeDurumu.izin?.mod]?.ad || aktif.mod;
-  b.onclick = () => menuAc(b, Object.entries(MOD_TR).map(([k, v]) => ({
-    metin: `${v.ad}${k === aktif.mod ? " ✓" : ""}`,
+  const m = MOD_TR[projeDurumu.izin?.mod] || MOD_TR[aktif.mod];
+  $("#hap-mod-metni").textContent = m?.kisa || aktif.mod;
+  b.title = m ? `${m.ad}: ${m.aciklama}` : "Mod";
+  // Claude Code mod secici gibi: simge + ad + tek satir aciklama, secili tikli
+  b.onclick = () => menuAc(b, [{ baslik: "Ajan ne kadar serbest?" }, ...Object.entries(MOD_TR).map(([k, v]) => ({
+    metin: v.ad, aciklama: v.aciklama, ikon: v.ikon, secili: k === aktif.mod,
     eylem: async () => {
       try { await api(`/api/projeler/${aktif.id}/mod`, { method: "PUT", govde: { mod: k } }); await projeYenile(); } catch (e) { bildir(e.message, "hata"); }
     },
-  })), { yukari: true });
+  }))], { yukari: true });
 }

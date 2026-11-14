@@ -974,3 +974,12 @@ body.uzak-saglayici [data-yalniz-yerel] { display: none !important; }
 .ay-yet { font-size: 11px; border-radius: 4px; padding: 1px 6px; background: var(--yuzey3, #2c2c29); color: var(--soluk, #9a9a94); }
 .ay-model-meta { font-size: 12px; color: var(--soluk, #9a9a94); white-space: nowrap; min-width: 120px; text-align: right; }
 .ay-tik { color: #d97757; font-weight: 700; }
+
+/* Claude Code gibi: menude ad + tek satir aciklama; alt cubuk sade hap'lar */
+.menu-oge .menu-metin { display: flex; flex-direction: column; gap: 2px; text-align: left; flex: 1; min-width: 0; }
+.menu-oge .menu-metin small { color: var(--soluk, #9a9a94); font-size: 12px; white-space: normal; max-width: 300px; line-height: 1.35; }
+.menu-oge:has(.menu-metin) { align-items: flex-start; padding-top: 8px; padding-bottom: 8px; }
+.alt-satir .hap.duz { border-radius: 8px; padding: 4px 8px; }
+.alt-satir .hap.duz:hover { background: var(--yuzey3, #2c2c29); }
+#hap-izole.secili { color: #d97757; }
+#hap-model .soluk { margin-left: 6px; }

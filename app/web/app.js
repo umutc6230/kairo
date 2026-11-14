@@ -352,7 +352,8 @@ async function durumYenile() {
     $("#sunucu-nokta").className = `nokta ${a.or_model ? "hazir" : "hata"}`;
     // model adi yalniz mesaj kutusunun altindaki secicide (tekrar etmesin); burada baglanti durumu
     $("#sunucu-metni").textContent = a.or_model ? "OpenRouter" : "OpenRouter · model seçilmedi";
-    $("#hap-model-metni").textContent = a.or_model || "Model seç";
+    $("#hap-model-metni").textContent = a.or_model ? a.or_model.split("/").pop() : "Model seç"; // Claude gibi kisa ad
+    $("#hap-model").title = a.or_model || "";
     const dus0 = durum.bilgi.dusunme_secenekleri.find((d) => d.deger === a.dusunme);
     $("#hap-dusunme-metni").textContent = dus0 ? dus0.kisa : a.dusunme;
     bantGuncelle();
@@ -366,7 +367,7 @@ async function durumYenile() {
   $("#sunucu-metni").title = s.durum === "kapali" ? "" : modelAdi(aktif);
   const b = s.bellek || {};
   $("#ram-metni").textContent = b.bos_gb != null ? `RAM ${sayi(b.bos_gb)}/${sayi(b.toplam_gb, 0)} GB boş` : "";
-  $("#hap-model-metni").textContent = a.saglayici === "openrouter" && a.or_model ? a.or_model : modelAdi(a.model);
+  $("#hap-model-metni").textContent = a.saglayici === "openrouter" && a.or_model ? a.or_model.split("/").pop() : modelAdi(a.model);
   const dus = durum.bilgi.dusunme_secenekleri.find((d) => d.deger === a.dusunme);
   $("#hap-dusunme-metni").textContent = dus ? dus.kisa : a.dusunme;
   $("#klasor-metni").textContent = `Model klasörü: ${a.llm_dizin}`;
@@ -412,32 +413,42 @@ function bantGuncelle() {
   });
 }
 
+// Claude Code "New session" gibi: ortada PROJE secici (model/dusunme alttaki cubukta kalir).
+// Son kullanilan projeler, acik olan tikli; fazlasi "Daha fazla" menusunde; altta klasor sec.
+const ILK_PROJE = 4;
 function bosDurumKartlari() {
   const kap = $("#model-kartlari");
-  const a = durum.ayarlar;
+  const etkin = projeDurumu.etkin?.id;
+  const projeler = [...(projeDurumu.liste || [])]
+    .sort((x, y) => String(y.guncelleme).localeCompare(String(x.guncelleme)));
+  const satir = (p) => {
+    const b = el(`<button class="kart-satir ${p.id === etkin ? "secili" : ""}" title="${kacir((p.kokler || []).join("\n"))}">
+      <span data-ikon="klasor"></span><span class="kart-ad">${kacir(p.ad)}</span>
+      ${p.id === etkin ? '<span class="tik" data-ikon="tik"></span>' : ""}</button>`);
+    b.onclick = async () => { await projeyeGec(p.id); bosDurumKartlari(); };
+    return b;
+  };
   kap.innerHTML = "";
-  // AI Ayarlari'ndaki saglayici ve model ne ise o gorunur
-  kap.append(el(`<div class="kart-baslik-satir soluk kucuk">Sağlayıcı: ${uzakMi() ? "OpenRouter" : "Yerel (llama.cpp)"}</div>`));
-  if (uzakMi()) {
-    const k = el(`<button class="kart-satir secili"><span data-ikon="model"></span><span>${kacir(a.or_model || "Model seç")}</span><span class="sag">OpenRouter</span>${a.or_model ? '<span class="tik" data-ikon="tik"></span>' : ""}</button>`);
-    k.onclick = () => ayarlarAc();
-    kap.append(k);
+  kap.append(el('<div class="kart-baslik-satir soluk kucuk">Hangi projede çalışalım?</div>'));
+  projeler.slice(0, ILK_PROJE).forEach((p) => kap.append(satir(p)));
+  const fazla = projeler.slice(ILK_PROJE);
+  if (fazla.length) {
+    const b = el(`<button class="kart-satir"><span data-ikon="daha"></span><span class="kart-ad">Daha fazla</span><span class="sag">${fazla.length}</span><span data-ikon="sag" class="kucuk-ikon"></span></button>`);
+    b.onclick = (e) => menuAc(e.currentTarget, fazla.map((p) => ({
+      metin: p.ad, ikon: "klasor", secili: p.id === etkin, eylem: async () => { await projeyeGec(p.id); bosDurumKartlari(); },
+    })), { sagaHizali: true });
+    kap.append(b);
   }
-  for (const m of uzakMi() ? [] : durum.sunucu.modeller) {
-    const k = el(`<button class="kart-satir ${m.anahtar === a.model ? "secili" : ""} ${m.dosya_var ? "" : "pasif"}">
-      <span data-ikon="model"></span><span>${kacir(m.ad)}</span>
-      <span class="sag">${m.dosya_var ? `~${m.ram_gb} GB${m.ses ? " · ses" : ""}` : "indirilmedi"}</span>
-      ${m.anahtar === a.model ? '<span class="tik" data-ikon="tik"></span>' : ""}</button>`);
-    k.onclick = () => m.dosya_var ? ayarKaydet({ model: m.anahtar }, true) : bildir("Bu model indirilmemiş.", "hata");
-    kap.append(k);
-  }
-  kap.append(el(`<div class="kart-ayrac"></div>`));
-  const dus = durum.bilgi.dusunme_secenekleri.find((d) => d.deger === a.dusunme);
-  const d = el(`<button class="kart-satir"><span data-ikon="beyin"></span><span>Düşünme: ${kacir(dus?.ad || a.dusunme)}</span><span data-ikon="asagi" class="kucuk-ikon"></span></button>`);
-  d.onclick = (e) => dusunmeMenusu(e.currentTarget, false);
-  kap.append(d);
+  kap.append(el('<div class="kart-ayrac"></div>'));
+  const yok = el(`<button class="kart-satir ${etkin === KISISEL ? "secili" : ""}"><span data-ikon="ekran"></span><span class="kart-ad">Proje olmadan (kişisel klasörler)</span>${etkin === KISISEL ? '<span class="tik" data-ikon="tik"></span>' : ""}</button>`);
+  yok.onclick = async () => { await projeyeGec(KISISEL); bosDurumKartlari(); };
+  kap.append(yok);
+  const yeni = el('<button class="kart-satir"><span data-ikon="arti"></span><span class="kart-ad">Klasör seç…</span></button>');
+  yeni.onclick = () => projeAc();
+  kap.append(yeni);
   ikonlariYerlestir(kap);
 }
+document.addEventListener("oturumlar-degisti", () => { if (!$("#bos-durum")?.hidden) bosDurumKartlari(); });
 
 function dusunmeMenusu(capa, yukari = true) {
   menuAc(capa, durum.bilgi.dusunme_secenekleri.map((d) => ({
