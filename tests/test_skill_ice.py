@@ -119,3 +119,20 @@ def test_kural_taramasi_ciddi_bulguda_sartli_yapar(tmp_path):
     ice, _, _ = _kur(tmp_path, {"s/SKILL.md": gizli}, {"s": "temiz"})
     k = ice.indir("https://github.com/o/r")
     assert ice.denetle(k["id"], "pdf-ozet")["son"] == "sartli"  # Claude temiz dese de
+
+
+def test_ayni_adli_skill_farkli_adla_kurulur_ve_ad_yeniden_yazilir(tmp_path):
+    ice, _, depo = _kur(tmp_path, {"x/SKILL.md": TEMIZ}, {"x": "temiz"})
+    depo.olustur("pdf-ozet", "zaten var olan", "govde")
+    k = ice.indir("https://github.com/o/r")
+    assert k["skiller"][0]["var"] == "uygulama"  # arayuz kaynagi soyler
+    ice.denetle(k["id"], "pdf-ozet")
+    with pytest.raises(UygulamaHatasi, match="farkli bir ad"):
+        ice.kur(k["id"], ["pdf-ozet"])
+    with pytest.raises(UygulamaHatasi, match="Gecersiz"):
+        ice.kur(k["id"], ["pdf-ozet"], yeni_adlar={"pdf-ozet": "Kotu Ad!"})
+    assert ice.kur(k["id"], ["pdf-ozet"], yeni_adlar={"pdf-ozet": "pdf-ozet-github"}) == {
+        "kurulan": ["pdf-ozet-github"]}  # fmt: skip
+    s = depo.getir("pdf-ozet-github")
+    assert "name: pdf-ozet-github" in s.dosya.read_text("utf-8")
+    assert depo.getir("pdf-ozet").aciklama == "zaten var olan"  # eskisi bozulmadi

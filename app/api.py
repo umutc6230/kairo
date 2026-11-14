@@ -223,6 +223,7 @@ class SkillIceAdIstegi(BaseModel):
 class SkillIceKurIstegi(BaseModel):
     adlar: list[str] = Field(min_length=1, max_length=50)
     riskli_onay: bool = False
+    yeni_adlar: dict[str, str] = {}  # zaten var olan ada sahip skill farkli adla kurulur
 
 
 class AltOturumIstegi(BaseModel):
@@ -1684,7 +1685,9 @@ def uygulama_olustur(
 
     @app.post("/api/skill-ice/{iid}/kur")
     async def skill_ice_kur(iid: str, istek: SkillIceKurIstegi) -> dict:
-        return await asyncio.to_thread(skill_ice.kur, iid, istek.adlar, istek.riskli_onay)
+        return await asyncio.to_thread(
+            skill_ice.kur, iid, istek.adlar, istek.riskli_onay, istek.yeni_adlar
+        )
 
     @app.delete("/api/skill-ice/{iid}")
     async def skill_ice_iptal(iid: str) -> dict:

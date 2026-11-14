@@ -68,3 +68,23 @@ async def test_runner_hatayi_yazar_cozumu_kaydeder_sonraki_gorevde_kullanir(tmp_
     await bitir(runner2, run2.id)
     assert "onceki_ders" in gorulen[-1]  # tekrar eden hata modele dersle dondu
     assert defter.liste()[0].sayi == 2
+
+
+async def test_durum_md_notu_kaniti_gecersiz_kilmaz_kod_degisikligi_kilar(tmp_path, proje):  # noqa: F811
+    """Arastirma sonunda DURUM.md'ye not dusmek 'dogrulanmadi' yapmasin; kod degisikligi yapsin."""
+
+    def oku_yaz_bitir(yazilacak):
+        return SahteModel([
+            cagri("proje_dosya_oku", yol="src/hesap.py"),  # 1: kanit
+            cagri("proje_dosya_yaz", yol=yazilacak, icerik="not\n"),  # 2: yazim
+            cagri("gorevi_bitir", ozet="tamam", kanit_adimlari=[1]),  # 3
+            cagri("gorevi_bitir", ozet="tamam", kanit_adimlari=[]),  # reddedilirse
+        ])  # fmt: skip
+
+    runner, *_ = kur(tmp_path, proje, oku_yaz_bitir("DURUM.md"))
+    run = await bitir(runner, (await runner.baslat("arastir ve not al")).id)
+    assert run.durum.value == "basarili" and run.sonuc.dogrulandi
+    (tmp_path / "b").mkdir()
+    runner2, *_ = kur(tmp_path / "b", proje, oku_yaz_bitir("src/yeni.py"))
+    run2 = await bitir(runner2, (await runner2.baslat("kod yaz")).id)
+    assert run2.durum.value == "dogrulanmadi"

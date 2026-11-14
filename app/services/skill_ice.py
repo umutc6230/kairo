@@ -136,6 +136,21 @@ def ek_tarama(kok: Path) -> list[dict]:
     return riskler
 
 
+def _ad_degistir(dosya: Path, yeni: str) -> None:
+    """SKILL.md frontmatter'indaki name'i degistirir (yoksa ekler); govdeye dokunmaz."""
+    metin = dosya.read_text(encoding="utf-8", errors="replace")
+    if metin.startswith("---") and (son := metin.find("\n---", 3)) > 0:
+        on = metin[3:son]
+        if re.search(r"(?m)^name\s*:", on):
+            on = re.sub(r"(?m)^name\s*:.*$", f"name: {yeni}", on, count=1)
+        else:
+            on = f"\nname: {yeni}{on}"
+        metin = f"---{on}{metin[son:]}"
+    else:
+        metin = f"---\nname: {yeni}\n---\n\n{metin}"
+    dosya.write_text(metin, encoding="utf-8")
+
+
 class SkillIceAktarici:
     def __init__(self, veri_dizini: Path, depo: SkillDeposu) -> None:
         self.kok = veri_dizini / "skill-karantina"
@@ -220,7 +235,8 @@ class SkillIceAktarici:
             "ad": ad, "yol": str(klasor.relative_to(depo_kok)).replace("\\", "/"),
             "aciklama": maskele(str(meta.get("description") or ""))[:300],
             "rapor": rapor, "kural": kural_seviyesi(rapor), "sorun": sorun,
-            "var": any(s.ad == ad for s in self.depo.kesfet()), "denetim": None,
+            # ayni adli kurulu skill'in kaynagi (claude/brain/uygulama); arayuz farkli ad onerir
+            "var": next((s.kaynak for s in self.depo.kesfet() if s.ad == ad), ""), "denetim": None,
         }  # fmt: skip
 
     # ---- 2) Claude Code denetimi ----
@@ -280,9 +296,18 @@ class SkillIceAktarici:
         return max(s["kural"], s["denetim"]["karar"], key=SEVIYE.__getitem__)
 
     # ---- 3) kur / iptal ----
-    def kur(self, iid: str, adlar: list[str], riskli_onay: bool = False) -> dict:
+    def kur(
+        self,
+        iid: str,
+        adlar: list[str],
+        riskli_onay: bool = False,
+        yeni_adlar: dict[str, str] | None = None,
+    ) -> dict:
+        """yeni_adlar: ayni adda skill zaten varsa (or. Claude Code'da) farkli adla kurulur;
+        kopyadaki SKILL.md 'name' alani da yeni adla yazilir, yoksa kesifte yine cakisir."""
         k = self.kayit(iid)
         kurulan = []
+        yeni_adlar = yeni_adlar or {}
         for ad in adlar:
             s = next((x for x in k["skiller"] if x["ad"] == ad), None)
             if s is None:
@@ -294,21 +319,27 @@ class SkillIceAktarici:
                 raise UygulamaHatasi(f"{ad}: denetim reddetti, kurulmaz.")
             if karar == "sartli" and not riskli_onay:
                 raise UygulamaHatasi(f"{ad}: riskli bulgular var; kurmak icin riskleri onaylayin.")
-            if any(x.ad == ad for x in self.depo.kesfet()):
-                raise UygulamaHatasi(f"Bu adda skill zaten var: {ad}")
+            hedef_ad = (yeni_adlar.get(ad) or ad).strip().lower()
+            if not AD_DESENI.fullmatch(hedef_ad):
+                raise UygulamaHatasi(f"Gecersiz skill adi: {hedef_ad} (kucuk harf, rakam, - _ .)")
+            if any(x.ad == hedef_ad for x in self.depo.kesfet()):
+                raise UygulamaHatasi(f"Bu adda skill zaten var: {hedef_ad}; farkli bir ad ver.")
             kaynak = self.kok / iid / "depo" / s["yol"]
             if any(p.is_symlink() for p in kaynak.rglob("*")):
                 raise UygulamaHatasi(f"{ad}: sembolik link iceriyor, kurulmaz.")
             if klasor_hashi(kaynak) != s["rapor"]["klasor_hashi"]:
                 raise UygulamaHatasi(f"{ad}: denetimden sonra dosyalar degismis; yeniden indirin.")
-            hedef = self.depo.uygulama_dizini / ad
+            hedef = self.depo.uygulama_dizini / hedef_ad
             shutil.copytree(kaynak, hedef)
+            if hedef_ad != ad:
+                _ad_degistir(hedef / "SKILL.md", hedef_ad)
             json_yaz(hedef / ".kaynak.json", {
                 "url": k["url"], "commit": k["commit"], "yol": s["yol"], "kurulum": simdi(),
+                "asil_ad": ad,
                 "klasor_hashi": s["rapor"]["klasor_hashi"], "karar": karar,
                 "denetim_ozeti": s["denetim"]["ozet"][:500],
             })  # fmt: skip
-            kurulan.append(ad)
+            kurulan.append(hedef_ad)
         self.depo.onbellegi_bosalt()
         return {"kurulan": kurulan}
 

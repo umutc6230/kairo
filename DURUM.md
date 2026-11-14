@@ -458,6 +458,12 @@ Python 3.12 + FastAPI + pywebview; arayuz vanilla JS. Paketleme: PORTABLE (kulla
     aracPaketleriCiz/baglayiciIceAktarCiz artik #mc-paket/#mc-ice'e cizer. Onizlemede uc sekme goruldu, konsol temiz.
   - [x] klasor_sil (depo.py): Windows'ta salt okunur git paket dosyalari rmtree(ignore_errors) ile kaliyordu;
     skill_ice ve pluginler.git_karantina bunu kullanir.
+  - [x] (2026-11-14, COMMIT YOK, kuruldu 09:02) Skill ice aktarma: ayni adli skill varsa kutu kapali kaliyordu ->
+    farkli adla kur (yeni_adlar; kopyadaki SKILL.md name yeniden yazilir), kartta neden yazili, riskli onay kart icinde.
+    Onizlemede obra/superpowers brainstorming -> brainstorming-github kuruldu. test_skill_ice 6.
+  - [x] "Dogrulanmadi" yanlis alarmi: arastirma sonunda DURUM.md notu (BRAIN-POLICY) web kanitini gecersiz kiliyordu.
+    runner.kayit_dosyasi_mi: DURUM.md/PROJE-REHBER.md/LESSONS.md/CHANGELOG.md, /journal/, /kayit/ yazimlari kanit
+    kuralinda "son degisiklik" sayilmaz. Canli ornek run e4bdfd142a6a. test_dersler'e test.
   - [ ] SIRADA: (1) dsh-superagent D1 (SUPERAJAN-PLANI.md; 3 soru kullaniciya); (2) agent-desktop karari.
   - [ ] DSH-SUPERAGENT WINDOWS PORTU (kullanici istegi 2026-11-14, BASLANDI, kod YOK): belgeler okundu (000, 001).
     Kavramlar: Source->Trigger->Thread->Eval(gate+assessment)->Ticket(Mandate)->Assignment(Executor)->Channel.

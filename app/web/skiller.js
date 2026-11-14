@@ -182,12 +182,19 @@ function skillKarti(s) {
   const d = s.denetim;
   const kural = s.rapor.riskler.slice(0, 8).map((r) => `<li><code>${kacir(r.dosya)}</code> ${kacir(r.neden)}</li>`).join("");
   const bulgu = (d?.bulgular || []).map((b) => `<li><span class="rozet ${ONEM[b.onem] || ""}">${kacir(b.onem)}</span> <code>${kacir(b.dosya)}${b.satir ? `:${kacir(b.satir)}` : ""}</code> ${kacir(b.tur)}: ${kacir(b.aciklama)}</li>`).join("");
-  const secilebilir = ["temiz", "sartli"].includes(s.son) && !s.var;
-  return `<div class="ske-skill" data-ad="${kacir(s.ad)}">
-    <div class="ske-ust"><label class="ske-sec"><input type="checkbox" data-sec ${secilebilir ? "checked" : "disabled"}> <b>${kacir(s.ad)}</b></label>
-      <span class="rozet ${sinif}">${kacir(etiket)}</span>${s.var ? '<span class="rozet">zaten kurulu</span>' : ""}
+  const secilebilir = ["temiz", "sartli"].includes(s.son);
+  // neden secilemiyor: kutuyu kapatmak yetmez, kullaniciya yazilir
+  const engel = { denetlenmedi: "Önce Claude Code ile denetle", reddet: "Denetim reddetti; kurulamaz" }[s.son] || "";
+  const KAYNAK = { claude: "Claude Code'da", brain: "Brain'de", uygulama: "Kairo'da" };
+  return `<div class="ske-skill ${secilebilir ? "" : "pasif"}" data-ad="${kacir(s.ad)}">
+    <div class="ske-ust"><label class="ske-sec" title="${kacir(engel)}"><input type="checkbox" data-sec ${secilebilir && !s.var ? "checked" : ""} ${secilebilir ? "" : "disabled"}> <b>${kacir(s.ad)}</b></label>
+      <span class="rozet ${sinif}">${kacir(etiket)}</span>
       <span class="soluk kucuk">${kacir(s.rapor.dosya_sayisi)} dosya</span>
       ${s.son === "denetlenmedi" ? '<button class="btn kucuk" data-denetle>Claude Code ile denetle</button>' : ""}</div>
+    ${engel && s.son !== "denetlenmedi" ? `<div class="kucuk vurgu">${kacir(engel)}</div>` : ""}
+    ${s.var && secilebilir ? `<div class="ske-ad-sec kucuk"><span>Bu adda bir skill ${kacir(KAYNAK[s.var] || (s.var.startsWith("plugin:") ? `${s.var.slice(7)} plugin'inde` : ""))} zaten var; aynı adla kurulamaz. Farklı adla kur:</span>
+      <input class="alan" data-yeni-ad value="${kacir(`${s.ad}-github`)}" maxlength="64" spellcheck="false" aria-label="Yeni skill adı"></div>` : ""}
+    ${s.son === "sartli" ? '<label class="onay kucuk ske-riskli-kart"><input type="checkbox" data-riskli> Riskli bulguları okudum, yine de kurulsun.</label>' : ""}
     <div class="soluk kucuk">${kacir(s.aciklama || "")}${s.sorun ? ` <span class="rozet kirmizi">${kacir(s.sorun)}</span>` : ""}</div>
     ${d ? `<div class="ske-denetim"><b>Claude Code:</b> ${kacir(d.ozet)}${bulgu ? `<ul>${bulgu}</ul>` : ""}</div>` : ""}
     ${kural ? `<details class="ske-kural"><summary class="soluk kucuk">Kural taraması: ${kacir(s.rapor.riskler.length)} işaret</summary><ul>${kural}</ul></details>` : ""}
@@ -201,12 +208,14 @@ function githubdanEkle() {
     <p class="soluk kucuk">Bir GitHub deposunun ya da içindeki skill klasörünün adresini yapıştır. Kairo indirir, hiçbir dosyayı çalıştırmadan karantinaya alır, kural taraması yapar ve <b>Claude Code</b>'a yalnız okuma yetkisiyle güvenlik ve gizlilik denetimi yaptırır. Güvenli bulunan kurulur, riskli olan senin onayını ister, reddedilen kurulmaz.</p>
     <div class="satir"><input class="alan" id="ske-url" placeholder="https://github.com/sahip/depo/tree/main/skills/ornek" style="flex:1" spellcheck="false" aria-label="GitHub adresi">
     <button class="btn ana" id="ske-indir">İndir ve tara</button></div>
-    <div id="ske-sonuc"></div>
-    <label class="onay ske-riskli" hidden><input type="checkbox" id="ske-riskli"> Riskli bulguları okudum, yine de kurulsun.</label></div>`);
+    <div id="ske-sonuc"></div></div>`);
   const sonuc = $("#ske-sonuc", g);
   const ciz = () => {
     sonuc.innerHTML = !kayit ? "" : `<div class="soluk kucuk ske-kaynak">Kaynak: <code>${kacir(kayit.url)}</code>${kayit.commit ? ` · commit <code>${kacir(kayit.commit.slice(0, 10))}</code>` : ""}</div>${kayit.skiller.map(skillKarti).join("")}`;
-    $(".ske-riskli", g).hidden = !kayit?.skiller.some((s) => s.son === "sartli");
+    // ad kutusuna yazinca ya da riskli onayi isaretlenince skill kendiliginden secilir
+    $$("[data-yeni-ad], [data-riskli]", sonuc).forEach((x) => {
+      x.addEventListener("input", () => { const c = $("[data-sec]", x.closest("[data-ad]")); if (c && !c.disabled) c.checked = true; });
+    });
     $$("[data-denetle]", sonuc).forEach((b) => {
       b.onclick = async () => {
         const ad = b.closest("[data-ad]").dataset.ad;
@@ -238,11 +247,15 @@ function githubdanEkle() {
   modal({ baslik: "GitHub'dan skill ekle", icerik: g, genis: true, kapaninca: sil, dugmeler: [
     { metin: "Kapat" },
     { metin: "Seçilenleri kur", tur: "ana", eylem: async (kapat, b) => {
-      const adlar = $$("[data-sec]:checked", sonuc).map((x) => x.closest("[data-ad]").dataset.ad);
-      if (!kayit || !adlar.length) { bildir("Kurmak için denetlenmiş bir skill seç.", "uyari"); return; }
+      const kartlar = $$("[data-sec]:checked", sonuc).map((x) => x.closest("[data-ad]"));
+      if (!kayit || !kartlar.length) { bildir("Kurmak için denetlenmiş bir skill seç.", "uyari"); return; }
+      const riskliOnaysiz = kartlar.filter((k) => $("[data-riskli]", k) && !$("[data-riskli]", k).checked).map((k) => k.dataset.ad);
+      if (riskliOnaysiz.length) { bildir(`Riskli: ${riskliOnaysiz.join(", ")}. Kurmak için kartındaki "okudum" kutusunu işaretle.`, "uyari", 6000); return; }
+      const adlar = kartlar.map((k) => k.dataset.ad);
+      const yeni_adlar = Object.fromEntries(kartlar.filter((k) => $("[data-yeni-ad]", k)).map((k) => [k.dataset.ad, $("[data-yeni-ad]", k).value.trim()]));
       b.disabled = true;
       try {
-        const r = await api(`/api/skill-ice/${kayit.id}/kur`, { method: "POST", govde: { adlar, riskli_onay: $("#ske-riskli", g).checked } });
+        const r = await api(`/api/skill-ice/${kayit.id}/kur`, { method: "POST", govde: { adlar, riskli_onay: kartlar.some((k) => $("[data-riskli]", k)?.checked), yeni_adlar } });
         bildir(`Kuruldu: ${r.kurulan.join(", ")}`, "basari", 4000);
         kapat();
         skillleriYukle();

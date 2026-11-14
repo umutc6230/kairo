@@ -879,3 +879,7 @@ body.uzak-saglayici [data-yalniz-yerel] { display: none !important; }
 .ek-ekle > summary svg { width: 15px; height: 15px; }
 .ek-ekle[open] { display: flex; flex-direction: column; gap: 8px; }
 .ek-ekle .ek-liste { margin-top: 4px; }
+.ske-skill.pasif { opacity: .75; }
+.ske-ad-sec { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; color: var(--sari); }
+.ske-ad-sec .alan { max-width: 260px; height: 30px; font-size: 13px; }
+.ske-riskli-kart { color: var(--sari); }

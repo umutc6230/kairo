@@ -245,6 +245,18 @@ def net_degisiklikler(adimlar: list) -> list:
     return [x for x in tamam if yol(x) not in gecici]
 
 
+# Oturum sonu kayit notlari (BRAIN-POLICY: DURUM.md, REHBER, ders/gunluk). Bunlara yazmak isin
+# sonucunu degistirmez; onlardan once alinan kanit (web, test) gecerli kalir. Yoksa arastirma
+# gorevi sonda DURUM.md'ye not dusunce "dogrulanmadi" cikiyordu (canli, 2026-11-14).
+KAYIT_DOSYALARI = {"durum.md", "proje-rehber.md", "lessons.md", "changelog.md"}
+
+
+def kayit_dosyasi_mi(x: Any) -> bool:
+    yol = str(x.argumanlar.get("yol") or "").replace("\\", "/").lower()
+    ad = yol.rsplit("/", 1)[-1]
+    return ad in KAYIT_DOSYALARI or "/journal/" in yol or "/kayit/" in yol
+
+
 # Claude Code AskUserQuestion karsiligi: yalniz sohbetten baslatilan (etkilesimli) gorevde sunulur;
 # headless/zamanlanmis/alt ajan gorevleri cevap verecek kimse olmadigi icin bu araci GORMEZ.
 SORU_ARACI = _f(
@@ -1268,7 +1280,7 @@ class AgentRunner:
         numaralar = [n for n in a.argumanlar.get("kanit_adimlari") or [] if isinstance(n, int)]
         adimlar = {x.no: x for x in run.adimlar}
         son_degisiklik = max(
-            (x.no for x in net_degisiklikler(run.adimlar)),
+            (x.no for x in net_degisiklikler(run.adimlar) if not kayit_dosyasi_mi(x)),
             default=0,
         )
         gecerli: list[int] = []
