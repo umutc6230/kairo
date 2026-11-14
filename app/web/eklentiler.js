@@ -86,9 +86,11 @@ function populerOgeler() {
     l.push({ anahtar: `cmp:${u.slug}`, tur: "uygulama", ad: u.ad, logo: u.logo, aciklama: u.aciklama, kaynak: "Composio", ham: u, dogrulanmis: true, eylemAdi: "Bağlan" });
   }
   // Composio bagli degilken Google vb. uygulamalar yine gorunsun; Bagla once Composio anahtarini ister
-  if (!veri.composio.bagli) {
+  // Connect (ck_) anahtarinda katalog yok: populer liste gorunur, Baglan dogrudan Composio'ya gider
+  const connect = veri.composio.tur === "connect";
+  if (!veri.composio.bagli || connect) {
     const once = COMPOSIO_ONERI.map((u) => ({ anahtar: `cmo:${u.slug}`, tur: "uygulama", ad: u.ad, aciklama: u.aciklama,
-      kaynak: "Composio ile", ham: u, dogrulanmis: true, eylemAdi: "Bağlan", composioGerekli: true }));
+      kaynak: "Composio ile", ham: u, dogrulanmis: true, eylemAdi: "Bağlan", composioGerekli: !connect }));
     l.unshift(...once);
   }
   return l;
@@ -135,8 +137,10 @@ async function composioBaglan(u) {
 function composioAnahtarModali() {
   const g = el(`<div>
     <p class="soluk">Composio ile Gmail, Slack, Google Drive/Sheets/Docs, Jira, HubSpot gibi 250+ uygulamaya tek tıkla bağlanırsın: "Bağlan"a basınca o uygulamanın kendi onay sayfası tarayıcıda açılır. Erişim anahtarları Composio'da kalır; Kairo'ya ve modele gelmez. Ücretsiz katman vardır; çağrılar Composio sunucularından geçer.</p>
-    <ol class="soluk kucuk"><li><a href="https://platform.composio.dev" target="_blank" rel="noopener">platform.composio.dev</a> adresinde hesap aç.</li><li>Settings > API Keys'ten bir proje anahtarı oluştur.</li><li>Aşağıya yapıştır.</li></ol>
-    <input class="alan" id="cmp-anahtar" type="password" placeholder="Composio API anahtarı" autocomplete="off"></div>`);
+    <p class="soluk kucuk">İki tür anahtar çalışır, Kairo hangisi olduğunu kendisi anlar:</p>
+    <ul class="soluk kucuk"><li><b>Kişisel (önerilen):</b> <a href="https://dashboard.composio.dev" target="_blank" rel="noopener">dashboard.composio.dev</a> > For You > Sessions &amp; API Key. <code>ck_</code> ile başlar.</li>
+    <li><b>Proje (geliştirici):</b> Platform > Settings > API Keys. Genelde <code>ak_</code> ile başlar.</li></ul>
+    <input class="alan" id="cmp-anahtar" type="password" placeholder="Composio anahtarı (ck_... ya da proje anahtarı)" autocomplete="off"></div>`);
   modal({ baslik: "Composio'yu bağla", icerik: g, dugmeler: [
     { metin: "İptal" },
     { metin: "Kaydet", tur: "ana", eylem: async (k, b) => {

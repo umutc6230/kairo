@@ -427,8 +427,30 @@ Python 3.12 + FastAPI + pywebview; arayuz vanilla JS. Paketleme: PORTABLE (kulla
   - [x] MODEL BILGISI TEK YERDE (2026-11-13, commit + push bu maddeyle): model adi yalniz mesaj kutusu seciciside (#hap-model-metni);
     durum cubugu "OpenRouter" / "Yerel model · Hazir" (yerel model adi ipucunda), sag paneldeki #sp-model satiri kaldirildi.
     Mesaj altindaki istatistik cipindeki model (hangi model cevapladi) duruyor. Onizlemede goruldu, derlendi + kuruldu 22:38.
-  - [ ] Ogrenen sistem A: ders defteri (app/agent/dersler.py) - OGRENEN-SISTEM-PLANI.md; runner baglanti noktalari:
-    _adim_calistir hata dali (~sat. 1080), DONGU_DUR (~815), _bitir kanit reddi, finally run_bitis
+  - [x] OGRENEN SISTEM A: DERS DEFTERI (2026-11-14, COMMIT YOK): app/agent/dersler.py (<veri>/dersler.json, en fazla 300;
+    imza = arac + hatanin yol/sayi/tirnak atilmis hali, Windows yolunda bosluk dahil; sirlar maskeli). runner.py:
+    _ders_isle hata/ret yazar, ayni aracin sonraki basarisi "ise yarayan" cozum olur (Run.bekleyen_dersler); tekrar eden
+    hatada arac sonucuna "onceki_ders"; baslat'ta hedefe ilgili <=5 ders (<=600 karakter) ek_sistem'e; basarisiz gorev
+    bitisi "gorev" dersi. api.py ajan.dersler. Yalniz AJAN GOREVLERI (sohbet modu cevap_akit bagli DEGIL). Arayuzde
+    ders listesi YOK. Test: tests/test_dersler.py (4) + a3/a8/a6/alt_oturum 48 gecti. Derlendi + kuruldu 08:10.
+  - [x] COMPOSIO CONNECT ANAHTARI (2026-11-14, COMMIT YOK): ck_ (For You) anahtari REST'e (x-api-key) gidip "gecersiz"
+    sayiliyordu. composio.py: connect_mi -> https://connect.composio.dev/mcp + x-consumer-api-key (dogrulama MCP
+    initialize; mcp_tanimi bu adres; Baglan = COMPOSIO_MANAGE_CONNECTIONS add, adres metinden; baglanti kesme
+    dashboard'dan). Proje anahtari (ak_) eski yol. eklentiler.js: iki tur aciklamasi, connect'te populer kartlar Baglan.
+    Test: test_composio (3). Canli: kullanicinin anahtariyla gecici klasorde kaydet + 12 arac. Kullanicinin
+    Kairo'suna anahtar EKLENMEDI (kullanici yapistirir). Not: tarama sirasinda COMPOSIO_MANAGE_CONNECTIONS
+    action=list Gmail icin bekleyen (onaysiz) bir baglanti baslatti. Derlendi + kuruldu.
+  - [ ] DSH-SUPERAGENT WINDOWS PORTU (kullanici istegi 2026-11-14, BASLANDI, kod YOK): belgeler okundu (000, 001).
+    Kavramlar: Source->Trigger->Thread->Eval(gate+assessment)->Ticket(Mandate)->Assignment(Executor)->Channel.
+    Kairo karsiligi: kaynak=GitHub (gh api, ETag), politika=izinli loginler, yurutucu=AgentRunner + worktree,
+    kanal=gh yorum/PR, panel. KALAN: 002-007 belgeleri, plan, uygulama. Repo: %TEMP%/tarama-dsh-superagent/repo.
+  - [ ] Ogrenen sistem B-D (OGRENEN-SISTEM-PLANI.md): akilli dongu tespiti, kanitli hafiza, gorev sonu otomatik inceleme.
+  - [ ] dsh-superagent (deepseek-ai, MIT, 2026-11-14 tarandi, temiz): DeepSeek Harness (dsh) bundle'i; tmux + fcntl
+    (Linux/macOS), GitHub ajan hesabi + issue dinleyicisi gerektirir, Windows'ta calismaz, Kairo'ya gomulemez. Kullanici
+    karari bekliyor: tasarimindan (orchestrator/worker, kabul politikasi) Kairo'da "Uygulama Yapici" varsayilan ajan.
+  - [ ] agent-desktop (vercel-labs, Apache-2.0, Rust, 2026-11-14 tarandi): erisilebilirlik agaciyla masaustu kontrolu,
+    `agent-desktop mcp` stdio MCP. npm postinstall GitHub release'ten ikili indirir (ayni release'teki SHA256 ile).
+    Telemetri/disari veri yok. Kullanici karari bekliyor: arac_paketleri ile sabit surum + sabit SHA256 kurulum + MCP.
   - [ ] ERTELENDI (kullanici 2026-11-13): langchain-ai/social-media-agent varsayilan ajan olarak eklenmedi; istenirse once guvenlik taramasi, sonra kod kopyalamadan talimatli 'Sosyal Medya' ajani (paylasim onayli)
   - [ ] Claude Code / Codex / Antigravity CLI'larini sohbetten kullanma (cli_ajan.py'de claude+codex var, antigravity yok)
 - [x] BRAIN BAGLANTISI (2026-11-13, Claude Code, COMMIT YOK): Kairo ajan gorevleri brain kayit sistemine bagli.

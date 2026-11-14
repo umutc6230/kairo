@@ -440,6 +440,9 @@ def uygulama_olustur(
     ajan.paralel_model = lambda: ayarlar.oku().saglayici == "openrouter"
 
     # ---- kalici ajanlar (openbot tasarimindan): kimlik + kuyruk + ajanlar arasi mesaj ----
+    from app.agent.dersler import DersDefteri
+
+    ajan.dersler = DersDefteri(veri_dizini)  # gorevler arasi hatalardan ogrenme
     ajan_deposu = AjanDeposu(veri_dizini)
     sohbet.ajan_olusturucu = ajan_deposu.olustur  # sohbette ajan_olustur araci
     ajan_dinleyicileri: list = []  # (ajan, is, run) -> None; Telegram cevabi vb.

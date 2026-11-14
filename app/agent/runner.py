@@ -183,6 +183,8 @@ class Run(BaseModel):
     dal: str = ""
     ajan_id: str = ""  # kalici ajanin isi (ajanlar.py): kimlik/talimat ek_sistem'de
     ek_sistem: str = ""
+    # ders defteri: hata veren arac -> imza; ayni arac sonra basarili olursa cozum kaydedilir
+    bekleyen_dersler: dict[str, str] = {}
     hata_sayaci: dict[str, int] = {}
     olusturma: str = Field(default_factory=lambda: datetime.now().isoformat(timespec="seconds"))
     guncelleme: str = ""
@@ -418,6 +420,7 @@ class AgentRunner:
         self.hooks = hooks
         self.araclar_kok: Callable[[str, str], tuple] | None = None
         self.kok: Callable[[], str] | None = None  # aktif proje koku: hook'larin cwd'si
+        self.dersler: Any = None  # DersDefteri (api baglar): gorevler arasi hatalardan ogrenme
         # kalici ajan araclari (api baglar): run -> (semalar, isleyiciler)
         self.ajan_araclari: Callable[[Any], tuple[list, dict]] | None = None
         self.takim: Any = None  # TakimPanosu (api baglar)
@@ -473,6 +476,9 @@ class AgentRunner:
                     f"yine OKUYARAK dogrula):\n{run.gecmis}\n\n{gorev_metni}"
                 )
         run.mesajlar = [{"role": "user", "content": gorev_metni}]
+        # onceki gorevlerin ilgili hatalari + ise yarayan cozumler
+        if self.dersler is not None and (ders := self.dersler.ilgili(run.hedef)):
+            run.ek_sistem = "\n\n".join([run.ek_sistem, ders]).strip()
         if izole_kur is not None:  # A8.3: ayri worktree + ajan/<id> dali
             run.calisma_koku, run.dal = izole_kur(run.id)
         h = await self._hook(  # engel: baslamaz
@@ -840,6 +846,9 @@ class AgentRunner:
             self.depo.kaydet(run)
             self._iptal.discard(run_id)
             self._duraklat.discard(run_id)
+            if self.dersler is not None and run.durum is RunDurum.basarisiz and run.hata:
+                with contextlib.suppress(OSError, ValueError):  # butce/dongu/ret bitisi de ders
+                    self.dersler.hata("gorev", run.hata, run.hedef)
             if self.hooks is not None and run.durum in BITMIS:  # bilgilendirme; hata yutulur
                 await asyncio.to_thread(
                     self.hooks.tetikle, "run_bitis",
@@ -1082,6 +1091,7 @@ class AgentRunner:
             a.durum = AdimDurum.tamam
         if a.durum is not AdimDurum.tamam:
             run.hata_sayaci[anahtar] = run.hata_sayaci.get(anahtar, 0) + 1
+        sonuc = self._ders_isle(run, a, sonuc)
         self._arac_mesaji(run, a, sonuc)
         self.depo.kaydet(run)
         if self.hooks is not None:  # post_tool: bilgilendirme; sonuc zaten uygulandi
@@ -1090,6 +1100,26 @@ class AgentRunner:
                 {"run": run.id, "arac": a.arac, "durum": str(a.durum), "sonuc": a.sonuc[:2000]},
                 arac=a.arac,
             )  # fmt: skip
+
+    def _ders_isle(self, run: Run, a: Adim, sonuc: Any) -> Any:
+        """Hata/ret ders defterine yazilir; daha once gorulduyse ders arac sonucuna eklenir.
+        Ayni aracin sonraki basarili cagrisi o hatanin cozumu olarak kaydedilir."""
+        if self.dersler is None:
+            return sonuc
+        try:
+            if a.durum is AdimDurum.tamam:
+                if anahtar := run.bekleyen_dersler.pop(a.arac, ""):
+                    arg = json.dumps(a.argumanlar, ensure_ascii=False, default=str)[:140]
+                    self.dersler.cozuldu(anahtar, f"{a.arac} su argumanlarla basarili oldu: {arg}")
+                return sonuc
+            if a.durum in (AdimDurum.hata, AdimDurum.reddedildi) and isinstance(sonuc, dict):
+                d = self.dersler.hata(a.arac, str(sonuc.get("hata") or ""), run.hedef)
+                run.bekleyen_dersler[a.arac] = d.imza
+                if d.sayi > 1:  # onceki gorevlerde de goruldu
+                    return {**sonuc, "onceki_ders": d.metin().lstrip("- ")}
+        except (OSError, ValueError) as e:  # ders defteri yardimci; gorev durmaz
+            logger.debug("Ders defteri yazilamadi: {}", e)
+        return sonuc
 
     # ---------------------------------------------------------------- alt ajan (A8.1, A8.4)
     def _sahiplik_sarmali(self, run: Run, ad: str, fonk: Callable[..., Any]) -> Callable[..., Any]:
