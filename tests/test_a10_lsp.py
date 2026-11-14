@@ -67,3 +67,27 @@ def test_proje_disi_dosya_reddedilir(ortam, tmp_path) -> None:
     isl, *_ = ortam
     r = isl["kod_semboller"](yol=str(tmp_path.parent / "baska.py"))
     assert r.get("karar") == "ret" or "hata" in r
+
+
+def test_yazma_sonrasi_tani_taze_ve_sarilmis_isleyici(ortam, tmp_path) -> None:
+    """Ogrenen sistem 6: yazmadan sonra dosya yeniden acilir; eski (bayat) tani donmez."""
+    isl, _, z = ortam
+    assert isl["kod_tanilar"](yol="a.py")["sonuclar"]  # ilk acilista HATA satiri var
+    f = tmp_path / "a.py"
+
+    def yaz(yol, icerik):
+        f.write_text(icerik, encoding="utf-8")
+        return {"tamam": True}
+
+    sarili = z.tani_ekle(yaz)
+    temiz = sarili(yol="a.py", icerik="x = 1\n")
+    assert "lsp_tanilari" not in temiz  # duzeltildi: bayat HATA tanisi gelmez
+    kirli = sarili(yol="a.py", icerik="x = 1\ny = 2  # HATA\n")
+    assert kirli["lsp_tanilari"] == [{"satir": 2, "mesaj": "HATA bulundu"}] and "not" in kirli
+    assert "lsp_tanilari" not in z.tani_ekle(lambda **kw: {"hata": "x"})(yol="a.py")
+
+
+def test_yazma_sonrasi_tani_sunucu_yoksa_bos(ortam) -> None:
+    _, sunucular, z = ortam
+    sunucular.clear()
+    assert z.yazma_sonrasi_tani("a.py") == []

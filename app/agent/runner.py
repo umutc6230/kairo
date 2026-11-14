@@ -65,6 +65,20 @@ KOC_HATA = (
     "KOC: Bu hata {} kez farkli argumanlarla tekrarlandi; argumanla oynamak ise yaramiyor. "
     "Dur, nedenini arastir (dosyayi/ciktiyi oku, --help, belge) ya da baska bir yol sec."
 )
+# 4 (WrongStack BrainMonitor fikri): son adimlara bakip modele kendiliginden yon notu
+IZLE_PENCERE = 8  # son bu kadar calismis adim
+IZLE_HATA = 5  # ...icinde bu kadar basarisiz (hata/ret/atlandi) -> yon notu
+IZLE_DOLASMA = 12  # son bu kadar adimda farkli cagri orani %50 altindaysa "ayni yerde dolasma"
+IZLE_ARALIK = 6  # iki not arasi en az bu kadar yeni adim
+YON_HATA = (
+    "[Izleyici] Son {n} adimin {h}'i basarisiz oldu. Ayni yaklasimi surdurme: dur, hatalari "
+    "birlikte oku, kok nedeni tek cumleyle yaz, plani guncelle ve FARKLI bir yol sec. Cozemiyorsan "
+    "neyin eksik oldugunu soyleyerek gorevi_bitir."
+)
+YON_DOLASMA = (
+    "[Izleyici] Son {n} adimda ayni cagrilara donup duruyorsun (yalniz {f} farkli cagri). Elindeki "
+    "bilgiyle karar ver: ya degisikligi yap ya da gorevi_bitir ile bulgulari raporla."
+)
 KOC_YAZ = "KOC: Yazdin; bitti demeden once sonucu dogrula (dosyayi oku ya da testi calistir)."
 
 
@@ -176,6 +190,7 @@ class Run(BaseModel):
     sonuc: Sonuc = Field(default_factory=Sonuc)
     hata: str = ""
     ilerlemesiz: int = 0
+    izleyici_son: int = 0  # 4: izleyicinin son yon notu verdigi adim sayisi (tekrar notu araligi)
     baglam: dict = {}  # son model cagrisinin butce dokumu (A4.1)
     ozet_sayisi: int = 0
     butce_uyarildi: bool = False  # "butce bitiyor, raporla" uyarisi verildi mi
@@ -306,6 +321,8 @@ komut, kod, web, GitHub ve baglayicilarla istenen isi ARACLARLA kendin yaparsin.
   acikca istendiyse yap.
 - Cevapta bilginin kaynagini belirt (dosya yolu, URL, arac); kendi bilginden soyluyorsan acikca
   "kaynaksiz, genel bilgi" de.
+- Arastirma (web/belge/kutuphane) sonucunda her bulgu icin: kaynak URL, tam API/fonksiyon adi,
+  surum (yoksa "surum belirsiz") ve emin olmadigin kisim. Belgede bulmadigini uydurma.
 Kurallar:
 - Her arac cagrisindan ONCE ayni mesajda tek cumle yaz: ne yapacaksin ve neden. Kullanici gorur.
   Kullanicinin dilinde yaz (Turkce istendiyse Turkce).
@@ -818,6 +835,9 @@ class AgentRunner:
                     )
                     run.guncellemeler.append(f"Kullanici: {m[:200]}")
                 self.depo.kaydet(run)
+                if yon := self._izleyici(run):  # 4: hata yogunlugu / dolasma -> yon notu
+                    run.mesajlar.append({"role": "user", "content": yon})
+                    run.guncellemeler.append(yon.split(".")[0])
                 # 3) model
                 mesaj = await self._model(run, sistem, semalar)
                 if mesaj is None:
@@ -1177,6 +1197,26 @@ class AgentRunner:
                     self.dersler.hata("inceleme", neden, run.hedef)
         except Exception as e:  # noqa: BLE001 - inceleme yardimci; gorev sonucu bozulmaz
             logger.warning("Gorev sonu inceleme yapilamadi ({}): {}", run_id, e)
+
+    @staticmethod
+    def _izleyici(run: Run) -> str:
+        """Son adimlarda hata yogunlugu ya da dolasma varsa tek seferlik yon notu (aralikli)."""
+        bitmis = (AdimDurum.tamam, AdimDurum.hata, AdimDurum.reddedildi, AdimDurum.atlandi)
+        adimlar = [a for a in run.adimlar if a.arac not in DONGU_MUAF and a.durum in bitmis]
+        if len(adimlar) - run.izleyici_son < IZLE_ARALIK:
+            return ""
+        son = adimlar[-IZLE_PENCERE:]
+        hatali = sum(a.durum is not AdimDurum.tamam for a in son)
+        if len(son) == IZLE_PENCERE and hatali >= IZLE_HATA:
+            run.izleyici_son = len(adimlar)
+            return YON_HATA.format(n=len(son), h=hatali)
+        son = adimlar[-IZLE_DOLASMA:]
+        imzalar = {(a.arac, json.dumps(a.argumanlar, sort_keys=True, ensure_ascii=False))
+                   for a in son}  # fmt: skip
+        if len(son) == IZLE_DOLASMA and len(imzalar) * 2 < len(son):
+            run.izleyici_son = len(adimlar)
+            return YON_DOLASMA.format(n=len(son), f=len(imzalar))
+        return ""
 
     @staticmethod
     def _koc(run: Run, a: Adim, sonuc: Any) -> Any:

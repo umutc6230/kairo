@@ -747,6 +747,10 @@ class SohbetServisi:
                 )
             araclar += lsp.SEMALAR
             isleyiciler |= self.kod_zekasi[alan.id].isleyiciler()
+            kz = self.kod_zekasi[alan.id]
+            for ad in ("proje_dosya_yaz", "proje_dosya_yama"):  # 6: yazma sonrasi LSP tanisi
+                if ad in isleyiciler:
+                    isleyiciler[ad] = kz.tani_ekle(isleyiciler[ad])
         if self.mcp is not None and self.politika is not None:  # A7: ayni izin katmanindan gecer
             politika = self.politika
 

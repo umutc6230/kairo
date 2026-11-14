@@ -160,6 +160,15 @@ class LspIstemci:
                 self._olay.wait(bitis - time.monotonic())
         return self.tanilar.get(uri, [])
 
+    def yenile(self, p: Path) -> None:
+        """Dosya diskte degisti: kapat + yeniden ac, eski tanilar silinir (bayat sonuc donmesin)."""
+        with self.kilit:
+            uri = _uri(p)
+            if uri in self.acik:
+                self._bildir("textDocument/didClose", {"textDocument": {"uri": uri}})
+                self.acik.discard(uri)
+            self.tanilar.pop(uri, None)
+
     def kapat(self) -> None:
         if self.surec and self.surec.poll() is None:
             self.surec.kill()
@@ -276,6 +285,33 @@ class KodZekasi:
         except UygulamaHatasi as e:
             istemci.kapat()  # cokmus/takilmis sunucu sonraki cagrida yeniden baslar
             return self._yedek(f"dil sunucusu kullanilamadi: {e.mesaj}", desen, p)
+
+    def yazma_sonrasi_tani(self, yol: str, bekle: float = 2.5) -> list[dict]:
+        """6: duzenleme sonrasi yalniz HATA (severity 1) tanilari; dil sunucusu yoksa []."""
+        try:
+            p = self.kapsam.coz(yol)
+            istemci = self._istemci(p) if p.is_file() else None
+            if istemci is None:
+                return []
+            istemci.yenile(p)
+            t = istemci.tani(p, bekle)
+        except (UygulamaHatasi, OSError, KeyError, TypeError):
+            return []  # tani yardimci; yazma sonucu bozulmaz
+        return [{"satir": d["range"]["start"]["line"] + 1, "mesaj": d.get("message", "")[:300]}
+                for d in t if d.get("severity", 1) == 1][:10]  # fmt: skip
+
+    def tani_ekle(self, fonk):
+        """Yazma isleyicisini sarar: basarili yazmada dil sunucusu hatalari sonuca eklenir."""
+
+        def sarili(**kw):
+            sonuc = fonk(**kw)
+            yazildi = isinstance(sonuc, dict) and "hata" not in sonuc and kw.get("yol")
+            if yazildi and (t := self.yazma_sonrasi_tani(str(kw["yol"]))):
+                not_ = "Duzenleme sonrasi dil sunucusu hata bildirdi; duzelt."
+                return {**sonuc, "lsp_tanilari": t, "not": not_}
+            return sonuc
+
+        return sarili
 
     def isleyiciler(self) -> dict:
         from app.agent.yazma import sonuc_veya_hata

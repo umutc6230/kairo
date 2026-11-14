@@ -28,6 +28,8 @@ Alinmayacak: Kanban lease, Chronicle SQLite, vector-memory (ikinci model RAM ist
 - [x] E. CLI'lar: cli_ajan.py'ye antigravity (agy.exe; headless argumanlari once `agy --help` ile dogrulanmali),
   sohbet araci cli_ye_yaptir(saglayici, gorev, klasor?) -> YanEtki.komut onayi, oturum basina resume.
 
+- [x] 4/6/7 (2026-11-14): izleyici yon notu, yazma sonrasi LSP tanisi, arastirma ozeti kurali. Tablodaki 7 ozelligin hepsi tamam.
+
 ## Guvenlik notu (WrongStack reposu)
 Gizli talimat/Unicode taramasi temiz. Riskli: curl|sh kurulum satirlari (docs/cli-reference.md:90 vb.),
 HQ telemetri ham icerik yayini varsayilan acik (docs/configuration.md:2388), ACP katalogu pin'siz `npx -y`.
