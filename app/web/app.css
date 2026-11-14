@@ -264,6 +264,7 @@ svg { display: block; }
 .rozet.uyari { background: #e0a83a26; color: var(--uyari-metin); }
 .rozet.kirmizi { background: #f2706b22; color: var(--kirmizi); }
 .rozet.sari { background: #f2b24c22; color: var(--sari); }
+.rozet.mavi { background: #4c8bf522; color: var(--mavi); }
 pre.duz { white-space: pre-wrap; font-family: var(--mono); font-size: 13px; margin: 0; background: var(--kod); padding: 10px 12px; border-radius: 8px; border: 1px solid var(--cizgi); max-height: 360px; overflow: auto; }
 
 .ocr-duzen { display: grid; grid-template-columns: 380px 1fr; gap: 18px; align-items: start; }
@@ -838,3 +839,43 @@ body.uzak-saglayici [data-yalniz-yerel] { display: none !important; }
 .grup-baslik:hover .grup-yeni, .grup-yeni:focus-visible { opacity: 1; }
 .grup-yeni svg { width: 14px; height: 14px; }
 .grup.kapali .grup-yeni svg { transform: none; }
+
+/* ---- Eklentiler: bagli / giris gerekli / baglanamadi rozetleri ---- */
+.ek-durum { flex-shrink: 0; white-space: nowrap; }
+.ek-ozet { display: flex; gap: 6px; flex-wrap: wrap; margin-left: auto; margin-right: 8px; }
+.ek-bolum-baslik { flex-wrap: wrap; }
+.ek-tumu { white-space: nowrap; }
+.ek-satir .ek-alt { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+/* ---- GitHub'dan skill ekle: karantina + denetim sonucu ---- */
+.ske { display: flex; flex-direction: column; gap: 10px; }
+.ske-skill { border: 1px solid var(--cizgi); border-radius: 10px; padding: 10px 12px; display: flex; flex-direction: column; gap: 6px; }
+.ske-ust { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.ske-ust .btn { margin-left: auto; }
+.ske-sec { display: flex; align-items: center; gap: 6px; cursor: pointer; }
+.ske-denetim { font-size: 13px; line-height: 1.5; background: var(--yuzey2); border-radius: 8px; padding: 8px 10px; }
+.ske-denetim ul, .ske-kural ul { margin: 6px 0 0; padding-left: 18px; display: flex; flex-direction: column; gap: 4px; font-size: 12.5px; }
+.ske-riskli { font-size: 13px; }
+
+/* ---- Ayarlar > Baglayicilar / Plugin'ler / Uzantilar: Eklentiler sayfasiyla ayni dil ---- */
+.ek-panel { display: flex; flex-direction: column; gap: 6px; }
+.ek-panel-ust { display: flex; align-items: flex-start; gap: 12px; padding-bottom: 6px; }
+.ek-panel-ust > div { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 4px; }
+.ek-panel-baslik { font-size: 17px; }
+.ek-panel .ek-bolum-baslik { margin: 14px 0 2px; }
+.ek-panel .ek-liste { border: 1px solid var(--cizgi); border-radius: 12px; padding: 0 12px; }
+.ek-panel .ek-liste:empty { display: none; }
+.ek-satir-sar { border-bottom: 1px solid var(--cizgi); }
+.ek-satir-sar:last-child { border-bottom: 0; }
+.ek-satir-sar > .ek-satir { border-bottom: 0; }
+.ek-satir .btn.kucuk { flex-shrink: 0; }
+.mc-araclar:not(:empty), .pl-detay { padding: 0 4px 12px 50px; display: flex; flex-direction: column; gap: 6px; }
+.mc-arac-liste { display: flex; flex-wrap: wrap; gap: 4px 14px; font-size: 13px; }
+.ek-bos { padding: 10px 2px; }
+.ek-ekle { border: 1px dashed var(--cizgi2); border-radius: 12px; padding: 10px 12px; margin-top: 10px; }
+.ek-ekle > summary { cursor: pointer; display: flex; align-items: center; gap: 8px; font-size: 14px; color: var(--soluk); list-style: none; }
+.ek-ekle > summary::-webkit-details-marker { display: none; }
+.ek-ekle > summary:hover, .ek-ekle[open] > summary { color: var(--metin); }
+.ek-ekle > summary svg { width: 15px; height: 15px; }
+.ek-ekle[open] { display: flex; flex-direction: column; gap: 8px; }
+.ek-ekle .ek-liste { margin-top: 4px; }

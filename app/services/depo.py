@@ -31,3 +31,17 @@ def json_oku(yol: Path, varsayilan: Any = None) -> Any:
     except (json.JSONDecodeError, UnicodeDecodeError) as e:
         logger.warning("Bozuk JSON atlandi: {} ({})", yol, e)
         return varsayilan
+
+
+def klasor_sil(yol: Path) -> None:
+    """Klasoru salt okunur dosyalariyla birlikte siler. Windows'ta git paket dosyalari salt
+    okunurdur; duz rmtree(ignore_errors=True) onlari sessizce birakiyordu (karantina birikti)."""
+    import shutil
+    import stat
+
+    def yazilabilir_yap(islev, p, _hata) -> None:
+        os.chmod(p, stat.S_IWRITE)
+        islev(p)
+
+    if yol.exists():
+        shutil.rmtree(yol, onexc=yazilabilir_yap)

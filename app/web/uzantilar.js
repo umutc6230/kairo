@@ -2,7 +2,7 @@
 // uzanti metni kacir() ile basilir.
 import { kacir } from "./md.js";
 import { onizlemeSrcdoc } from "./inceleme.js";
-import { $, $$, api, bildir, el, modal, onayla } from "./ortak.js";
+import { $, $$, api, bildir, ekAvatar, el, modal, onayla } from "./ortak.js";
 
 let komutlar = [];
 
@@ -56,13 +56,14 @@ export function uzantiSekmesiKur(govde) {
   const ciz = async () => {
     try {
       const { uzantilar } = await api("/api/uzantilar");
-      kap.innerHTML = uzantilar.map((u) => `<div class="secenek-kart ${u.acik ? "" : "pasif"}" data-uz="${kacir(u.ad)}">
-        <div style="flex:1"><div class="ust"><b>${kacir(u.ad)}</b> <span class="rozet">v${kacir(u.surum)}</span>
-          ${u.yetenekler.map((y) => `<span class="rozet">${kacir(y)}</span>`).join(" ")}</div>
-          <div class="alt">${kacir(u.description)}${u.komutlar.length ? ` · komutlar: ${kacir(u.komutlar.map((k) => "/" + k).join(" "))}` : ""}${u.araclar.length ? ` · araçlar (her zaman onay): ${kacir(u.araclar.join(", "))}` : ""}</div></div>
-        ${u.yetenekler.includes("panel") && u.acik ? '<button class="btn" data-is="panel">Panel</button>' : ""}
-        <button class="btn" data-is="ac">${u.acik ? "Kapat" : "Aç"}</button><button class="btn tehlike" data-is="sil">Kaldır</button></div>`).join("")
-        || '<div class="ayar-not">Kurulu uzantı yok.</div>';
+      kap.innerHTML = uzantilar.map((u) => `<div class="ek-satir" data-uz="${kacir(u.ad)}">
+        ${ekAvatar(u.ad)}
+        <div class="ek-govde"><div class="ek-ad">${kacir(u.ad)} <span class="soluk kucuk">v${kacir(u.surum)}</span></div>
+          <div class="ek-alt soluk">${kacir(u.description)}${u.yetenekler.length ? ` · ${kacir(u.yetenekler.join(", "))}` : ""}${u.komutlar.length ? ` · komutlar: ${kacir(u.komutlar.map((k) => "/" + k).join(" "))}` : ""}${u.araclar.length ? ` · araçlar (her zaman onay): ${kacir(u.araclar.join(", "))}` : ""}</div></div>
+        <span class="rozet ek-durum ${u.acik ? "yesil" : ""}">${u.acik ? "Açık" : "Kapalı"}</span>
+        ${u.yetenekler.includes("panel") && u.acik ? '<button class="btn kucuk" data-is="panel">Panel</button>' : ""}
+        <button class="btn kucuk" data-is="ac">${u.acik ? "Kapat" : "Aç"}</button><button class="btn kucuk tehlike" data-is="sil">Kaldır</button></div>`).join("")
+        || '<div class="soluk kucuk ek-bos">Kurulu uzantı yok. Normal kullanımda gerekmez; kendi komut ya da panelini eklemek istersen aşağıdan klasör seç.</div>';
       $$("[data-uz]", kap).forEach((kart) => {
         const ad = kart.dataset.uz;
         const u = uzantilar.find((x) => x.ad === ad);

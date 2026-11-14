@@ -1,7 +1,8 @@
 // Claude Desktop ayar karsiliklari: Gorunum, Bildirimler, Masaustu, Kod sekmeleri;
 // baglayici ice aktarma + dizin; gorunumun uygulanmasi ve bildirim gonderme.
+import { ikonlariYerlestir } from "./ikonlar.js";
 import { kacir } from "./md.js";
-import { $, $$, api, bildir, durum, onayla, sor } from "./ortak.js";
+import { $, $$, api, bildir, durum, ekAvatar, onayla, sor } from "./ortak.js";
 
 const sec = (ad, secenekler) => `<select class="secim" data-ayar="${ad}">${secenekler.map(([v, e]) => `<option value="${v}">${e}</option>`).join("")}</select>`;
 const satir = (baslik, aciklama, kontrol) => `<div class="ayar-satir"><div><div>${baslik}</div>${aciklama ? `<div class="soluk kucuk">${aciklama}</div>` : ""}</div><div class="ayar-kontrol">${kontrol}</div></div>`;
@@ -127,22 +128,19 @@ export function kisayolEslesir(e, metin) {
 
 // ---- arac paketleri (REA, Craft Anything): surumu/ozeti sabit, veri klasorune kurulur ----
 export async function aracPaketleriCiz(govde, yenile) {
-  const kap = document.createElement("div");
-  kap.className = "ayar-grup";
-  kap.id = "arac-paketleri";
-  $('[data-panel="mcp"]', govde).prepend(kap);
+  const kap = $("#mc-paket", govde);
   const ciz = async () => {
     let paketler;
     try { ({ paketler } = await api("/api/arac-paketleri")); } catch (e) { kap.innerHTML = `<div class="hata-kutu">${kacir(e.message)}</div>`; return; }
-    kap.innerHTML = `<b class="kucuk">Araç paketleri</b>
-      <div class="ayar-not">Hazır araç setleri. Sürümü ve özeti sabittir; uygulamanın veri klasörüne kurulur, sistemde başka bir şeyi değiştirmez. Araçlar geçitle sunulur (ara → şema → çağır), her çağrı yine izin ister.</div>
-      <div class="rutin-sablon">${paketler.map((p) => `<div class="secenek-kart" data-paket="${kacir(p.ad)}"><div style="flex:1">
-        <div class="ust"><b>${kacir(p.baslik)}</b> <span class="soluk kucuk">v${kacir(p.surum)} · ~${kacir(p.boyut_mb)} MB · ${kacir(p.lisans)}</span></div>
-        <div class="alt">${kacir(p.aciklama)}</div>
-        ${p.engel ? `<div class="alt vurgu">${kacir(p.engel)}</div>` : ""}</div>
-        ${p.mesgul ? '<span class="rozet sari">kuruluyor…</span>' : p.kurulu
-          ? `<span class="rozet yesil">kurulu</span><button class="btn" data-kaldir="${kacir(p.ad)}">Kaldır</button>`
-          : `<button class="btn ana" data-kur="${kacir(p.ad)}" ${p.engel ? "disabled" : ""}>Kur</button>`}</div>`).join("")}</div>`;
+    kap.innerHTML = `<div class="ek-bolum-baslik"><b>Araç paketleri</b><span class="soluk kucuk">sabit sürüm ve özet, veri klasörüne kurulur</span></div>
+      <div class="ek-izgara">${paketler.map((p) => `<div class="ek-kart" data-paket="${kacir(p.ad)}">${ekAvatar(p.baslik)}
+        <div class="ek-govde"><div class="ek-ad">${kacir(p.baslik)}${p.kurulu ? ' <span class="rozet yesil">Kurulu</span>' : ""}${p.mesgul ? ' <span class="rozet mavi">Kuruluyor…</span>' : ""}</div>
+          <div class="ek-aciklama">${kacir(p.aciklama)}</div>
+          <div class="ek-alt soluk">v${kacir(p.surum)} · ~${kacir(p.boyut_mb)} MB · ${kacir(p.lisans)}</div>
+          ${p.engel ? `<div class="ek-alt vurgu">${kacir(p.engel)}</div>` : ""}</div>
+        ${p.mesgul ? "" : p.kurulu
+          ? `<button class="btn kucuk" data-kaldir="${kacir(p.ad)}">Kaldır</button>`
+          : `<button class="btn kucuk ana" data-kur="${kacir(p.ad)}" ${p.engel ? "disabled" : ""}>Kur</button>`}</div>`).join("")}</div>`;
     $$("[data-kur]", kap).forEach((b) => {
       b.onclick = async () => {
         const p = paketler.find((x) => x.ad === b.dataset.kur);
@@ -171,17 +169,17 @@ export async function aracPaketleriCiz(govde, yenile) {
 
 // ---- baglayici ice aktarma + dizin ----
 export async function baglayiciIceAktarCiz(govde, yenile) {
-  const kap = document.createElement("div");
-  kap.className = "ayar-grup";
-  $('[data-panel="mcp"]', govde).prepend(kap);
+  const kap = $("#mc-ice", govde);
   const ciz = async () => {
     try {
       const { bulunan, dizin } = await api("/api/mcp/ice-aktar");
-      kap.innerHTML = `<b class="kucuk">Claude Code ve Claude Desktop'taki bağlayıcılar</b>
-        ${bulunan.map((b) => `<div class="satir"><span style="flex:1">${kacir(b.baslik)} <span class="soluk kucuk">${kacir(b.kaynak)} · ${kacir(b.veri.komut || b.veri.url)}</span></span>${b.var ? '<span class="rozet yesil">ekli</span>' : `<button class="btn" data-ice="${kacir(b.anahtar)}">İçe aktar</button>`}</div>`).join("") || '<div class="soluk kucuk">Bulunamadı.</div>'}
-        ${bulunan.some((b) => !b.var) ? '<div class="satir"><button class="btn" id="mc-hepsi">Hepsini içe aktar</button></div>' : ""}
-        <b class="kucuk" style="margin-top:8px">Dizin</b>
-        <div class="rutin-sablon">${dizin.map((d, i) => `<div class="secenek-kart"><div style="flex:1"><div class="ust"><b>${kacir(d.baslik)}</b></div><div class="alt">${kacir(d.aciklama)}</div></div>${d.var ? '<span class="rozet yesil">ekli</span>' : `<button class="btn" data-dz="${i}">Ekle</button>`}</div>`).join("")}</div>`;
+      const eklenmemis = bulunan.filter((b) => !b.var);
+      kap.innerHTML = `${bulunan.length ? `<details class="ek-ekle" ${eklenmemis.length ? "open" : ""}><summary><span data-ikon="klasor"></span>Claude Code ve Claude Desktop'tan içe aktar <span class="soluk kucuk">${eklenmemis.length ? `${eklenmemis.length} eklenmemiş` : "hepsi ekli"}</span></summary>
+        <div class="ek-liste">${bulunan.map((b) => `<div class="ek-satir">${ekAvatar(b.baslik)}<div class="ek-govde"><div class="ek-ad">${kacir(b.baslik)}</div><div class="ek-alt soluk" title="${kacir(b.veri.komut || b.veri.url)}">${kacir(b.kaynak)} · ${kacir(b.veri.komut || b.veri.url)}</div></div>${b.var ? '<span class="rozet ek-durum yesil">Ekli</span>' : `<button class="btn kucuk" data-ice="${kacir(b.anahtar)}">İçe aktar</button>`}</div>`).join("")}</div>
+        ${eklenmemis.length > 1 ? '<div class="satir"><button class="btn" id="mc-hepsi">Hepsini içe aktar</button></div>' : ""}</details>` : ""}
+        <div class="ek-bolum-baslik"><b>Dizin</b><span class="soluk kucuk">tek tıkla eklenebilen bağlayıcılar</span></div>
+        <div class="ek-izgara">${dizin.map((d, i) => `<div class="ek-kart">${ekAvatar(d.baslik)}<div class="ek-govde"><div class="ek-ad">${kacir(d.baslik)}${d.var ? ' <span class="rozet yesil">Ekli</span>' : ""}</div><div class="ek-aciklama">${kacir(d.aciklama)}</div></div>${d.var ? "" : `<button class="btn kucuk" data-dz="${i}">${d.oauth ? "Bağlan" : "Ekle"}</button>`}</div>`).join("")}</div>`;
+      ikonlariYerlestir(kap);
       const aktar = async (anahtarlar) => {
         const r = await api("/api/mcp/ice-aktar", { method: "POST", govde: { anahtarlar } });
         bildir(`Eklendi: ${r.eklenen.length}${r.hatalar.length ? `, hata: ${r.hatalar.join("; ")}` : ""}`, r.hatalar.length ? "uyari" : "basari", 3000);

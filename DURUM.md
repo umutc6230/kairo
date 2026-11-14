@@ -440,6 +440,25 @@ Python 3.12 + FastAPI + pywebview; arayuz vanilla JS. Paketleme: PORTABLE (kulla
     Test: test_composio (3). Canli: kullanicinin anahtariyla gecici klasorde kaydet + 12 arac. Kullanicinin
     Kairo'suna anahtar EKLENMEDI (kullanici yapistirir). Not: tarama sirasinda COMPOSIO_MANAGE_CONNECTIONS
     action=list Gmail icin bekleyen (onaysiz) bir baglanti baslatti. Derlendi + kuruldu.
+  - [x] EKLENTI DURUM ROZETLERI (2026-11-14, COMMIT YOK, derlendi KURULMADI): mcp.durumlar() + /api/mcp her sunucuya
+    baglanti {durum: bagli|baglaniyor|hata|kapali, arac, hata} ve ek (plugin/Composio) isareti; ortak.js baglayiciDurumu
+    (Bagli · N arac yesil / Giris gerekli sari / Baglanamadi kirmizi / Baglaniyor mavi / Kapali); eklentiler.js ust ozet,
+    sorunlular once, baglanirken 3 sn yenileme; sagpanel + Ayarlar MCP ayni etiket. test_a7_mcp rozet testi. Onizlemede goruldu.
+  - [x] GITHUB'DAN SKILL ICE AKTARMA (2026-11-14): indir (git --depth 1, hook kapali) -> karantina -> kural taramasi
+    (pluginler.inceleme_raporu + skill ekleri) -> Claude Code CLI denetimi (canli denendi: -p --restricted
+    --strict-mcp-config --tools Read Grep Glob --disable-slash-commands --no-session-persistence --output-format json
+    --json-schema; cwd=skill klasoru; ~19 sn, ~0.08$; kotu ornegi "reddet") -> reddet kurulmaz, sartli kullanici onayi,
+    temiz kurulur -> <veri>/skills/<ad> + .kaynak.json. YAPILDI (COMMIT YOK): app/services/skill_ice.py, api /api/skill-ice
+    (POST indir, /{id}/denetle, /{id}/kur, DELETE), skiller.js "GitHub'dan ekle" modali (kapaninca karantina silinir),
+    Turkce prompt injection deseni ve ciddi sayilir; kurulumdan once klasor_hashi tekrar kontrol. tests/test_skill_ice.py (5).
+    Onizlemede canli: anthropics/skills brand-guidelines indirildi, Claude Code 19 sn "Guvenli". Derlenmedi/kurulmadi.
+  - [x] AYARLAR YENIDEN TASARIM (2026-11-14, COMMIT YOK): Baglayicilar/Plugin'ler/Uzantilar Eklentiler diliyle
+    (ek-panel, ek-satir + ekAvatar + durum rozeti + tek ana dugme + menu, ek-izgara kartlar, ekleme formlari katlanir
+    <details class="ek-ekle">). Baglayici sirasi: kendi listen, elle ekle, Claude'dan ice aktar, arac paketleri, dizin.
+    aracPaketleriCiz/baglayiciIceAktarCiz artik #mc-paket/#mc-ice'e cizer. Onizlemede uc sekme goruldu, konsol temiz.
+  - [x] klasor_sil (depo.py): Windows'ta salt okunur git paket dosyalari rmtree(ignore_errors) ile kaliyordu;
+    skill_ice ve pluginler.git_karantina bunu kullanir.
+  - [ ] SIRADA: (1) dsh-superagent D1 (SUPERAJAN-PLANI.md; 3 soru kullaniciya); (2) agent-desktop karari.
   - [ ] DSH-SUPERAGENT WINDOWS PORTU (kullanici istegi 2026-11-14, BASLANDI, kod YOK): belgeler okundu (000, 001).
     Kavramlar: Source->Trigger->Thread->Eval(gate+assessment)->Ticket(Mandate)->Assignment(Executor)->Channel.
     Kairo karsiligi: kaynak=GitHub (gh api, ETag), politika=izinli loginler, yurutucu=AgentRunner + worktree,

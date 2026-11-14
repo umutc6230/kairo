@@ -1,7 +1,7 @@
 // Sag panel (Claude Code Desktop gibi): proje dosya agaci, baglayicilar; alt durum cubugu.
 import { ikon, ikonlariYerlestir } from "./ikonlar.js";
 import { kacir } from "./md.js";
-import { $, api, bildir, durum, el, modal } from "./ortak.js";
+import { $, api, baglayiciDurumu, bildir, durum, el, modal } from "./ortak.js";
 
 const PANEL_ANAHTAR = "kairo.sagPanel";
 const DOSYA_ANAHTAR = "kairo.dosyaPanel";
@@ -60,23 +60,24 @@ async function baglayicilariYenile() {
   try {
     const { sunucular } = await api("/api/mcp");
     sonBaglayicilar = sunucular;
-    const acik = sunucular.filter((s) => s.aktif !== false).length;
-    const giris = sunucular.filter(girisGerekli).length;
-    const metin = !sunucular.length ? "yok" : giris ? `${giris} giriş gerekli` : `${acik}/${sunucular.length}`;
+    const kodlar = sunucular.map((s) => baglayiciDurumu(s).kod);
+    const n = (k) => kodlar.filter((x) => x === k).length;
+    const sorun = n("giris") + n("hata");
+    const metin = !sunucular.length ? "yok" : n("giris") ? `${n("giris")} giriş gerekli` : n("hata") ? `${n("hata")} bağlanamadı` : `${n("bagli")}/${sunucular.length} bağlı`;
     $("#sp-baglayici").textContent = metin;
-    $("#sp-baglayici").classList.toggle("uyari-metin", giris > 0);
-    $("#dc-baglayici").textContent = `Bağlayıcı: ${acik}/${sunucular.length}`;
+    $("#sp-baglayici").classList.toggle("uyari-metin", sorun > 0);
+    $("#dc-baglayici").textContent = `Bağlayıcı: ${n("bagli")}/${sunucular.length} bağlı`;
     if (!$("#sp-baglayici-detay").hidden) baglayiciDetayCiz();
   } catch { /* sessiz */ }
 }
-const girisGerekli = (s) => Boolean(s.uzak && s.oauth && !s.oauth.bagli);
 
 function baglayiciDetayCiz() {
   const kap = $("#sp-baglayici-detay");
-  const sira = [...sonBaglayicilar].sort((a, b) => girisGerekli(b) - girisGerekli(a) || a.ad.localeCompare(b.ad, "tr"));
+  const SIRA = { giris: 0, hata: 1, baglaniyor: 2, bagli: 3, kapali: 4 };
+  const sira = [...sonBaglayicilar].sort((a, b) => SIRA[baglayiciDurumu(a).kod] - SIRA[baglayiciDurumu(b).kod] || a.ad.localeCompare(b.ad, "tr"));
   kap.innerHTML = sira.map((s) => {
-    const durumM = girisGerekli(s) ? '<span class="sp-durum uyari-metin">Giriş gerekli</span>'
-      : s.aktif === false ? '<span class="sp-durum soluk">kapalı</span>' : '<span class="sp-durum yesil-metin">açık</span>';
+    const d = baglayiciDurumu(s);
+    const durumM = `<span class="rozet sp-durum ${d.sinif}" title="${kacir(d.ipucu)}">${kacir(d.etiket)}</span>`;
     return `<div class="sp-alt-satir" title="${kacir(s.aciklama || s.ad)}"><span class="sp-harf">${kacir((s.ad || "?")[0].toUpperCase())}</span><span class="sp-ad">${kacir(s.ad)}</span>${durumM}</div>`;
   }).join("") || '<div class="soluk kucuk">Bağlayıcı yok.</div>';
   kap.append(el('<button class="sp-alt-bag" type="button">Bağlayıcıları yönet</button>'));

@@ -3,7 +3,7 @@
 // Baglanma: OAuth sunucusu ve Composio uygulamasi icin tarayicida o uygulamanin onay sayfasi acilir.
 import { ikonlariYerlestir } from "./ikonlar.js";
 import { kacir } from "./md.js";
-import { $, $$, api, bildir, el, menuAc, modal, onayla } from "./ortak.js";
+import { $, $$, api, baglayiciDurumu, bildir, el, menuAc, modal, onayla } from "./ortak.js";
 import { ayarlarAc } from "./ayarlar.js";
 import { githubBaglan } from "./ayarlar2.js";
 
@@ -39,8 +39,9 @@ const TUR_ADI ={ baglayici: "Bağlayıcı", skill: "Skill", plugin: "Plugin", uy
 function satir(o) {
   return `<div class="ek-satir" data-anahtar="${kacir(o.anahtar)}">
     ${avatar(o.ad, o.logo)}
-    <div class="ek-govde"><div class="ek-ad">${kacir(o.ad)}${o.dogrulanmis ? ' <span class="ek-tik" data-ikon="tik" title="Doğrulanmış"></span>' : ""}${o.durum ? ` <span class="rozet ${o.durumSinif || ""}">${kacir(o.durum)}</span>` : ""}</div>
+    <div class="ek-govde"><div class="ek-ad">${kacir(o.ad)}${o.dogrulanmis ? ' <span class="ek-tik" data-ikon="tik" title="Doğrulanmış"></span>' : ""}</div>
       <div class="ek-alt soluk">${kacir(TUR_ADI[o.tur] || o.tur)} · ${kacir(o.kaynak || "")}</div></div>
+    ${o.durum ? `<span class="rozet ek-durum ${o.durumSinif || ""}" title="${kacir(o.ipucu || o.durum)}">${kacir(o.durum)}</span>` : ""}
     <button class="ikon-btn" data-ikon="daha" title="Seçenekler" data-menu></button></div>`;
 }
 
@@ -56,22 +57,25 @@ function kart(o) {
 // ---- veri -> ortak oge bicimi ----
 function yukluOgeler() {
   const l = [];
+  // sorun once (giris gerekli, baglanamadi), sonra baglaniyor, bagli, kapali
+  const SIRA = { giris: 0, hata: 1, baglaniyor: 2, bagli: 3, kapali: 4 };
   for (const s of veri.mcp) {
-    // OAuth isteyen ama girisi tamamlanmamis baglayici: rozetli ve listenin en ustunde
-    const girisYok = s.uzak && veri.dizin.some((d) => d.ad === s.ad && d.oauth) && !s.oauth?.bagli;
-    l.push({ anahtar: `mcp:${s.ad}`, tur: "baglayici", ad: s.ad, kaynak: s.uzak ? new URL(s.url || "https://x").host : (s.komut || "yerel"),
-      durum: girisYok ? "giriş gerekli" : s.aktif ? "" : "kapalı", durumSinif: girisYok ? "uyari" : "", oncelik: girisYok ? 0 : 1,
-      ham: s, dogrulanmis: veri.dizin.some((d) => d.ad === s.ad) });
+    const d = baglayiciDurumu(s);
+    l.push({ anahtar: `mcp:${s.ad}`, tur: "baglayici", ad: s.ad,
+      kaynak: s.ek ? (s.ad === "composio" ? "Composio" : "plugin ile geldi") : s.uzak ? new URL(s.url || "https://x").host : (s.komut || "yerel"),
+      durum: d.etiket, durumSinif: d.sinif, ipucu: d.ipucu, kod: d.kod, oncelik: SIRA[d.kod] ?? 2,
+      ham: s, dogrulanmis: veri.dizin.some((x) => x.ad === s.ad) });
   }
-  l.sort((a, b) => (a.oncelik ?? 1) - (b.oncelik ?? 1));
+  l.sort((a, b) => a.oncelik - b.oncelik);
   for (const u of veri.uygulamalar.filter((x) => x.bagli)) {
-    l.push({ anahtar: `cmp:${u.slug}`, tur: "uygulama", ad: u.ad, logo: u.logo, kaynak: "Composio ile bağlı", ham: u, dogrulanmis: true });
+    l.push({ anahtar: `cmp:${u.slug}`, tur: "uygulama", ad: u.ad, logo: u.logo, kaynak: "Composio", durum: "Bağlı", durumSinif: "yesil", kod: "bagli", ham: u, dogrulanmis: true });
   }
+  const acikKapali = (acik) => (acik ? { durum: "Açık", durumSinif: "yesil", kod: "bagli" } : { durum: "Kapalı", durumSinif: "", kod: "kapali" });
   for (const p of veri.pluginler) {
-    l.push({ anahtar: `plg:${p.ad}`, tur: "plugin", ad: p.ad, kaynak: p.kaynak || p.surum || "plugin", durum: p.acik === false ? "kapalı" : "", ham: p });
+    l.push({ anahtar: `plg:${p.ad}`, tur: "plugin", ad: p.ad, kaynak: p.kaynak || p.surum || "plugin", ...acikKapali(p.acik !== false), ham: p });
   }
   for (const s of veri.skiller) {
-    l.push({ anahtar: `skl:${s.ad}`, tur: "skill", ad: s.ad, kaynak: s.kaynak === "claude" ? "Claude Code" : s.kaynak === "brain" ? "Brain" : s.kaynak || "Kairo", durum: s.acik ? "" : "kapalı", ham: s });
+    l.push({ anahtar: `skl:${s.ad}`, tur: "skill", ad: s.ad, kaynak: s.kaynak === "claude" ? "Claude Code" : s.kaynak === "brain" ? "Brain" : s.kaynak || "Kairo", ...acikKapali(s.acik), ham: s });
   }
   return l;
 }
@@ -166,10 +170,13 @@ function skillSayfasinaGit() { gitFn({ tur: "skiller" }); }
 function ogeMenusu(capa, o) {
   const s = o.ham;
   const ogeler = [];
-  if (o.tur === "baglayici") {
+  if (o.tur === "baglayici" && s.ek) {
+    ogeler.push({ metin: "Bağlantıyı dene", ikon: "oynat", eylem: async () => { const t = await api(`/api/mcp/${s.ad}/test`, { method: "POST" }); bildir(`${s.ad}: ${(t.araclar || []).length} araç.`, "basari", 3000); yukle(); } });
+    ogeler.push({ metin: s.ad === "composio" ? "Composio anahtarını değiştir" : "Plugin ayarları", ikon: "disli", eylem: () => (s.ad === "composio" ? composioAnahtarModali() : ayarlarAc("plugin")) });
+  } else if (o.tur === "baglayici") {
     if (s.uzak && /githubcopilot|github\.com/.test(s.url || "")) ogeler.push({ metin: "GitHub ile giriş yap", ikon: "anahtar", eylem: async () => { await githubBaglan(); yukle(); } });
     else if (s.uzak) ogeler.push({ metin: s.oauth?.bagli ? "Yeniden giriş yap" : "Tarayıcıda giriş yap", ikon: "anahtar", eylem: async () => { await api(`/api/mcp/${s.ad}/oauth`, { method: "POST" }); bildir("Tarayıcıda giriş sayfası açıldı.", "bilgi", 5000); } });
-    ogeler.push({ metin: "Bağlantıyı dene", ikon: "oynat", eylem: async () => { const t = await api(`/api/mcp/${s.ad}/test`, { method: "POST" }); bildir(`${s.ad}: ${(t.araclar || []).length} araç.`, "basari", 3000); } });
+    ogeler.push({ metin: "Bağlantıyı dene", ikon: "oynat", eylem: async () => { const t = await api(`/api/mcp/${s.ad}/test`, { method: "POST" }); bildir(`${s.ad}: ${(t.araclar || []).length} araç.`, "basari", 3000); yukle(); } });
     ogeler.push({ metin: s.aktif ? "Kapat" : "Aç", ikon: "guc", eylem: async () => { await api(`/api/mcp/${s.ad}`, { method: "PUT", govde: { aktif: !s.aktif } }); yukle(); } });
     ogeler.push({ metin: "Araçlar ve ayrıntılar", ikon: "disli", eylem: () => ayarlarAc("mcp") });
     ogeler.push("ayrac", { metin: "Kaldır", ikon: "cop", tehlike: true, eylem: async () => { if (await onayla("Bağlayıcıyı kaldır", `${s.ad} kaldırılsın mı?`, { evet: "Kaldır", tehlike: true })) { await api(`/api/mcp/${s.ad}`, { method: "DELETE" }); yukle(); } } });
@@ -199,8 +206,12 @@ function ciz() {
   const composioKart = !veri.composio.bagli && (filtre === "hepsi" || filtre === "baglayici") ? `<div class="ek-tanitim">
       <div><b>250+ uygulamaya tek tıkla bağlan</b><div class="soluk kucuk">Gmail, Slack, Google Drive, Sheets, Docs, Jira, HubSpot, Trello... Composio ile "Bağlan"a bas, uygulamanın onay sayfasında izin ver.</div></div>
       <button class="btn ana kucuk" id="ek-composio">Composio'yu bağla</button></div>` : "";
+  const say = (k) => yuklu.filter((o) => o.tur !== "skill" && o.tur !== "plugin" && o.kod === k).length;
+  const ozet = [["bagli", "bağlı", "yesil"], ["giris", "giriş gerekli", "sari"], ["hata", "bağlanamadı", "kirmizi"], ["baglaniyor", "bağlanıyor", "mavi"]]
+    .map(([k, ad, sinif]) => [say(k), ad, sinif]).filter(([n]) => n)
+    .map(([n, ad, sinif]) => `<span class="rozet ${sinif}">${n} ${ad}</span>`).join(" ");
   kap.innerHTML = `
-    <div class="ek-bolum-baslik"><b>Senin eklentilerin <span class="soluk kucuk">${yuklu.length}</span></b>${tumu("yuklu", yuklu.length)}</div>
+    <div class="ek-bolum-baslik"><b>Senin eklentilerin <span class="soluk kucuk">${yuklu.length}</span></b><span class="ek-ozet">${ozet}</span>${tumu("yuklu", yuklu.length)}</div>
     <div class="ek-liste">${kes("yuklu", yuklu).map(satir).join("") || '<div class="soluk kucuk">Eşleşen eklenti yok.</div>'}</div>
     ${composioKart}
     <div class="ek-bolum-baslik"><b>Popüler</b><span class="ek-sag">${tumu("populer", populer.length)}${veri.composio.bagli ? `<input class="alan kucuk-alan" id="ek-cmp-ara" placeholder="Composio'da uygulama ara" value="${kacir(composioArama)}">` : ""}</span></div>
@@ -227,7 +238,9 @@ async function composioYukle() {
   try { veri.uygulamalar = (await api(`/api/composio/uygulamalar?arama=${encodeURIComponent(composioArama)}`)).uygulamalar; } catch (e) { veri.uygulamalar = []; bildir(e.message, "uyari", 5000); }
 }
 
+let yenileZamani = null;
 export async function yukle() {
+  clearTimeout(yenileZamani);
   const [m, d, s, p, c] = await Promise.all([
     api("/api/mcp").catch(() => ({ sunucular: [] })),
     api("/api/mcp/ice-aktar").catch(() => ({ dizin: [] })),
@@ -238,6 +251,10 @@ export async function yukle() {
   veri = { ...veri, mcp: m.sunucular || [], dizin: d.dizin || [], skiller: s.skiller || [], pluginler: p.pluginler || [], composio: c };
   await composioYukle();
   ciz();
+  // baglanan sunucu varken durum kendiliginden guncellensin (sayfa aciksa)
+  if (veri.mcp.some((s) => baglayiciDurumu(s).kod === "baglaniyor") && document.querySelector("#ek-icerik")?.offsetParent) {
+    yenileZamani = setTimeout(() => yukle().catch(() => {}), 3000);
+  }
 }
 
 export function eklentilerKur({ git } = {}) {

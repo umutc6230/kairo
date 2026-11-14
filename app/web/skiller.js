@@ -19,6 +19,7 @@ export function skillerKur(cb) {
     };
   });
   $("#s-yeni").onclick = yeniSkill;
+  $("#s-github").onclick = githubdanEkle;
   $("#t-kaydet").onclick = async () => {
     try {
       await api("/api/talimatlar", { method: "PUT", govde: { metin: $("#t-uygulama").value } });
@@ -167,4 +168,85 @@ function yeniSkill() {
       },
     ],
   });
+}
+
+// ---- GitHub'dan skill: indir -> karantina -> kural taramasi + Claude Code denetimi -> onayla kur ----
+// Hicbir dosya calistirilmaz. Denetlenmeyen ve "reddet" alan skill kurulamaz; "sartli" acik onay ister.
+const KARAR = {
+  denetlenmedi: ["Denetlenmedi", ""], temiz: ["Güvenli", "yesil"], sartli: ["Riskli: onay ister", "sari"], reddet: ["Reddedildi", "kirmizi"],
+};
+const ONEM = { yuksek: "kirmizi", orta: "sari" };
+
+function skillKarti(s) {
+  const [etiket, sinif] = KARAR[s.son] || [s.son, ""];
+  const d = s.denetim;
+  const kural = s.rapor.riskler.slice(0, 8).map((r) => `<li><code>${kacir(r.dosya)}</code> ${kacir(r.neden)}</li>`).join("");
+  const bulgu = (d?.bulgular || []).map((b) => `<li><span class="rozet ${ONEM[b.onem] || ""}">${kacir(b.onem)}</span> <code>${kacir(b.dosya)}${b.satir ? `:${kacir(b.satir)}` : ""}</code> ${kacir(b.tur)}: ${kacir(b.aciklama)}</li>`).join("");
+  const secilebilir = ["temiz", "sartli"].includes(s.son) && !s.var;
+  return `<div class="ske-skill" data-ad="${kacir(s.ad)}">
+    <div class="ske-ust"><label class="ske-sec"><input type="checkbox" data-sec ${secilebilir ? "checked" : "disabled"}> <b>${kacir(s.ad)}</b></label>
+      <span class="rozet ${sinif}">${kacir(etiket)}</span>${s.var ? '<span class="rozet">zaten kurulu</span>' : ""}
+      <span class="soluk kucuk">${kacir(s.rapor.dosya_sayisi)} dosya</span>
+      ${s.son === "denetlenmedi" ? '<button class="btn kucuk" data-denetle>Claude Code ile denetle</button>' : ""}</div>
+    <div class="soluk kucuk">${kacir(s.aciklama || "")}${s.sorun ? ` <span class="rozet kirmizi">${kacir(s.sorun)}</span>` : ""}</div>
+    ${d ? `<div class="ske-denetim"><b>Claude Code:</b> ${kacir(d.ozet)}${bulgu ? `<ul>${bulgu}</ul>` : ""}</div>` : ""}
+    ${kural ? `<details class="ske-kural"><summary class="soluk kucuk">Kural taraması: ${kacir(s.rapor.riskler.length)} işaret</summary><ul>${kural}</ul></details>` : ""}
+    ${s.rapor.kurulum_scriptleri.length ? `<div class="soluk kucuk">Kurulum scriptleri (çalıştırılmaz): ${kacir(s.rapor.kurulum_scriptleri.join(", "))}</div>` : ""}
+  </div>`;
+}
+
+function githubdanEkle() {
+  let kayit = null;
+  const g = el(`<div class="ske">
+    <p class="soluk kucuk">Bir GitHub deposunun ya da içindeki skill klasörünün adresini yapıştır. Kairo indirir, hiçbir dosyayı çalıştırmadan karantinaya alır, kural taraması yapar ve <b>Claude Code</b>'a yalnız okuma yetkisiyle güvenlik ve gizlilik denetimi yaptırır. Güvenli bulunan kurulur, riskli olan senin onayını ister, reddedilen kurulmaz.</p>
+    <div class="satir"><input class="alan" id="ske-url" placeholder="https://github.com/sahip/depo/tree/main/skills/ornek" style="flex:1" spellcheck="false" aria-label="GitHub adresi">
+    <button class="btn ana" id="ske-indir">İndir ve tara</button></div>
+    <div id="ske-sonuc"></div>
+    <label class="onay ske-riskli" hidden><input type="checkbox" id="ske-riskli"> Riskli bulguları okudum, yine de kurulsun.</label></div>`);
+  const sonuc = $("#ske-sonuc", g);
+  const ciz = () => {
+    sonuc.innerHTML = !kayit ? "" : `<div class="soluk kucuk ske-kaynak">Kaynak: <code>${kacir(kayit.url)}</code>${kayit.commit ? ` · commit <code>${kacir(kayit.commit.slice(0, 10))}</code>` : ""}</div>${kayit.skiller.map(skillKarti).join("")}`;
+    $(".ske-riskli", g).hidden = !kayit?.skiller.some((s) => s.son === "sartli");
+    $$("[data-denetle]", sonuc).forEach((b) => {
+      b.onclick = async () => {
+        const ad = b.closest("[data-ad]").dataset.ad;
+        b.disabled = true;
+        b.textContent = "Denetleniyor… (20-60 sn)";
+        try {
+          const s = await api(`/api/skill-ice/${kayit.id}/denetle`, { method: "POST", govde: { ad } });
+          kayit.skiller = kayit.skiller.map((x) => (x.ad === ad ? s : x));
+        } catch (e) { bildir(e.message, "hata", 7000); }
+        ciz();
+      };
+    });
+  };
+  const sil = () => { if (kayit) api(`/api/skill-ice/${kayit.id}`, { method: "DELETE" }).catch(() => {}); };
+  $("#ske-indir", g).onclick = async (e) => {
+    const b = e.currentTarget;
+    const url = $("#ske-url", g).value.trim();
+    if (!url) return;
+    b.disabled = true;
+    b.textContent = "İndiriliyor…";
+    try {
+      sil();
+      kayit = await api("/api/skill-ice", { method: "POST", govde: { url } });
+    } catch (err) { kayit = null; bildir(err.message, "hata", 7000); }
+    ciz();
+    b.disabled = false;
+    b.textContent = "İndir ve tara";
+  };
+  modal({ baslik: "GitHub'dan skill ekle", icerik: g, genis: true, kapaninca: sil, dugmeler: [
+    { metin: "Kapat" },
+    { metin: "Seçilenleri kur", tur: "ana", eylem: async (kapat, b) => {
+      const adlar = $$("[data-sec]:checked", sonuc).map((x) => x.closest("[data-ad]").dataset.ad);
+      if (!kayit || !adlar.length) { bildir("Kurmak için denetlenmiş bir skill seç.", "uyari"); return; }
+      b.disabled = true;
+      try {
+        const r = await api(`/api/skill-ice/${kayit.id}/kur`, { method: "POST", govde: { adlar, riskli_onay: $("#ske-riskli", g).checked } });
+        bildir(`Kuruldu: ${r.kurulan.join(", ")}`, "basari", 4000);
+        kapat();
+        skillleriYukle();
+      } catch (e) { bildir(e.message, "hata", 7000); b.disabled = false; }
+    } },
+  ] });
 }

@@ -212,6 +212,19 @@ class AjanRunKaydi(BaseModel):
     metin: str = ""
 
 
+class SkillIceIstegi(BaseModel):
+    url: str = Field(min_length=1, max_length=500)
+
+
+class SkillIceAdIstegi(BaseModel):
+    ad: str = Field(min_length=1, max_length=64)
+
+
+class SkillIceKurIstegi(BaseModel):
+    adlar: list[str] = Field(min_length=1, max_length=50)
+    riskli_onay: bool = False
+
+
 class AltOturumIstegi(BaseModel):
     baslik: str = Field(min_length=1, max_length=200)
     kaynak: str = Field(default="", max_length=64)  # onerinin arac cagrisi id'si
@@ -1386,7 +1399,14 @@ def uygulama_olustur(
 
     @app.get("/api/mcp")
     async def mcp_listesi() -> dict:
-        return {"sunucular": [s.disari() for s in mcp.liste()]}
+        # rozet: her bagliyicinin canli durumu (bagli/baglaniyor/hata/kapali); plugin ve Composio
+        # gibi ek kaynaklar da listelenir ama "ek" isaretlidir (ayarlari kendi yerinden yonetilir)
+        durum = await asyncio.to_thread(mcp.durumlar)
+        kendi = {s.ad for s in mcp.liste()}
+        return {"sunucular": [
+            {**s.disari(), "ek": s.ad not in kendi, "baglanti": durum.get(s.ad, {})}
+            for s in mcp.tum()
+        ]}  # fmt: skip
 
     @app.post("/api/github/baglan")
     async def github_baglan(kontrol: bool = False) -> dict:
@@ -1648,6 +1668,27 @@ def uygulama_olustur(
                 {"kaynak": k, "yol": str(p), "var": p.is_dir()} for k, p in skiller.kaynak_listesi
             ],
         }
+
+    # ---- GitHub'dan skill: indir -> karantina -> kural + Claude Code denetimi -> onayla kur ----
+    from app.services.skill_ice import SkillIceAktarici
+
+    skill_ice = app.state.skill_ice = SkillIceAktarici(veri_dizini, skiller)
+
+    @app.post("/api/skill-ice")
+    async def skill_ice_indir(istek: SkillIceIstegi) -> dict:
+        return skill_ice.disari(await asyncio.to_thread(skill_ice.indir, istek.url))
+
+    @app.post("/api/skill-ice/{iid}/denetle")
+    async def skill_ice_denetle(iid: str, istek: SkillIceAdIstegi) -> dict:
+        return await asyncio.to_thread(skill_ice.denetle, iid, istek.ad)
+
+    @app.post("/api/skill-ice/{iid}/kur")
+    async def skill_ice_kur(iid: str, istek: SkillIceKurIstegi) -> dict:
+        return await asyncio.to_thread(skill_ice.kur, iid, istek.adlar, istek.riskli_onay)
+
+    @app.delete("/api/skill-ice/{iid}")
+    async def skill_ice_iptal(iid: str) -> dict:
+        return await asyncio.to_thread(skill_ice.iptal, iid)
 
     @app.get("/api/skiller/{ad}")
     async def skill_getir(ad: str) -> dict:

@@ -286,3 +286,23 @@ export function modelCipleri(kap, { coklu = true, ad = "m" } = {}) {
 export function seciliModeller(kap) {
   return $$("input:checked", kap).map((i) => i.value);
 }
+
+// Bagliyici (MCP) durumu: Eklentiler, sag panel ve Ayarlar ayni etiketi gosterir.
+// s.baglanti sunucudan gelir (bagli/baglaniyor/hata/kapali); OAuth girisi eksikse once o soylenir.
+export function baglayiciDurumu(s) {
+  const b = s.baglanti || {};
+  if (s.aktif === false || b.durum === "kapali") return { kod: "kapali", etiket: "Kapalı", sinif: "", ipucu: "Kapalı: ajan bu bağlayıcıyı kullanmaz." };
+  const yetki = b.durum === "hata" && /401|403|kimlik|yetki|giri[sş]|unauthor/i.test(b.hata || "");
+  if ((s.oauth && s.oauth.bagli === false) || yetki) return { kod: "giris", etiket: "Giriş gerekli", sinif: "sari", ipucu: b.hata || "Hesabınla giriş yapılmadı." };
+  if (b.durum === "bagli") return { kod: "bagli", etiket: b.arac ? `Bağlı · ${b.arac} araç` : "Bağlı", sinif: "yesil", ipucu: "Bağlantı çalışıyor; ajan araçlarını kullanabilir." };
+  if (b.durum === "hata") return { kod: "hata", etiket: "Bağlanamadı", sinif: "kirmizi", ipucu: b.hata || "Bağlantı kurulamadı." };
+  return { kod: "baglaniyor", etiket: "Bağlanıyor…", sinif: "mavi", ipucu: "Sunucu başlatılıyor; birkaç saniye içinde durumu güncellenir." };
+}
+
+// Eklentiler ve Ayarlar listelerinde ayni logo/harf rozeti
+const AVATAR_RENK = ["#d97757", "#2bb6a8", "#6a8fd8", "#c7a14a", "#a36ad8", "#d86a8f", "#5aa86a"];
+export function ekAvatar(ad, logo) {
+  if (logo) return `<img class="ek-logo" src="${kacir(logo)}" alt="" loading="lazy" referrerpolicy="no-referrer">`;
+  const r = AVATAR_RENK[[...(ad || "?")].reduce((t, c) => t + c.charCodeAt(0), 0) % AVATAR_RENK.length];
+  return `<span class="ek-logo harf" style="background:${r}">${kacir(((ad || "?")[0] || "?").toUpperCase())}</span>`;
+}

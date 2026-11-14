@@ -25,7 +25,7 @@ from pydantic import BaseModel, Field
 from app.agent.dosyalar import ortam_allowlist
 from app.exceptions import Bulunamadi, UygulamaHatasi
 from app.services import cc_plugin as cc
-from app.services.depo import json_oku, json_yaz
+from app.services.depo import json_oku, json_yaz, klasor_sil
 
 AD = r"^[a-z0-9][a-z0-9_-]{0,47}$"
 SURUM = r"^\d+\.\d+\.\d+$"
@@ -200,10 +200,10 @@ class PluginDeposu:
             )
             if r.returncode != 0:
                 raise UygulamaHatasi(f"Indirilemedi: {(r.stdout + r.stderr)[-300:]}")
-            shutil.rmtree(gecici / "r" / ".git", ignore_errors=True)
+            klasor_sil(gecici / "r" / ".git")
             return self.karantinaya_al(str(gecici / "r"))
         finally:
-            shutil.rmtree(gecici, ignore_errors=True)
+            klasor_sil(gecici)
 
     # ---- Claude Code marketplace + bu bilgisayardaki Claude Code plugin'leri ----
     def marketplace(self, kaynak: str) -> dict:

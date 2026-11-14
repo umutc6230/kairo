@@ -205,3 +205,26 @@ def test_mcp_roots_aktif_proje_klasoru_ve_degisiklik(tmp_path) -> None:
         assert [k["uri"] for k in sonra] == [b.resolve().as_uri()]
     finally:
         y.kapat()
+
+
+async def test_api_baglayici_durumu_rozet(istemci, app) -> None:
+    """Eklentiler rozeti: calisan 'bagli' + arac sayisi, baslamayan 'hata', kapali 'kapali'."""
+    import asyncio
+
+    y = app.state.sohbet.mcp
+    y.ekle({"ad": "iyi", "komut": sys.executable, "argumanlar": ["-I", SUNUCU],
+            "izinli_araclar": ["selam"]})  # fmt: skip
+    y.ekle({"ad": "bozuk", "komut": "olmayan-komut-xyz", "argumanlar": []})
+    y.ekle({"ad": "kapali", "komut": sys.executable, "argumanlar": ["-I", SUNUCU], "aktif": False})
+    durum: dict = {}
+    for _ in range(50):  # ilk sorgu arka planda baslatir; sonraki sorgularda netlesir
+        durum = {
+            s["ad"]: s["baglanti"] for s in (await istemci.get("/api/mcp")).json()["sunucular"]
+        }
+        if durum["iyi"].get("durum") == "bagli" and durum["bozuk"].get("durum") == "hata":
+            break
+        await asyncio.sleep(0.1)
+    assert durum["iyi"]["durum"] == "bagli" and durum["iyi"]["arac"] >= 1
+    assert durum["bozuk"]["durum"] == "hata" and "bulunamadi" in durum["bozuk"]["hata"]
+    assert durum["kapali"] == {"durum": "kapali"}
+    y.kapat()

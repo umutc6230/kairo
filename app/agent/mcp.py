@@ -626,6 +626,7 @@ class McpYoneticisi:
         if s is None:
             raise Bulunamadi("MCP sunucusu bulunamadi.")
         b = self._baglanti(s)
+        getattr(self, "_suren", {}).pop(ad, None)  # rozet durumu bu denemeden sonra yeniden okunur
         b.hazirla()
         try:  # resources istege bagli: desteklemeyen sunucu hata verebilir
             kaynaklar = [str(x.get("uri", ""))[:200] for x in b.kaynaklar()]
@@ -658,6 +659,29 @@ class McpYoneticisi:
             if f.exception() is not None:
                 continue  # baglanamayan sunucu sohbeti dusurmez
             sonuc.append((s, b))
+        return sonuc
+
+    def durumlar(self) -> dict[str, dict]:
+        """Arayuz rozeti icin her aktif sunucunun BEKLEMEDEN baglanti durumu; hic denenmemis
+        sunucu arka planda baslatilir (sonraki sorguda bagli/hata gorunur)."""
+        if not hasattr(self, "_havuz"):
+            self._havuz = cf.ThreadPoolExecutor(max_workers=16, thread_name_prefix="mcp")
+            self._suren = {}
+        sonuc: dict[str, dict] = {}
+        for s in self.tum():
+            if not s.aktif:
+                sonuc[s.ad] = {"durum": "kapali"}
+                continue
+            b = self._baglanti(s)
+            f = self._suren.get(s.ad)
+            if f is None:
+                self._suren[s.ad] = f = self._havuz.submit(b.hazirla)
+            if not f.done():
+                sonuc[s.ad] = {"durum": "baglaniyor"}
+            elif f.exception() is not None:
+                sonuc[s.ad] = {"durum": "hata", "hata": maskele(str(f.exception()))[:200]}
+            else:
+                sonuc[s.ad] = {"durum": "bagli", "arac": len(b.araclar)}
         return sonuc
 
     def semalar_ve_isleyiciler(self, izin_uygula) -> tuple[list[dict], dict]:
