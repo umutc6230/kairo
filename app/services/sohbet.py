@@ -32,6 +32,7 @@ from app.services.sohbet_araclari import (
     ALT_OTURUM_ARACI,
     CLI_ARACI,
     GORSEL_ARACI,
+    GORSEL_URET_ARACI,
     IS_DURUM_ARACI,
     IS_EMRI_ARACI,
     PLAN_ARACI,
@@ -733,6 +734,7 @@ class SohbetServisi:
         self.ajan_olusturucu = None  # AjanDeposu.olustur (api baglar): sohbetten kalici ajan
         self._cli_oturumlari: dict[str, str] = {}  # "saglayici|klasor" -> CLI konusma id
         self.goruntu_var = None  # () -> bool (api baglar): secili model gorsel okuyabiliyor mu
+        self.openrouter = None  # OpenRouterDeposu (api baglar): gorsel_uret icin
         self.is_emirleri = None  # (ac, listele) api baglar: sohbetten thread (is emri)
         self.tarayici = None  # Tarayici (api baglar)
         self.masaustu = None  # Masaustu (api baglar)
@@ -950,6 +952,14 @@ class SohbetServisi:
                 araclar.append(GORSEL_ARACI)
                 kapsam_ = ajan_kaydi.kapsam
                 isleyiciler["gorsel_oku"] = lambda yol: sonuc_veya_hata(gorsel_oku, kapsam_, yol)
+            uretim_istendi = re.search(  # sema baglam yer; yalniz uretim isteginde sunulur
+                r"g[oö]rsel|resim|logo|ikon|illustrasyon|illüstrasyon|afi[sş]|poster|kapak|"
+                r"image|[cç]iz(?!elge)",
+                (istek_metni or "").lower(),
+            )
+            if uretim_istendi and self.politika is not None and self._gorsel_saglayici(ayar):
+                araclar.append(GORSEL_URET_ARACI)
+                isleyiciler["gorsel_uret"] = self._gorsel_uret_isleyici(alan, ayar)
             if self.politika is not None:
                 araclar.append(CLI_ARACI)
                 isleyiciler["cli_ye_yaptir"] = self._cli_isleyici(alan, ayar)
@@ -1041,6 +1051,67 @@ class SohbetServisi:
                 oturumlar[anahtar] = s.oturum
             return {"durum": s.durum, "ozet": s.ozet[:6000], "adimlar": s.log[-15:],
                     "maliyet_usd": s.maliyet_usd}  # fmt: skip
+
+        return lambda **kw: sonuc_veya_hata(yap, **kw)
+
+    def _gorsel_saglayici(self, ayar) -> str:
+        """Kullanilabilir gorsel saglayicisi: 'codex' | 'openrouter' | '' (arac sunulmaz)."""
+        from app.agent import cli_ajan
+
+        secim = getattr(ayar, "gorsel_saglayici", "otomatik")
+        codex = secim in ("otomatik", "codex") and bool(cli_ajan.codex_komutu())
+        orr = (
+            secim in ("otomatik", "openrouter")
+            and self.openrouter is not None
+            and bool(getattr(ayar, "gorsel_model", ""))
+            and bool(self.openrouter.anahtar())
+        )
+        return "codex" if codex else "openrouter" if orr else ""
+
+    def _gorsel_uret_isleyici(self, alan: CalismaAlani, ayar):
+        """OpenRouter /images ile gorsel uretir, projeye yazar (YanEtki.yaz: onayli modda sorar)."""
+        from datetime import datetime
+        from pathlib import Path
+
+        from app.agent import cli_ajan
+        from app.agent.yazma import sonuc_veya_hata
+
+        politika, depo = self.politika, self.openrouter
+        saglayici = self._gorsel_saglayici(ayar)
+        model = "Codex (ChatGPT)" if saglayici == "codex" else ayar.gorsel_model
+        uzantilar = {"image/png": ".png", "image/jpeg": ".jpg", "image/webp": ".webp",
+                     "image/svg+xml": ".svg"}  # fmt: skip
+
+        def yap(istem: str = "", yol: str = "") -> dict:
+            istem = str(istem).strip()[:4000]
+            if not istem:
+                return {"hata": "istem gerekli (ne cizilecegini tarif et)."}
+            yol = str(yol).strip() or f"gorseller/gorsel-{datetime.now():%Y%m%d-%H%M%S}.png"
+            s = politika.uygula(
+                Istek(arac="gorsel_uret", yan_etki=YanEtki.yaz, yol=yol,
+                      ozet=f"Gorsel uret ({model}) -> {yol}: {istem[:100]}"),
+                alan,
+            )  # fmt: skip
+            try:
+                if saglayici == "codex":
+                    r = asyncio.run(cli_ajan.codex_gorsel_uret(istem))
+                else:
+                    r = depo.gorsel_uret(model, istem)
+            except (YerelLLMHatasi, RuntimeError) as e:  # saglayici hatasi modele anlasilir doner
+                return {"hata": str(e), "karar": "hata"}
+            hedef = Path(s.cozulmus_yol or yol)
+            dogru = uzantilar.get(r["tur"])
+            if (
+                dogru
+                and hedef.suffix.lower() != dogru
+                and not (dogru == ".jpg" and hedef.suffix.lower() == ".jpeg")
+            ):
+                hedef = hedef.with_suffix(dogru)  # model istenenden farkli bicim dondurdu
+            hedef.parent.mkdir(parents=True, exist_ok=True)
+            hedef.write_bytes(r["veri"])
+            return {"yol": str(hedef), "model": model, "boyut_kb": round(len(r["veri"]) / 1024),
+                    "maliyet_usd": r["maliyet_usd"],
+                    "not": "Gorsel kaydedildi; kullaniciya yolunu soyle."}  # fmt: skip
 
         return lambda **kw: sonuc_veya_hata(yap, **kw)
 

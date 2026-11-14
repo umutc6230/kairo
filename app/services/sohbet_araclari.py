@@ -514,6 +514,21 @@ GORSEL_ARACI = {
     },
 }  # fmt: skip
 
+GORSEL_URET_ARACI = {
+    "type": "function",
+    "function": {
+        "name": "gorsel_uret",
+        "description": "Metinden gorsel (resim, logo, ikon, illustrasyon, afis) URETIR ve projeye "
+        "kaydeder. istem: ayrintili Ingilizce tarif (konu, stil, renk, kompozisyon). yol: "
+        "proje icinde hedef dosya (bos = gorseller/gorsel-<zaman>.png).",
+        "parameters": {
+            "type": "object",
+            "properties": {"istem": {"type": "string"}, "yol": {"type": "string"}},
+            "required": ["istem"],
+        },
+    },
+}  # fmt: skip
+
 UZANTI_YAZ_ARACI = {
     "type": "function",
     "function": {

@@ -227,6 +227,45 @@ async def calistir(
     return s
 
 
+GORSEL_TURLERI = {".png": "image/png", ".jpg": "image/jpeg", ".jpeg": "image/jpeg",
+                  ".webp": "image/webp"}  # fmt: skip
+
+
+async def codex_gorsel_uret(istem: str, *, calistirici=None) -> dict:
+    """ChatGPT aboneligiyle (Codex CLI image_generation) gorsel uretir.
+    Bos gecici klasorde calisir (proje okunmaz); Codex gorseli oraya kopyalamazsa kendi
+    ~/.codex/generated_images/<thread>/ klasorundeki en yeni dosya alinir.
+    Doner: {veri, tur, maliyet_usd: None} (abonelik kotasindan dusulur)."""
+    import tempfile
+
+    mesaj = (
+        "Use your image generation tool to create this image:\n"
+        f"{istem}\n\nSave the final image in the current folder as gorsel.png. "
+        "Do nothing else. Reply only with the saved file path."
+    )
+    with tempfile.TemporaryDirectory(prefix="kairo-gorsel-") as gecici:
+        s = await (calistirici or calistir)("codex", mesaj, Path(gecici))
+        # Once Codex'in kendi kopyasi: sandbox'in gecici klasore yazdigi dosya bazen
+        # okunamiyor (PermissionError, 2026-11-14; skill codex-gorsel ile ayni sira)
+        asil = Path.home() / ".codex" / "generated_images" / s.oturum
+        adaylar: list[Path] = []
+        for yer in (asil if s.oturum and asil.is_dir() else None, Path(gecici)):
+            if yer and not adaylar:
+                adaylar = [p for p in yer.iterdir() if p.suffix.lower() in GORSEL_TURLERI]
+        if not adaylar:
+            raise RuntimeError(f"Codex gorsel uretmedi: {(s.ozet or s.durum)[:400]}")
+        p = max(adaylar, key=lambda x: x.stat().st_mtime)
+        for i in range(5):  # kisa sureli kilit (sandbox/antivirus)
+            try:
+                veri = p.read_bytes()
+                break
+            except PermissionError:
+                if i == 4:
+                    raise RuntimeError(f"Gorsel okunamadi (erisim engellendi): {p}") from None
+                await asyncio.sleep(1)
+        return {"veri": veri, "tur": GORSEL_TURLERI[p.suffix.lower()], "maliyet_usd": None}
+
+
 def _oldur(pid: int) -> None:
     if sys.platform == "win32":
         subprocess.run(["taskkill", "/T", "/F", "/PID", str(pid)], capture_output=True,

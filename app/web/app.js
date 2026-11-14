@@ -447,6 +447,32 @@ function bosDurumKartlari() {
   yeni.onclick = () => projeAc();
   kap.append(yeni);
   ikonlariYerlestir(kap);
+  onerileriCiz(kap);
+}
+
+// Proaktif oneriler (Grok Bot gibi): DURUM.md yarim/acik maddeleri, seni bekleyen thread'ler, yaklasan rutinler
+let oneriSayac = 0;
+const ONERI_IKON = { durum: "plan", thread: "logo", rutin: "saat" };
+async function onerileriCiz(kap) {
+  const no = ++oneriSayac;
+  let liste = [];
+  try { liste = (await api("/api/oneriler")).oneriler; } catch { return; }
+  if (no !== oneriSayac || !liste.length || !kap.isConnected) return; // bu arada yeniden cizildi
+  kap.append(el('<div class="kart-ayrac"></div>'), el('<div class="kart-baslik-satir soluk kucuk">Öneriler</div>'));
+  for (const o of liste) {
+    const b = el(`<button class="kart-satir" title="${kacir(o.metin)}"><span data-ikon="${ONERI_IKON[o.tur] || "bilgi"}"></span>
+      <span class="kart-ad">${kacir(o.metin)}</span><span class="sag soluk kucuk">${kacir(o.ayrinti)}</span></button>`);
+    b.onclick = async () => {
+      if (o.tur !== "durum") { $(`.nav-oge[data-git="${o.tur === "rutin" ? "rutinler" : "ajanlar"}"]`)?.click(); return; }
+      if (o.proje_id && o.proje_id !== projeDurumu.etkin?.id) { await projeyeGec(o.proje_id); bosDurumKartlari(); }
+      const g = $("#girdi");
+      g.value = `DURUM.md'deki şu maddeye devam et: ${o.metin}`;
+      g.dispatchEvent(new Event("input"));
+      g.focus();
+    };
+    kap.append(b);
+  }
+  ikonlariYerlestir(kap);
 }
 document.addEventListener("oturumlar-degisti", () => { if (!$("#bos-durum")?.hidden) bosDurumKartlari(); });
 

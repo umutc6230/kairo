@@ -39,3 +39,25 @@ def test_ilgiye_gore_en_iyi_alti_ve_sinir(tmp_path):
     metin = h.sistem_metni("p", "postgres baglantisi neden kopuyor")
     assert metin.splitlines()[1].endswith("Veritabani postgres 16 kullaniyor")
     assert len(metin) <= MAX_SISTEM_KARAKTER + 200 and len(metin.splitlines()) <= 7
+
+
+def test_ice_aktar_satir_satir(tmp_path):
+    h = HafizaDeposu(tmp_path)
+    h.ekle("Python 3.12 kullanir")
+    metin = (
+        "# Hafiza\n- Python 3.12 kullanir\n* Turkce kisa cevap ister\n"
+        "2. Windows 11 Pro\nOPENAI_API_KEY=sk-abcdefghijklmnopqrstuvwx1234\n\nx\n"
+    )
+    r = h.ice_aktar(metin, "grok")
+    assert (r["eklenen"], r["atlanan"], r["gizli"], r["dolu"]) == (2, 1, 1, False)
+    metinler = {k["metin"] for k in h.liste()}
+    assert {"Turkce kisa cevap ister", "Windows 11 Pro"} <= metinler
+
+
+@pytest.mark.asyncio
+async def test_ice_aktar_api(istemci):
+    govde = {"metin": "- Kahve sever\n- Kahve sever"}
+    r = (await istemci.post("/api/hafiza/ice-aktar", json=govde)).json()
+    assert (r["eklenen"], r["atlanan"]) == (1, 1)
+    kayitlar = (await istemci.get("/api/hafiza")).json()["kayitlar"]
+    assert any(k["metin"] == "Kahve sever" for k in kayitlar)

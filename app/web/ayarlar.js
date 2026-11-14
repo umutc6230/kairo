@@ -77,6 +77,16 @@ export function ayarlarAc(sekme = "ai") {
         <div class="satir"><input class="alan" id="ay-ara" placeholder="Model ara..."><label class="onay"><input type="checkbox" id="ay-indirilen"> Yalnız indirilenler</label>
         <label class="onay" title="Yerel modellerin hepsi ücretsizdir"><input type="checkbox" checked disabled> Yalnız ücretsiz</label></div>
         <div id="ay-modeller" class="ayar-grup"></div></div>
+      <div class="ayar-grup"><label for="ay-gorsel-saglayici">Görsel üretim</label>
+        <div class="satir"><select class="secim" id="ay-gorsel-saglayici">
+          ${[["otomatik", "Otomatik (Codex kuruluysa Codex, yoksa OpenRouter)"], ["codex", "Codex: ChatGPT aboneliği (Plus/Pro)"], ["openrouter", "OpenRouter: aşağıdaki model"]]
+            .map(([d, ad]) => `<option value="${d}" ${(a.gorsel_saglayici || "otomatik") === d ? "selected" : ""}>${ad}</option>`).join("")}</select>
+          <span class="soluk kucuk" id="ay-codex-durum"></span></div>
+        <div class="satir" id="ay-gorsel-or"><input class="alan" id="ay-gorsel-model" list="ay-gorsel-liste" value="${kacir(a.gorsel_model || "")}" placeholder="Boş = görsel üretme kapalı" style="flex:1" maxlength="200">
+          <label class="onay"><input type="checkbox" id="ay-gorsel-ucretsiz" checked> Yalnız ücretsiz</label>
+          <button class="btn kucuk" id="ay-gorsel-yenile" title="Listeyi OpenRouter'dan yeniden al">Yenile</button></div>
+        <datalist id="ay-gorsel-liste"></datalist>
+        <div class="ayar-not" id="ay-gorsel-not">Sohbette "logo çiz", "görsel üret" gibi isteklerde ajan resim üretip projeye kaydeder. Codex abonelik kotanı kullanır (~1-2 dk); OpenRouter anahtar ve model ister.</div></div>
       <div class="ayar-grup" data-yerel><label>Test</label>
         <div class="satir"><button class="btn" id="ay-test"><span data-ikon="oynat"></span>Seçili modeli test et</button><span id="ay-test-sonuc" class="ayar-not">Uygulamanın kullandığı biçimde (JSON şema) kısa bir istek atar.</span></div></div>
       <h3 class="ay-bolum" id="ay-b-dusunme">Düşünme (effort)</h3>
@@ -132,7 +142,7 @@ export function ayarlarAc(sekme = "ai") {
       <div class="anahtar-satir"><div><div>Görev sonu otomatik inceleme</div><div class="ayar-not">Ajan dosya değiştirdiyse görev bitince değişiklikler model tarafından incelenir; ciddi bulgular sonraki görevlere ders olarak eklenir. Model çağrısı yapar.</div></div>
         <label class="anahtar"><input type="checkbox" id="hf-inceleme" ${a.otomatik_inceleme ? "checked" : ""}><span></span></label></div>
       <div class="satir"><input class="alan" id="hf-yeni" placeholder="Yeni not: ör. Testler pytest -q ile çalışır" style="flex:1" maxlength="1000">
-        <button class="btn" id="hf-ekle">Ekle</button><button class="btn" id="hf-disa">Dışa aktar</button></div>
+        <button class="btn" id="hf-ekle">Ekle</button><button class="btn" id="hf-ice" title="Claude, ChatGPT ya da Grok'tan hafızanı taşı">İçe aktar</button><button class="btn" id="hf-disa">Dışa aktar</button></div>
       <div id="hf-liste" class="ayar-grup"></div>
     </div>
     <div class="modal-govde ek-panel" data-panel="mcp" hidden>
@@ -277,6 +287,32 @@ export function ayarlarAc(sekme = "ai") {
       g.value = "";
       hafizaCiz();
     } catch (err) { bildir(err.message, "hata"); }
+  };
+  $("#hf-ice", govde).onclick = () => {
+    const alan = el(`<div><p class="ayar-not" style="margin-top:0">Diğer asistana (Claude, ChatGPT, Grok) "Hakkımda hatırladığın her şeyi madde madde yaz" de, cevabı buraya yapıştır. Her satır ayrı not olur; anahtar/parola içerenler ve zaten kayıtlı olanlar atlanır.</p>
+      <textarea class="alan" rows="10" style="width:100%" maxlength="100000" aria-label="Aktarılacak hafıza metni"></textarea></div>`);
+    const ta = $("textarea", alan);
+    modal({
+      baslik: "Hafızayı içe aktar",
+      icerik: alan,
+      genis: true,
+      dugmeler: [
+        { metin: "Vazgeç" },
+        { metin: "Aktar", tur: "ana", eylem: async (kapat, b) => {
+          if (!ta.value.trim()) return;
+          b.disabled = true;
+          try {
+            const r = await api("/api/hafiza/ice-aktar", { method: "POST", govde: { metin: ta.value } });
+            bildir(`${r.eklenen} not eklendi` + (r.atlanan ? `, ${r.atlanan} zaten vardı` : "")
+              + (r.gizli ? `, ${r.gizli} gizli bilgi içerdiği için atlandı` : "")
+              + (r.dolu ? ". Hafıza doldu, kalanlar eklenmedi." : ""), r.dolu ? "hata" : "basari");
+            kapat();
+            hafizaCiz();
+          } catch (err) { bildir(err.message, "hata"); b.disabled = false; }
+        } },
+      ],
+    });
+    setTimeout(() => ta.focus(), 10);
   };
   $("#hf-disa", govde).onclick = async () => {
     try {  // oturum basligi gerektigi icin duz <a download> kullanilamaz
@@ -769,6 +805,25 @@ export function ayarlarAc(sekme = "ai") {
   $("#ay-baglam", govde).value = String(a.baglam_token);
   alanKaydet("#ay-baglam", "baglam_token", Number);
   alanKaydet("#ay-sistem", "sistem_istemi");
+  alanKaydet("#ay-gorsel-model", "gorsel_model", (v) => v.trim());
+  const gorselSaglayiciCiz = () => { $("#ay-gorsel-or", govde).hidden = $("#ay-gorsel-saglayici", govde).value === "codex"; };
+  $("#ay-gorsel-saglayici", govde).onchange = (e) => { gorselSaglayiciCiz(); kaydet({ gorsel_saglayici: e.target.value }); };
+  gorselSaglayiciCiz();
+  api("/api/ajanlar-saglayicilar").then((v) => {
+    $("#ay-codex-durum", govde).textContent = v.kurulu.codex ? "Codex kurulu" : "Codex kurulu değil";
+  }).catch(() => {});
+  const gorselListe = async (yenile = false) => {
+    try {
+      const v = await api(`/api/openrouter/modeller?gorsel=true${yenile ? "&yenile=true" : ""}`);
+      const ucretsiz = $("#ay-gorsel-ucretsiz", govde).checked;
+      $("#ay-gorsel-liste", govde).innerHTML = v.modeller.filter((m) => !ucretsiz || m.ucretsiz)
+        .map((m) => `<option value="${kacir(m.id)}">${kacir(m.ad)}${m.ucretsiz ? " (ücretsiz)" : ""}</option>`).join("");
+      if (v.uyari) $("#ay-gorsel-not", govde).textContent = v.uyari;
+    } catch (err) { $("#ay-gorsel-not", govde).textContent = `Görsel model listesi alınamadı: ${err.message}`; }
+  };
+  $("#ay-gorsel-ucretsiz", govde).onchange = () => gorselListe();
+  $("#ay-gorsel-yenile", govde).onclick = () => gorselListe(true);
+  gorselListe();
   alanKaydet("#ay-sicaklik", "sicaklik", Number);
   alanKaydet("#ay-max", "max_tokens", Number);
   $("#ay-sicaklik", govde).oninput = (e) => { e.target.previousElementSibling.textContent = `Sıcaklık (${e.target.value})`; };

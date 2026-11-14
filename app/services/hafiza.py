@@ -119,6 +119,28 @@ class HafizaDeposu:
                 return kayitlar[i].model_dump()
         raise Bulunamadi("Hafiza kaydi bulunamadi.")
 
+    def ice_aktar(self, metin: str, kaynak_adi: str = "") -> dict:
+        """Baska asistanin (Claude, ChatGPT, Grok...) hafiza metnini satir satir not yapar.
+        Madde isaretleri temizlenir; gizli bilgi iceren ve zaten kayitli satirlar atlanir."""
+        eklenen, atlanan, gizli, dolu = 0, 0, 0, False
+        for satir in str(metin or "").splitlines():
+            satir = re.sub(r"^\s*(?:[-*•·]|\d+[.)])\s*", "", satir).strip()
+            if len(satir) < 3 or satir.startswith("#"):
+                continue
+            try:
+                self.ekle(satir[:1000], kaynak="kullanici", guven="orta")
+                eklenen += 1
+            except UygulamaHatasi as e:
+                if "gizli" in e.mesaj:
+                    gizli += 1
+                elif "dolu" in e.mesaj:
+                    dolu = True
+                    break
+                else:
+                    atlanan += 1
+        return {"eklenen": eklenen, "atlanan": atlanan, "gizli": gizli, "dolu": dolu,
+                "kaynak": kaynak_adi[:40]}  # fmt: skip
+
     def sil(self, kayit_id: str) -> dict:
         kayitlar = self._liste()
         kalan = [k for k in kayitlar if k.id != kayit_id]

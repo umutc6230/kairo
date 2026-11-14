@@ -171,6 +171,7 @@ class OpenRouterDeposu:
     def __init__(self, veri_dizini: Path, transport: Any = None, adres: str = OR_ADRES) -> None:
         self.anahtar_yolu = veri_dizini / "openrouter.json"
         self.liste_yolu = veri_dizini / "openrouter-modeller.json"
+        self.gorsel_liste_yolu = veri_dizini / "openrouter-gorsel-modeller.json"
         self.transport = transport
         self.adres = adres
 
@@ -258,17 +259,25 @@ class OpenRouterDeposu:
         liste = sorted((_sadelestir(m) for m in ham if m.get("id")), key=lambda m: m["ad"])
         json_yaz(self.liste_yolu, {"zaman": time.time(), "modeller": liste})
 
-    async def modeller(self, yenile: bool = False) -> dict:
-        onb = json_oku(self.liste_yolu, None)
+    async def modeller(self, yenile: bool = False, gorsel: bool = False) -> dict:
+        """gorsel: gorsel URETEN modeller (/models varsayilan olarak yalniz metin cikislilar)."""
+        yol = self.gorsel_liste_yolu if gorsel else self.liste_yolu
+        onb = json_oku(yol, None)
         taze = onb and time.time() - onb.get("zaman", 0) < ONBELLEK_SN
         if taze and not yenile:
             return {"modeller": onb["modeller"], "zaman": onb["zaman"], "uyari": ""}
         try:
             async with httpx.AsyncClient(timeout=20.0, transport=self.transport) as c:
-                r = await c.get(f"{self.adres}/models")
+                r = await c.get(
+                    f"{self.adres}/models",
+                    params={"output_modalities": "image"} if gorsel else None,
+                )
                 r.raise_for_status()
                 ham = r.json()["data"]
             liste = sorted((_sadelestir(m) for m in ham if m.get("id")), key=lambda m: m["ad"])
+            if gorsel:  # gorsel fiyati token disinda (pricing.image); yalniz :free kesin ucretsiz
+                for m in liste:
+                    m["ucretsiz"] = m["id"].endswith(":free")
         except (httpx.HTTPError, KeyError, TypeError, ValueError) as e:
             if onb:
                 return {
@@ -278,8 +287,32 @@ class OpenRouterDeposu:
                 }
             raise OpenRouterHatasi(f"OpenRouter model listesi alinamadi: {e}") from e
         veri = {"zaman": time.time(), "modeller": liste}
-        json_yaz(self.liste_yolu, veri)
+        json_yaz(yol, veri)
         return veri | {"uyari": ""}
+
+    def gorsel_uret(self, model: str, istem: str) -> dict:
+        """POST /images {model, prompt} -> {veri: bytes, tur: media_type, maliyet_usd}.
+        Senkron: arac isleyicileri is parcaciginda calisir."""
+        import base64
+
+        a = self.anahtar()
+        if not a:
+            raise OpenRouterHatasi("OpenRouter anahtari yok; AI Ayarlari'ndan ekleyin.")
+        try:
+            with httpx.Client(timeout=180.0, transport=self.transport) as c:
+                r = c.post(f"{self.adres}/images", headers={"Authorization": f"Bearer {a}"},
+                           json={"model": model, "prompt": istem})  # fmt: skip
+        except httpx.HTTPError as e:
+            raise OpenRouterHatasi(f"Gorsel uretilemedi ({type(e).__name__}).", gecici=True) from e
+        if r.status_code >= 400:
+            OpenRouterLLM._hata_firlat(r.status_code, r.text)
+        try:
+            g = r.json()["data"][0]
+            veri = base64.b64decode(g["b64_json"])
+        except (KeyError, IndexError, TypeError, ValueError) as e:
+            raise OpenRouterHatasi("Gorsel modeli beklenmeyen cevap dondurdu.") from e
+        maliyet = (r.json().get("usage") or {}).get("cost")
+        return {"veri": veri, "tur": g.get("media_type") or "image/png", "maliyet_usd": maliyet}
 
     def _tasima(self) -> Any:
         if self.transport is not None:  # testler: sahte tasima

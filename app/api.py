@@ -74,6 +74,7 @@ from app.services.ekler import EkDeposu
 from app.services.hafiza import HafizaDeposu
 from app.services.model_magaza import Indirici, Magaza, ModelKaydi, uyumluluk
 from app.services.model_yonetici import LLMFabrikasi, ModelYonetici
+from app.services.oneriler import oneriler as oneriler_hesapla
 from app.services.openrouter import OpenRouterDeposu
 from app.services.oturumlar import Mesaj, OturumDeposu
 from app.services.pluginler import PluginDeposu
@@ -751,6 +752,7 @@ def uygulama_olustur(
 
     sohbet.is_emirleri = (_sohbet_is_ac, _sohbet_is_liste)
     sohbet.goruntu_var = lambda: model_yetenegi().goruntu
+    sohbet.openrouter = openrouter
 
     async def _is_baslat(is_: sa.IsEmri) -> None:
         """Bir atama: ilk atamada worktree + dal olusur; sonrakiler ayni dalda onceki ozetle."""
@@ -1315,8 +1317,8 @@ def uygulama_olustur(
         return await openrouter.limit()
 
     @app.get("/api/openrouter/modeller")
-    async def or_modeller(yenile: bool = False) -> dict:
-        return await openrouter.modeller(yenile)
+    async def or_modeller(yenile: bool = False, gorsel: bool = False) -> dict:
+        return await openrouter.modeller(yenile, gorsel)
 
     @app.post("/api/openrouter/test")
     async def or_test(istek: ModelIstegi) -> dict:
@@ -1499,6 +1501,12 @@ def uygulama_olustur(
     @app.get("/api/hafiza")
     async def hafiza_listesi(kapsam: str | None = None) -> dict:
         return {"kayitlar": hafiza.liste(kapsam)}
+
+    @app.post("/api/hafiza/ice-aktar")
+    async def hafiza_ice_aktar(veri: dict) -> dict:
+        """Grok Bot gibi: baska asistandan hafiza tasima (yapistirilan metin)."""
+        metin = str(veri.get("metin") or "")[:100_000]
+        return hafiza.ice_aktar(metin, str(veri.get("kaynak") or ""))
 
     @app.post("/api/hafiza")
     async def hafiza_ekle(istek: HafizaIstegi) -> dict:
@@ -2440,6 +2448,14 @@ def uygulama_olustur(
                 zamanlayici.hedefe_ulasti(z.id, simdi)
 
     app.state.zamanlayici_tick = zamanlayici_tick
+
+    @app.get("/api/oneriler")
+    async def oneri_listesi() -> dict:
+        """Yeni sohbet ekrani: DURUM.md maddeleri, insan bekleyen thread'ler, yaklasan rutinler."""
+        alanlar = sorted(projeler.liste(), key=lambda a: a.guncelleme, reverse=True)
+        isler = [_is_ozet(x) for x in superajan_deposu.liste()]
+        return {"oneriler": await asyncio.to_thread(
+            oneriler_hesapla, alanlar, isler, zamanlayici.liste(), datetime.now(UTC))}  # fmt: skip
 
     async def _zamanlayici_dongusu() -> None:
         while True:
