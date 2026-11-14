@@ -425,3 +425,24 @@ async def test_github_baglan_kapali_kaydi_acar(istemci, monkeypatch):
     assert (await istemci.post("/api/github/baglan")).json()["durum"] == "bagli"
     s = next(x for x in (await istemci.get("/api/mcp")).json()["sunucular"] if x["ad"] == "github")
     assert s["aktif"] is True
+
+
+async def test_aracli_sohbette_cevap_payi_arac_argumanina_yeter(istemci, sunucu):
+    """Kisa max_tokens (1024) araclar varken uzun rapor argumanini kesip JSON'u bozuyordu."""
+    await istemci.put("/api/ayarlar", json={"max_tokens": 1024, "baglam_token": 32768})
+    o = await yeni_oturum(istemci)
+    await istemci.post(f"/api/oturumlar/{o}/mesaj", json={"metin": "selam"})
+    istek = [i for i in sunucu.istekler if i.get("max_tokens", 0) > 1][-1]
+    assert istek.get("tools") and istek["max_tokens"] >= 8192
+
+
+async def test_kesik_arac_argumani_parcalama_yonlendirmesi():
+    from app.services.sohbet import arac_calistir
+
+    cagri = {"id": "c1", "function": {"name": "proje_dosya_yaz",
+             "arguments": '{"yol": "r.md", "icerik": "# Rapor\n| a |'}}  # fmt: skip
+    mesaj, kayit = await arac_calistir(
+        cagri, {"proje_dosya_yaz": lambda **k: {}}, lambda o: None, {}
+    )
+    assert "kesildi" in mesaj["content"] and "proje_dosya_yama" in mesaj["content"]
+    assert kayit["durum"] == "hata"

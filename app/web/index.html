@@ -64,6 +64,7 @@
           </div>
           <div class="yazma-kap">
             <div class="bant" id="uyari-bandi" hidden></div>
+            <div id="uzanti-bantlari"></div>
             <div class="yazma" id="yazma">
               <div class="ek-listesi" id="ek-listesi"></div>
               <div class="yazma-satir">
@@ -221,7 +222,7 @@
             <div class="satir"><h1 style="flex:1">Ajanlar</h1><button class="btn ana" id="aj-yeni"><span data-ikon="arti"></span>Yeni ajan</button></div>
             <p class="soluk">Kalıcı çalışma arkadaşları: her biri kendi klasöründe, kendi talimatı ve modeliyle çalışır, önceki işlerini hatırlar, işleri sıraya alır ve birbirine iş verebilir.</p>
             <section class="aj-isler" aria-labelledby="aj-isler-baslik">
-              <div class="ek-bolum-baslik"><b id="aj-isler-baslik">İş emirleri <span id="aj-isler-sayi"></span></b><span class="ek-sag"><button class="btn kucuk ana" id="aj-is-yeni"><span data-ikon="arti"></span>Yeni iş emri</button></span></div>
+              <div class="ek-bolum-baslik"><b id="aj-isler-baslik">İş emirleri <span id="aj-isler-sayi"></span></b><span class="ek-sag"><button class="btn kucuk" id="aj-is-github" title="GitHub issue/yorumlarından /kairo ile iş emri">GitHub</button><button class="btn kucuk ana" id="aj-is-yeni"><span data-ikon="arti"></span>Yeni iş emri</button></span></div>
               <div class="soluk kucuk">İşi ayrı bir dalda ajana yaptır; bitince incele, istersen ana dala birleştir. Yalnız seni bekleyenler öne çıkar.</div>
               <div id="aj-isler-liste"></div>
             </section>
@@ -353,6 +354,7 @@
         <span id="ram-metni" class="soluk kucuk" data-yalniz-yerel></span>
         <span class="dc-bosluk"></span>
         <button id="dc-or-limit" class="dc-tik dc-limit" title="OpenRouter kalan limit" hidden></button>
+        <span id="dc-uzanti" class="soluk kucuk"></span>
         <span id="dc-baglayici" class="soluk kucuk"></span>
         <span id="dc-surum" class="soluk kucuk"></span>
     </footer>

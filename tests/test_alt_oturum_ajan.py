@@ -16,6 +16,12 @@ async def test_alt_oturum_onay_ve_ret(istemci):
     assert o["oneri_kararlari"] == {"c1": alt["id"]}
     r = (await istemci.post(f"/api/oturumlar/{ust}/oneri-reddet", json={"kaynak": "c2"})).json()
     assert r["oneri_kararlari"]["c2"] == "reddedildi"
+    r = await istemci.post(
+        f"/api/oturumlar/{ust}/oneri-reddet", json={"kaynak": "c3", "karar": "is:0123456789ab"}
+    )
+    assert r.json()["oneri_kararlari"]["c3"] == "is:0123456789ab"  # D2: arka planda is emri
+    bozuk = {"kaynak": "c4", "karar": "is:../x"}
+    assert (await istemci.post(f"/api/oturumlar/{ust}/oneri-reddet", json=bozuk)).status_code >= 400
     # listede alt oturumun ana oturumu gorunur (arayuz altina girintiler)
     liste = (await istemci.get("/api/oturumlar")).json()
     assert {x["id"]: x["ust"] for x in liste}[alt["id"]] == ust

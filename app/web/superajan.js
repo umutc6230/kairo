@@ -7,19 +7,22 @@ import { ikonlariYerlestir } from "./ikonlar.js";
 import { $, $$, api, bildir, el, menuAc, modal, onayla } from "./ortak.js";
 
 const ASAMA = {
+  onay_bekliyor: ["GitHub'dan geldi · onay bekliyor", "sari"],
   insan_bekliyor: ["Senden yanıt bekliyor", "sari"], inceleme: ["İncelemeye hazır", "yesil"],
   taslak: ["Doğrulanmadı (taslak)", "sari"], basarisiz: ["Başarısız", "kirmizi"],
   calisiyor: ["Çalışıyor", "mavi"], sirada: ["Sırada", ""], yapilacak_yok: ["Yapılacak iş yok", ""],
   bitti: ["Bitti", ""], durduruldu: ["Durduruldu", ""],
 };
-const ONCE = ["insan_bekliyor", "inceleme", "taslak", "basarisiz"];
+const ONCE = ["onay_bekliyor", "insan_bekliyor", "inceleme", "taslak", "basarisiz"];
 let acikDetay = "";
 
 function satir(x) {
   const [etiket, sinif] = ASAMA[x.asama] || [x.asama, ""];
+  const pr = x.pr_url ? "" : '<button class="btn kucuk" data-teslim title="Dalı gönderir, PR açar, ilgili issue\'ya yorum yazar">PR aç</button>';
   const eylem = {
+    onay_bekliyor: '<button class="btn kucuk ana" data-baslat>Başlat</button><button class="btn kucuk" data-ac>Ayrıntı</button>',
     insan_bekliyor: '<button class="btn kucuk ana" data-ac>Yanıtla</button>',
-    inceleme: '<button class="btn kucuk ana" data-birlestir>Ana dala birleştir</button><button class="btn kucuk" data-ac>İncele</button>',
+    inceleme: `<button class="btn kucuk ana" data-birlestir>Ana dala birleştir</button>${pr}<button class="btn kucuk" data-ac>İncele</button>`,
     taslak: '<button class="btn kucuk" data-ac>İncele</button><button class="btn kucuk" data-tekrar>Tamamlat</button>',
     basarisiz: '<button class="btn kucuk" data-tekrar>Tekrar dene</button><button class="btn kucuk" data-ac>Ayrıntı</button>',
     calisiyor: '<button class="btn kucuk" data-ac>İzle</button>',
@@ -27,7 +30,7 @@ function satir(x) {
   const kapali = ["bitti", "durduruldu", "yapilacak_yok"].includes(x.asama);
   return `<div class="ek-satir-sar is-satir" data-is="${kacir(x.id)}"><div class="ek-satir">
     <div class="ek-govde"><div class="ek-ad">${kacir(x.baslik)}</div>
-      <div class="ek-alt soluk">${kacir(x.proje_kok.split(/[\\/]/).pop())}${x.dal ? ` · dal <code>${kacir(x.dal)}</code>` : ""}${x.bekleme ? ` · ${kacir(x.bekleme)}` : ""}</div></div>
+      <div class="ek-alt soluk">${kacir(x.proje_kok.split(/[\\/]/).pop())}${x.dal ? ` · dal <code>${kacir(x.dal)}</code>` : ""}${x.bekleme ? ` · ${kacir(x.bekleme)}` : ""}${(x.konular || []).length ? ` · ${kacir(x.konular.join(", "))}` : ""}${x.pr_url && /^https:\/\/github\.com\//.test(x.pr_url) ? ` · <a href="${kacir(x.pr_url)}" target="_blank" rel="noopener">PR</a>` : ""}</div></div>
     <span class="rozet ek-durum ${sinif}">${kacir(etiket)}</span>${eylem}
     <button class="ikon-btn" data-ikon="daha" title="Seçenekler" data-menu ${kapali && !x.runlar.length ? "hidden" : ""}></button></div>
     <div class="is-detay" ${acikDetay === x.id ? "" : "hidden"}></div></div>`;
@@ -58,6 +61,15 @@ function ikonlariBagla(kap, isler) {
     };
     $("[data-ac]", k)?.addEventListener("click", () => detayAcKapa(k, x));
     $("[data-tekrar]", k)?.addEventListener("click", () => istek("tekrar"));
+    $("[data-baslat]", k)?.addEventListener("click", () => istek("baslat"));
+    $("[data-teslim]", k)?.addEventListener("click", async () => {
+      if (!(await onayla("PR aç", `"${x.baslik}" işinin dalı (${x.dal}) GitHub'a gönderilsin, PR açılsın${(x.konular || []).length ? " ve ilgili issue'ya yorum yazılsın" : ""} mı?`, { evet: "Gönder ve PR aç" }))) return;
+      try {
+        const s = await api(`/api/superajan/isler/${x.id}/teslim`, { method: "POST", govde: {} });
+        bildir(`PR açıldı: ${s.pr_url}`, "basari", 7000);
+      } catch (e) { bildir(e.message, "hata", 9000); }
+      isEmirleriCiz();
+    });
     $("[data-birlestir]", k)?.addEventListener("click", async () => {
       if (!(await onayla("Ana dala birleştir", `"${x.baslik}" işinin dalı (${x.dal}) ana dala birleştirilsin mi? Senin commit edilmemiş değişikliğin varsa birleştirme yapılmaz; çakışma olursa geri alınır.`, { evet: "Birleştir" }))) return;
       try {
@@ -145,7 +157,7 @@ export function threadKarti(ids, kap) {
       const [etiket, sinif] = ASAMA[x.asama] || [x.asama, ""];
       let s = $(`[data-th="${x.id}"]`, liste);
       if (!s) {
-        s = el(`<div class="thread-satir" data-th="${kacir(x.id)}"><button class="thread-bas"><span class="thread-nokta"></span><span class="thread-ad"></span><span class="rozet"></span></button><div class="thread-detay" hidden></div></div>`);
+        s = el(`<div class="thread-satir" data-th="${kacir(x.id)}"><button class="thread-bas"><span class="thread-nokta"></span><span class="thread-ad"></span><span class="rozet"></span></button><div class="thread-soru" hidden></div><div class="thread-detay" hidden></div></div>`);
         $(".thread-bas", s).onclick = () => threadAcKapa(s, x, acik);
         liste.append(s);
       }
@@ -155,8 +167,9 @@ export function threadKarti(ids, kap) {
       r.className = `rozet ${sinif}`;
       r.textContent = etiket;
       s.dataset.run = x.run;
-      // thread soru sordu/onay istedi: kart kendiliginden acilir, cevap buradan verilir
-      if (x.asama === "insan_bekliyor" && !acik.has(x.id)) threadAcKapa(s, x, acik);
+      soruCiz(s, x, acik);
+      // onay istedi (soru degil): kart kendiliginden acilir, onay canli gorunumden verilir
+      if (x.asama === "insan_bekliyor" && !x.soru?.metin && !acik.has(x.id)) threadAcKapa(s, x, acik);
       else if (acik.has(x.id) && s.dataset.cizilenRun !== x.run) threadDetay(s, x);
     }
     if (isler.some((x) => !["bitti", "durduruldu", "yapilacak_yok"].includes(x.asama))) setTimeout(ciz, 4000);
@@ -206,4 +219,59 @@ EK TALIMAT: ${arg}`.slice(0, 8000), proje_kok: x.proje_kok, kaynak: "sohbet" } }
   };
   $("button", d).onclick = gonder;
   girdi.onkeydown = (e) => { if (e.key === "Enter") gonder(); };
+}
+
+// GitHub kaynagi (D3-D5): /kairo ile baslayan issue/yorum is emri acar; gozle modunda "Baslat" bekler
+export async function githubAyarAc() {
+  let a;
+  try { a = await api("/api/superajan/github"); } catch (e) { return bildir(e.message, "hata"); }
+  const g = el(`<div>
+    <p class="soluk kucuk">Depodaki bir issue ya da yorum ilk satırda <code>/kairo</code> ile başlarsa ve yazan izinli listedeyse Kairo bunu iş emrine çevirir (60 sn'de bir yoklanır). Ayrı GitHub hesabı gerekmez; gh girişin kullanılır.${a.gh ? "" : " <b>GitHub CLI (gh) kurulu değil.</b>"}</p>
+    <label class="anahtar-satir"><span>Açık</span><span class="anahtar"><input type="checkbox" id="gh-aktif" ${a.aktif ? "checked" : ""}><span></span></span></label>
+    <label class="proje-alan">Depo (sahip/ad)<input class="alan" id="gh-depo" placeholder="umutc6230/proje" value="${kacir(a.depo)}"></label>
+    <label class="proje-alan">Yerel klasör (boş: açık proje)<input class="alan" id="gh-kok" value="${kacir(a.proje_kok)}"></label>
+    <label class="proje-alan">İzinli GitHub kullanıcıları (virgülle; boş: kendi hesabın)<input class="alan" id="gh-izinli" value="${kacir(a.izinli.join(", "))}"></label>
+    <label class="proje-alan">Mod<select class="secim" id="gh-mod">
+      <option value="gozle" ${a.mod === "gozle" ? "selected" : ""}>Gözle: iş emri açılır, sen "Başlat" dersin; GitHub'a yalnız "PR aç" ile yazılır</option>
+      <option value="yap" ${a.mod === "yap" ? "selected" : ""}>Yap: hemen başlar; doğrulanmış iş otomatik PR olur</option></select></label>
+  </div>`);
+  modal({ baslik: "GitHub'dan iş emri", icerik: g, dugmeler: [
+    { metin: "Kapat" },
+    { metin: "Şimdi yokla", eylem: async () => {
+      try { const s = await api("/api/superajan/yokla", { method: "POST", govde: {} }); bildir(s.durum === "kapali" ? "Kaynak kapalı." : `${s.acilan} yeni iş emri, ${s.takip} takip.`, "bilgi", 5000); isEmirleriCiz(); } catch (e) { bildir(e.message, "hata", 8000); }
+    } },
+    { metin: "Kaydet", tur: "ana", eylem: async (kapat) => {
+      const govde = { aktif: $("#gh-aktif", g).checked, depo: $("#gh-depo", g).value.trim(), proje_kok: $("#gh-kok", g).value.trim(),
+        izinli: $("#gh-izinli", g).value.split(",").map((x) => x.trim()).filter(Boolean), mod: $("#gh-mod", g).value };
+      try { await api("/api/superajan/github", { method: "PUT", govde }); bildir("Kaydedildi.", "basari", 2500); kapat(); } catch (e) { bildir(e.message, "hata", 8000); }
+    } },
+  ] });
+}
+
+// T3: thread'in sorusu proje sohbetinde secenekli kart (ilk secenek onerilen); cevap thread'e gider
+function soruCiz(s, x, acik) {
+  const k = $(".thread-soru", s);
+  const soru = x.soru?.metin ? x.soru : null;
+  const anahtar = soru ? `${x.run}|${soru.metin}` : "";
+  if (k.dataset.anahtar === anahtar) return; // ayni soru: yeniden cizip secimi bozma
+  k.dataset.anahtar = anahtar;
+  k.hidden = !soru;
+  if (!soru) { k.innerHTML = ""; return; }
+  k.innerHTML = `<div class="soru-metin md">${md(soru.metin)}</div><div class="dugme-sira"></div>`;
+  const sira = $(".dugme-sira", k);
+  const gonder = async (metin, btn) => {
+    sira.querySelectorAll("button").forEach((b) => { b.disabled = true; });
+    try {
+      await api(`/api/superajan/isler/${x.id}/mesaj`, { method: "POST", govde: { metin } });
+      k.innerHTML = `<span class="soluk kucuk">Cevaplandı: ${kacir(metin)}</span>`;
+    } catch (e) { bildir(e.message, "hata", 7000); sira.querySelectorAll("button").forEach((b) => { b.disabled = false; }); btn?.focus(); }
+  };
+  (soru.secenekler || []).forEach((sec, i) => {
+    const b = el(`<button class="btn kucuk ${i === 0 ? "ana" : ""}">${String.fromCharCode(65 + i)}. ${kacir(sec)}${i === 0 ? ' <span class="soluk">(önerilen)</span>' : ""}</button>`);
+    b.onclick = () => gonder(sec, b);
+    sira.append(b);
+  });
+  const ac = el('<button class="btn kucuk">Thread\'i aç</button>');
+  ac.onclick = () => { if ($(".thread-detay", s).hidden) threadAcKapa(s, x, acik); };
+  sira.append(ac);
 }

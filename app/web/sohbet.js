@@ -8,7 +8,7 @@ import { projeDurumu } from "./proje.js";
 import { ikon, ikonlariYerlestir } from "./ikonlar.js";
 import { kacir, md } from "./md.js";
 import {
-  $, api, bildir, canliSayac, durum, el, istatistikCipleri, modal, modelAdi, modelProfil, sayi, sseOku,
+  $, api, bildir, canliSayac, durum, el, istatistikCipleri, modal, modelAdi, modelProfil, onayla, sayi, sseOku,
 } from "./ortak.js";
 
 const bekleyenEkler = []; // {id?, ad, tur, onizleme, yukleniyor}
@@ -27,12 +27,29 @@ function altOturumKarti(o, kap) {
   const ciz = () => {
     const karar = oneriKararlari[o.id];
     if (karar === "reddedildi") { sira.innerHTML = '<span class="soluk kucuk">Geçildi</span>'; return; }
+    if (karar?.startsWith("is:")) { sira.innerHTML = ""; threadKarti([karar.slice(3)], sira); return; }
     if (karar) {
       sira.innerHTML = '<span class="rozet yesil">Açıldı</span><button class="btn kucuk">Alt oturuma git</button>';
       sira.querySelector("button").onclick = () => geriCagri.oturumAc(karar, true);
       return;
     }
-    sira.innerHTML = '<button class="btn ana kucuk" data-ac>Alt oturumda başlat</button><button class="btn kucuk" data-red>Gerek yok</button>';
+    sira.innerHTML = '<button class="btn ana kucuk" data-ac>Alt oturumda başlat</button><button class="btn kucuk" data-arka title="Ayrı git dalında, ajan arka planda yapar; bitince incelersin">Arka planda yaptır (ayrı dal)</button><button class="btn kucuk" data-red>Gerek yok</button>';
+    sira.querySelector("[data-arka]").onclick = async (e) => {
+      e.currentTarget.disabled = true;
+      const ac = () => api("/api/superajan/isler", { method: "POST", govde: { baslik: g.baslik || "", gorev: String(g.gorev || ""), kaynak: "sohbet" } });
+      try {
+        let is_;
+        try { is_ = await ac(); } catch (h) {
+          if (!/GIT_YOK/.test(h.message)) throw h;
+          if (!(await onayla("Git deposu oluşturulsun mu?", "İş ayrı bir git dalında yapılır; bu proje henüz git deposu değil. Depo oluşturulup ilk commit atılsın mı?", { evet: "Oluştur" }))) { ciz(); return; }
+          await api("/api/superajan/git-baslat", { method: "POST", govde: {} });
+          is_ = await ac();
+        }
+        await api(`/api/oturumlar/${ust}/oneri-reddet`, { method: "POST", govde: { kaynak: o.id, karar: `is:${is_.id}` } });
+        oneriKararlari[o.id] = `is:${is_.id}`;
+        ciz();
+      } catch (hata) { bildir(hata.message, "hata", 7000); ciz(); }
+    };
     sira.querySelector("[data-ac]").onclick = async (e) => {
       e.currentTarget.disabled = true;
       try {

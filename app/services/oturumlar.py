@@ -121,9 +121,10 @@ class OturumDeposu:
             self.kaydet(ust)
         return alt
 
-    def oneri_reddet(self, ust_id: str, kaynak: str) -> Oturum:
+    def oneri_reddet(self, ust_id: str, kaynak: str, karar: str = "reddedildi") -> Oturum:
+        """karar: "reddedildi" ya da "is:<is emri id>" (oneri arka planda is emri olarak acildi)."""
         ust = self.getir(ust_id)
-        ust.oneri_kararlari[kaynak[:64]] = "reddedildi"
+        ust.oneri_kararlari[kaynak[:64]] = karar
         return self.kaydet(ust)
 
     def yeniden_adlandir(self, oturum_id: str, baslik: str) -> Oturum:

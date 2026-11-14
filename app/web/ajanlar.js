@@ -2,7 +2,7 @@
 // klasoru, modeli, hafizasi ve FIFO kuyrugu vardir. Ajanlar birbirine is verebilir.
 // Arka uc: /api/ajanlar. Calisan isin adimlari gorevler.js ile canli gosterilir.
 import { sohbetteGorevGoster } from "./gorevler.js";
-import { isEmirleriCiz, yeniIsEmri } from "./superajan.js";
+import { githubAyarAc, isEmirleriCiz, yeniIsEmri } from "./superajan.js";
 import { kacir, md } from "./md.js";
 import { $, $$, api, bildir, onayla } from "./ortak.js";
 
@@ -180,6 +180,8 @@ export function ajanlarKur() {
   if (yeni) yeni.onclick = () => formAc();
   const is_ = $("#aj-is-yeni");
   if (is_) is_.onclick = () => yeniIsEmri();
+  const gh = $("#aj-is-github");
+  if (gh) gh.onclick = () => githubAyarAc();
 }
 
 export function ajanlarYukle() {

@@ -53,6 +53,12 @@ VARSAYILAN_BAGLAM = 16384
 CEVAP_TOKEN = 2048  # kucuk baglamli yerel model icin taban
 DONGU_UYAR = 3  # ayni arac+arguman bu kadar ardisik tekrarlanirsa calistirilmaz, model uyarilir
 DONGU_DUR = 6  # ...bu kadar olursa gorev durur
+# Superajan is emri dalinda (dal "is/...") push/PR/issue komutlari: teslim kullanicinin onayiyla
+TESLIM_KOMUTU = re.compile(r"\bgit\s+push\b|\bgh\s+(pr|issue|api|release)\b", re.I)
+TESLIM_RET = (
+    "Bu is emrinde git push / gh pr|issue|api|release YAPILMAZ: teslimi (commit, push, PR, yorum) "
+    "Kairo yapar. Degisikligi bu dalda birak ve gorevi_bitir."
+)
 # Durum yoklayan araclar (arka plan komutu, ekran) ayni argumanla tekrar cagrilabilir
 DONGU_MUAF = {"komut_durumu", "plan_guncelle", "tarayici_ekran", "masaustu_ekran", "git_durum"}
 DONGU_MESAJI = (
@@ -1099,6 +1105,15 @@ class AgentRunner:
                 {"hata": f"Bu cagri {run.hata_sayaci[anahtar]} kez basarisiz oldu; CALISTIRILMADI. "
                  "Farkli bir yol dene."},
             )  # fmt: skip
+            self.depo.kaydet(run)
+            return
+        if (
+            a.arac == "komut_calistir"
+            and run.dal.startswith("is/")
+            and TESLIM_KOMUTU.search(str(a.argumanlar.get("komut", "")))
+        ):  # D4: is emri dalinda teslim (push/PR/yorum) Kairo'nundur, ajan yapamaz
+            a.durum = AdimDurum.reddedildi
+            self._arac_mesaji(run, a, {"hata": TESLIM_RET, "karar": "ret"})
             self.depo.kaydet(run)
             return
         if a.arac == "plan_guncelle":

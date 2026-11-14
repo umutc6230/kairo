@@ -904,3 +904,5 @@ body.uzak-saglayici [data-yalniz-yerel] { display: none !important; }
 .ajan-inceleme summary { cursor: pointer; }
 .inceleme-bulgu { margin: 6px 0; }
 .mc-tumu { display: inline-flex; margin-bottom: 6px; font-weight: 600; }
+.uzanti-bant { display: flex; gap: 8px; align-items: center; } .uzanti-bant .md { flex: 1; }
+.thread-soru { padding: 6px 0 8px 16px; } .thread-soru .dugme-sira { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 6px; }

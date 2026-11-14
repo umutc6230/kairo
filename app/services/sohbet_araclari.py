@@ -398,7 +398,9 @@ ALT_OTURUM_ARACI = {
         "name": "alt_oturum_oner",
         "description": "Bu sohbetten ayri yurutulmesi daha iyi, kendi basina bir isi kullaniciya "
         "ALT OTURUM olarak onerir. Oturumu ACMAZ: kullanici karttan onaylarsa acilir ve `gorev` "
-        "orada ilk mesaj olur. Kucuk isler icin onerme; oneriden sonra o isi burada yapma.",
+        "orada ilk mesaj olur (ya da kullanici ayri git dalinda arka planda yaptirir). "
+        "Uygulama/ozellik yapim isteklerinde de oner. Kucuk isler icin onerme; "
+        "oneriden sonra o isi burada yapma.",
         "parameters": {
             "type": "object",
             "properties": {
@@ -496,6 +498,32 @@ def is_emri_isleyicileri(ac, listele) -> dict:
 def _kisa(o: dict) -> dict:
     return {k: o.get(k, "") for k in ("id", "baslik", "asama", "ozet", "olusturma", "guncelleme")}
 
+
+UZANTI_YAZ_ARACI = {
+    "type": "function",
+    "function": {
+        "name": "uzanti_yaz",
+        "description": "Kullanici Kairo icin bir uzanti (mod) isterse yazar ve KARANTINAYA koyar; "
+        "KURMAZ. Uzanti ayri surecte calisan bir Python dosyasidir: stdin'den satir basina JSON "
+        "{id, tur, veri} okur, stdout'a {id, sonuc} yazar. tur: komut ({komut, arg} -> {metin}), "
+        "panel (-> {html}), ui (-> {durum, bildirim, bant: {md, dugmeler: [{metin, komut}]}}), "
+        "olay ({olay, veri}; arac_cagrisi -> {karar: engelle, neden} | {argumanlar} | {cevap}; "
+        "istem -> {metin}; tur_bitis/run_baslangic/run_bitis bilgi), arac ({arac, argumanlar}). "
+        "Yalniz standart kutuphane kullan.",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "manifest": {
+                    "type": "object",
+                    "description": "uzanti.json: name (kucuk harf), version (1.0.0), description, "
+                    "yetenekler [komut|panel|olay|arac|ui], komutlar, olaylar, araclar",
+                },
+                "ana_py": {"type": "string", "description": "ana.py icerigi"},
+            },
+            "required": ["manifest", "ana_py"],
+        },
+    },
+}  # fmt: skip
 
 CLI_ARACI = {
     "type": "function",

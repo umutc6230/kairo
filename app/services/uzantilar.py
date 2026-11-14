@@ -35,8 +35,12 @@ from app.services.pluginler import inceleme_raporu
 AD = r"^[a-z0-9][a-z0-9_-]{0,31}$"
 ZAMAN_ASIMI = 15
 MAX_CIKTI = 200_000
-Yetenek = Literal["komut", "panel", "olay", "arac"]
-OLAYLAR = {"run_baslangic", "run_bitis"}
+Yetenek = Literal["komut", "panel", "olay", "arac", "ui"]
+# Mods karsiligi: arac_cagrisi (izle/engelle/arguman degistir/cevapla), istem (yeniden yaz),
+# tur_bitis (sohbet turu bitti). run_* bilgilendirme.
+OLAYLAR = {"run_baslangic", "run_bitis", "arac_cagrisi", "istem", "tur_bitis"}
+KANCA_ZAMAN = 5  # kanca olaylari ajani bekletir: kisa zaman asimi
+MAX_UI = 2000
 
 
 class UzantiArac(BaseModel):
@@ -71,6 +75,14 @@ def _manifest(kok: Path) -> Manifest:
     return m
 
 
+def _imza(kok: Path) -> tuple:
+    """Uzanti dosyalarinin (py + manifest) degisim imzasi."""
+    with contextlib.suppress(OSError):
+        dosyalar = sorted([*kok.rglob("*.py"), kok / "uzanti.json"])
+        return tuple((str(p), p.stat().st_mtime_ns) for p in dosyalar if p.is_file())
+    return ()
+
+
 class _Surec:
     """Satir basina JSON istek/cevap; istekler sirali."""
 
@@ -79,6 +91,7 @@ class _Surec:
         self.kilit = threading.Lock()
         self.p: subprocess.Popen[bytes] | None = None
         self.sayac = 0
+        self.imza = _imza(kok)  # dosyalar degisince surec yeniden baslatilir
 
     def _baslat(self) -> None:
         self.p = subprocess.Popen(  # noqa: S603 - kullanicinin onayla kurdugu uzanti
@@ -91,7 +104,7 @@ class _Surec:
             creationflags=subprocess.CREATE_NO_WINDOW if sys.platform == "win32" else 0,
         )
 
-    def istek(self, tur: str, veri: dict) -> dict:
+    def istek(self, tur: str, veri: dict, sure: float = ZAMAN_ASIMI) -> dict:
         with self.kilit:
             if self.p is None or self.p.poll() is not None:
                 self._baslat()
@@ -119,12 +132,10 @@ class _Surec:
 
             t = threading.Thread(target=oku, daemon=True)
             t.start()
-            t.join(ZAMAN_ASIMI)
+            t.join(sure)
             if "c" not in sonuc:
                 self.kapat()  # cevapsiz/coken: kapat, sonra yeniden baslar
-                raise UygulamaHatasi(
-                    f"Uzanti '{self.m.name}' {ZAMAN_ASIMI} sn icinde cevap vermedi."
-                )
+                raise UygulamaHatasi(f"Uzanti '{self.m.name}' {sure:g} sn icinde cevap vermedi.")
             c = sonuc["c"]
             if c.get("hata"):
                 raise UygulamaHatasi(f"Uzanti hatasi: {maskele(str(c['hata']))[:300]}")
@@ -145,6 +156,7 @@ class UzantiYoneticisi:
         self.karantina.mkdir(parents=True, exist_ok=True)
         self.kayit = self.kok / "kayit.json"
         self._surecler: dict[str, _Surec] = {}
+        self.son_bildirim: dict[str, str] = {}  # uzanti -> son bildirim (ayni toast tekrarlanmaz)
 
     # ---- kurulum ----
     def karantinaya_al(self, kaynak: str) -> dict:
@@ -217,6 +229,9 @@ class UzantiYoneticisi:
 
     def _surec(self, ad: str, m: Manifest) -> _Surec:
         s = self._surecler.get(ad)
+        if s is not None and s.imza != _imza(s.kok):  # Mods gibi: dosya degisti -> yeniden yukle
+            self._kapat(ad)
+            s = None
         if s is None:
             s = self._surecler[ad] = _Surec(self.kok / ad, m)
         return s
@@ -262,6 +277,110 @@ class UzantiYoneticisi:
                     self._surec(ad, m).istek("olay", {"olay": olay, "veri": veri})
                 except UygulamaHatasi:
                     continue
+
+    # ---- Mods kancalari: sonucu degistirebilen olaylar ----
+    def _dinleyenler(self, olay: str) -> list[tuple[str, Manifest]]:
+        return [(a, m) for a, m in self._acik() if "olay" in m.yetenekler and olay in m.olaylar]
+
+    def dinleyen_var(self, olay: str) -> bool:
+        return bool(self._dinleyenler(olay))
+
+    def arac_kancasi(self, arac: str, argumanlar: dict) -> dict:
+        """arac_cagrisi: uzanti {karar: engelle, neden} / {argumanlar} / {cevap} dondurebilir.
+        Ilk engelle ya da cevap kazanir; arguman degisiklikleri sirayla uygulanir. Coken ya da
+        gec cevap veren uzanti cagriyi ENGELLEMEZ (Kairo'nun izin motoru asil korumadir)."""
+        sonuc: dict = {"argumanlar": argumanlar}
+        for ad, m in self._dinleyenler("arac_cagrisi"):
+            try:
+                r = self._surec(ad, m).istek(
+                    "olay", {"olay": "arac_cagrisi", "veri": {"arac": arac,
+                    "argumanlar": sonuc["argumanlar"]}}, KANCA_ZAMAN,
+                )  # fmt: skip
+            except UygulamaHatasi:
+                continue
+            if r.get("karar") == "engelle":
+                return {"engelle": f"[{ad}] {str(r.get('neden') or 'uzanti engelledi')[:300]}"}
+            if "cevap" in r:
+                return {"cevap": r["cevap"], "uzanti": ad}
+            if isinstance(r.get("argumanlar"), dict):
+                sonuc["argumanlar"] = r["argumanlar"]
+                sonuc["degistiren"] = ad
+        return sonuc
+
+    def istem_kancasi(self, metin: str) -> str:
+        """istem: uzanti {metin} ile kullanici istemini yeniden yazabilir (sirayla)."""
+        for ad, m in self._dinleyenler("istem"):
+            try:
+                r = self._surec(ad, m).istek(
+                    "olay", {"olay": "istem", "veri": {"metin": metin}}, KANCA_ZAMAN
+                )
+            except UygulamaHatasi:
+                continue
+            if isinstance(r.get("metin"), str) and r["metin"].strip():
+                metin = r["metin"][:20000]
+        return metin
+
+    # ---- Mods UI yuzeyleri: durum cubugu, bildirim (toast), istem ustu bant ----
+    def ui(self) -> list[dict]:
+        out = []
+        for ad, m in self._acik():
+            if "ui" not in m.yetenekler:
+                continue
+            try:
+                r = self._surec(ad, m).istek("ui", {}, KANCA_ZAMAN)
+            except UygulamaHatasi:
+                continue
+            bant = r.get("bant") if isinstance(r.get("bant"), dict) else {}
+            bildirim = str(r.get("bildirim") or "")[:300]
+            yeni = bildirim and bildirim != self.son_bildirim.get(ad)
+            if bildirim:
+                self.son_bildirim[ad] = bildirim
+            out.append({
+                "uzanti": ad, "durum": str(r.get("durum") or "")[:80],
+                "bildirim": bildirim if yeni else "",
+                "bant": {"md": str(bant.get("md") or "")[:MAX_UI],
+                         "dugmeler": [{"metin": str(d.get("metin", ""))[:40],
+                                       "komut": str(d.get("komut", ""))[:40]}
+                                      for d in (bant.get("dugmeler") or [])[:3]
+                                      if isinstance(d, dict)]} if bant else {},
+            })  # fmt: skip
+        return out
+
+    # ---- kurulum kaynaklari: git adresi ve Kairo'nun yazdigi uzanti ----
+    def git_karantina(self, url: str) -> dict:
+        """Git deposunu HICBIR SEY calistirmadan (hook kapali) indirip karantinaya alir."""
+        import tempfile
+
+        if not re.fullmatch(r"https://[\w.-]+/[\w./-]+", url or ""):
+            raise UygulamaHatasi("Yalniz https git adresi kabul edilir.")
+        gecici = Path(tempfile.mkdtemp(prefix="indir-", dir=self.karantina))
+        try:
+            r = subprocess.run(  # noqa: S603 - sabit argumanlar, kabuk yok
+                ["git", "-c", f"core.hooksPath={gecici / 'yok'}", "clone", "--depth", "1",
+                 url, str(gecici / "r")],
+                capture_output=True, text=True, timeout=180, env=ortam_allowlist(),
+            )  # fmt: skip
+            if r.returncode != 0:
+                raise UygulamaHatasi(f"Indirilemedi: {(r.stdout + r.stderr)[-300:]}")
+            shutil.rmtree(gecici / "r" / ".git", ignore_errors=True)
+            return self.karantinaya_al(str(gecici / "r"))
+        finally:
+            shutil.rmtree(gecici, ignore_errors=True)
+
+    def taslak_yaz(self, manifest: dict, ana_py: str) -> dict:
+        """Kairo (model) uzanti yazar: YALNIZ karantinaya; kurulum kullanicinin onayiyla."""
+        import tempfile
+
+        m = Manifest(**manifest)
+        gecici = Path(tempfile.mkdtemp(prefix="taslak-", dir=self.karantina))
+        try:
+            (gecici / "uzanti.json").write_text(
+                json.dumps(m.model_dump(), ensure_ascii=False, indent=2), encoding="utf-8"
+            )
+            (gecici / m.ana).write_text(ana_py[:200_000], encoding="utf-8")
+            return self.karantinaya_al(str(gecici))
+        finally:
+            shutil.rmtree(gecici, ignore_errors=True)
 
     def arac_semalari_ve_isleyiciler(self, izin_uygula) -> tuple[list[dict], dict]:
         semalar, isl = [], {}

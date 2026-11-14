@@ -1,6 +1,6 @@
 // Uzantilar (A7.6): ayri surecte calisan eklentiler. Panel HTML'i sandbox iframe + CSP ile;
 // uzanti metni kacir() ile basilir.
-import { kacir } from "./md.js";
+import { kacir, md } from "./md.js";
 import { onizlemeSrcdoc } from "./inceleme.js";
 import { $, $$, api, bildir, ekAvatar, el, modal, onayla } from "./ortak.js";
 
@@ -102,4 +102,32 @@ export function uzantiSekmesiKur(govde) {
     } catch (err) { rapor.innerHTML = `<div class="uyari-kutu kucuk">${kacir(err.message)}</div>`; }
   };
   ciz();
+}
+
+// Mods UI yuzeyleri: ui yetenegi olan acik uzantilar durum cubugu metni, bildirim (toast) ve
+// istem ustu bant (Markdown + en fazla 3 dugme) verir. Dugme uzantinin komutunu calistirir.
+export function uzantiYuzeyleriKur() {
+  const yenile = async () => {
+    let v;
+    try { v = await api("/api/uzantilar/ui"); } catch { return; }
+    const ys = v.yuzeyler || [];
+    $("#dc-uzanti").textContent = ys.map((y) => y.durum).filter(Boolean).join(" · ");
+    for (const y of ys) if (y.bildirim) bildir(`${y.uzanti}: ${y.bildirim}`, "bilgi", 5000);
+    const kap = $("#uzanti-bantlari");
+    kap.innerHTML = "";
+    for (const y of ys.filter((x) => x.bant?.md)) {
+      const b = el(`<div class="bant uzanti-bant"><span class="soluk kucuk">${kacir(y.uzanti)}</span><div class="md">${md(y.bant.md)}</div><span class="dugme-sira"></span></div>`);
+      for (const d of y.bant.dugmeler || []) {
+        const btn = el(`<button class="btn kucuk">${kacir(d.metin)}</button>`);
+        btn.onclick = async () => {
+          try { const r = await api("/api/uzantilar/komut", { method: "POST", govde: { komut: d.komut, arg: "" } }); if (r.metin) bildir(r.metin.slice(0, 300), "bilgi", 5000); } catch (e) { bildir(e.message, "hata"); }
+          yenile();
+        };
+        $(".dugme-sira", b).append(btn);
+      }
+      kap.append(b);
+    }
+  };
+  yenile();
+  setInterval(yenile, 6000);
 }

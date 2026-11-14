@@ -1,6 +1,7 @@
 # DURUM - kairo
 guncel: 2026-11-14 | son arac: Claude Code | dal: feature/ajan-katmani
 
+- 2026-11-14 (17): COMMIT YOK. Telefondan (TermFlow koprusu) yazilan mesajlar acik Kairo penceresinde gorunmuyordu: oturum listesi yalniz acilista/kendi islemlerinde cekiliyordu. app.js disDegisiklikleriAl: 3 sn'lik durum yoklamasinda /api/oturumlar imzasi (guncelleme|mesaj_sayisi|baslik) karsilastirilir, degisince liste ve (akis yokken) acik sohbet yeniden cizilir. Ayri veri klasorlu sunucuda tarayicida disaridan baslik degisikligiyle dogrulandi. Portable derlendi; teslim klasorune kopyalama kullanici onayi bekliyor (acik Kairo kapanmali).
 - 2026-11-13 (16): commit a4fc316 pushlandi. (1) BUYUT: cercevesiz pencere maximize() ile gorev cubugunu kapliyordu -> main.py PencereApi._calisma_alanina_sigdir: form.Bounds = Screen.WorkingArea, durum gercek sinirdan (bayrak acilista tutmuyordu). Gercek pencerede UIA ile olculdu: buyuk 0,0-1920,1140, gorev cubugu 1140-1200 acik, geri alma eski boyut. (2) AD: proje klasoru Projects\kairo, exe Kairo.exe, teslim Desktop\Portable Programlar\Kairo (data tasindi), spec paketleme/kairo.spec, pyproject/MCP clientInfo/User-Agent/OpenRouter Referer/version anahtari 'kairo' (eski 'yerel_ai_studio' anahtari arka plan tespitinde hala taniniyor). Baslangic kisayolu yeni exe'ye cevrildi. GitHub reposu henuz yerel-ai-studio adinda. Gecmis kayitlar ve degerlendirme raporlari eski adla birakildi.
 - 2026-11-13 (15): TAM PAKET KOSULDU: 679 gecti, 3 atladi (test_a9_masaustu haric, 14.5 dk); test_a9_masaustu ayri 5/5; ruff temiz. Teslim exe (10:45) kaynaktan yeni, yeniden derleme gerekmedi. COMMIT YOK, push onayi bekliyor.
 - 2026-11-13 (14): COMMIT YOK. MCP OAuth girisi (Vercel) "Dis kaynakli istek reddedildi" veriyordu: saglayici sitesinden /api/mcp/oauth/geri'ye yonlendirmede Referer dis oluyor, _loopback_koruma (api.py) reddediyordu. GET /api/mcp/oauth/geri kaynak kontrolunden muaf (state ile korunur); tum OAuth baglayicilari icin gecerli. test_mcp_oauth'a test eklendi (66 gecti). Portable derlendi, teslim klasorune kopyalandi (data korundu), Baslat.bat ile Kairo penceresi acildi. Gercek Vercel girisi kullanicida denenecek. (2) EKLENTILER: kullanicinin Vercel'i ekliydi ama girisi tamamlanmamisti ve "Senin eklentilerin" ilk 6'da kalmadigi icin gorunmuyordu -> OAuth'lu girisi yok baglayici "giris gerekli" rozetiyle en ustte (eklentiler.js, .rozet.uyari). Dizine 25 resmi uzak MCP eklendi (mcp_ice.DIZIN; 2026-11-13 canli yoklandi, hepsi 401 + DCR; DeepWiki anahtarsiz). Google (Gmail/Drive/Takvim/Sheets/Docs), Slack, HubSpot, Outlook, Trello: resmi DCR'li sunucu yok -> Composio bagli degilken Populer'de kart, Baglan Composio anahtar penceresini acar. Onizlemede goruldu. Tam paket test_a9_masaustu'da (gercek UIA, dusuk RAM) dustu; tek basina 5/5 gecti; tam paket yeniden KOSULMADI. Yeniden derlendi + teslim (data korundu), pencere acildi. Kullanicinin bagli giris gerektiren uygulamasi yok: Vercel girisi yok, GitHub kapali, Composio anahtari yok. Tam paket arka planda kosuyordu (sonuc yazilmadi).
@@ -363,6 +364,16 @@ Python 3.12 + FastAPI + pywebview; arayuz vanilla JS. Paketleme: PORTABLE (kulla
   ozyineleme (alt cizgili ad); adres /v1 cift ekleniyordu; "İ".lower() hatasi; durdur kilitte asiliydi.
 
 ## Siradaki adim
+- 2026-11-14 HATA DUZELTME: Kairo sohbetinde 'Gecersiz arguman JSON'u' (GitHub raporu yazarken). Kok neden: sohbet cevap siniri ayardaki max_tokens (1024) idi; uzun rapor tek proje_dosya_yaz argumaninda kesiliyordu (ajan gorevleri cevap_tokeni ile cozulmustu, sohbet degil). Duzeltme sohbet.py: araclar varken max(max_tokens, cevap_tokeni(baglam)) (32K -> 8192) + kesik argumanda 'parcala' yonlendirmesi. Probe: DeepSeek akissiz cagrida tek tirnakli JSON gecerli (tirnak neden degil). test_api +2.
+- EKSIKLERI TAMAMLA (2026-11-14) BITTI: tam paket 764 gecti + CLI regresyonu (uzanti_yaz semasi 16K baglami tasiriyordu -> yalniz uzanti/mod isteginde) giderildi, teslim 13:03, commit+push. Kararlar: GitHub hitabi /kairo; thread onayi tercih yok -> otomatik kalir;
+  agent-desktop EKLE (sabit surum + SHA256); sosyal medya ajani ERTELENMIS kalir. RAM 3.4 GB -> model olcumleri yapilamaz.
+  - [x] D2 alt oturum kartina "Arka planda yaptir (ayri dal)"
+  - [x] D3 GitHub /kairo yoklama (gh api + ETag) -> tetik -> is emri (gozle: panelde Baslat)
+  - [x] D4-D5 teslim (commit/push/PR/yorum, yap modu), worktree'de git push/gh komut engeli, takip yorumlari
+  - [x] agent-desktop arac paketi (v1.3.1 x86_64 tar.gz, sha256 6ee4b1e0..., guvenli_ac tar.gz destegi; kurulum kullanici tiklamasiyla) (sabit surum + SHA256) + MCP
+  - [x] MODS: arac_cagrisi (engelle/arguman/cevap), istem, tur_bitis, ui yetenegi (durum/bildirim/bant), dosya degisince yeniden yukleme, git'ten karantina, uzanti_yaz araci (yalniz karantina). tests/test_mods.py
+  - [x] T3 thread sorusu secenekli kart (_is_ozet soru + superajan.js soruCiz)
+  - [ ] KARSILASTIRMA (kullanici istegi): 'benim github istatistiklerimi rapor olarak olustur, pdf ve docx indirilebilir ver' -> Claude Code + Kairo; Kairo'daki eksikleri tamamla
 - WRONGSTACK KALAN 4/6/7 TAMAM (2026-11-14): tam paket 747 gecti 3 atladi (test_a9_masaustu haric), derlendi + teslim 10:57 (data korundu), acildi, commit+push:
   - [x] 7 arastirma ozeti: runner SISTEM + sohbet AJAN_NOTU'na kural (kaynak URL, API adi, surum, belirsizlik, uydurma). tests/test_ogrenen_7.py
   - [x] 6 lsp.py LspIstemci.yenile (didClose + eski tani silinir; once didOpen tek seferdi, tanilar bayat kaliyordu) + KodZekasi.yazma_sonrasi_tani/tani_ekle; sohbet.py proje_dosya_yaz/yama sarilir -> 'lsp_tanilari' (yalniz severity 1, en fazla 10). Dil sunucusu tanimli degilse etkisiz. tests/test_a10_lsp.py (+2)
@@ -509,7 +520,7 @@ Ukftd_yGittV8xV.mp4,
     Kavramlar: Source->Trigger->Thread->Eval(gate+assessment)->Ticket(Mandate)->Assignment(Executor)->Channel.
     Kairo karsiligi: kaynak=GitHub (gh api, ETag), politika=izinli loginler, yurutucu=AgentRunner + worktree,
     kanal=gh yorum/PR, panel. KALAN: 002-007 belgeleri, plan, uygulama. Repo: %TEMP%/tarama-dsh-superagent/repo.
-  - [ ] Ogrenen sistem B-D (OGRENEN-SISTEM-PLANI.md): akilli dongu tespiti, kanitli hafiza, gorev sonu otomatik inceleme.
+  - [x] (2026-11-14 bitti, 3691830) Ogrenen sistem B-D (OGRENEN-SISTEM-PLANI.md): akilli dongu tespiti, kanitli hafiza, gorev sonu otomatik inceleme.
   - [ ] dsh-superagent (deepseek-ai, MIT, 2026-11-14 tarandi, temiz): DeepSeek Harness (dsh) bundle'i; tmux + fcntl
     (Linux/macOS), GitHub ajan hesabi + issue dinleyicisi gerektirir, Windows'ta calismaz, Kairo'ya gomulemez. Kullanici
     karari bekliyor: tasarimindan (orchestrator/worker, kabul politikasi) Kairo'da "Uygulama Yapici" varsayilan ajan.
@@ -517,7 +528,7 @@ Ukftd_yGittV8xV.mp4,
     `agent-desktop mcp` stdio MCP. npm postinstall GitHub release'ten ikili indirir (ayni release'teki SHA256 ile).
     Telemetri/disari veri yok. Kullanici karari bekliyor: arac_paketleri ile sabit surum + sabit SHA256 kurulum + MCP.
   - [ ] ERTELENDI (kullanici 2026-11-13): langchain-ai/social-media-agent varsayilan ajan olarak eklenmedi; istenirse once guvenlik taramasi, sonra kod kopyalamadan talimatli 'Sosyal Medya' ajani (paylasim onayli)
-  - [ ] Claude Code / Codex / Antigravity CLI'larini sohbetten kullanma (cli_ajan.py'de claude+codex var, antigravity yok)
+  - [x] (2026-11-14 bitti: cli_ye_yaptir + antigravity) Claude Code / Codex / Antigravity CLI'larini sohbetten kullanma (cli_ajan.py'de claude+codex var, antigravity yok)
 - [x] BRAIN BAGLANTISI (2026-11-13, Claude Code, COMMIT YOK): Kairo ajan gorevleri brain kayit sistemine bagli.
   - runner.py `_hook_kok`/`kok`: run_baslangic/run_bitis hook'larina cwd + hedef/ozet/model gider; SessionStart additionalContext run.ek_sistem'e eklenir (api.py `ajan.kok` = aktif proje koku).
   - hooks.py: HookSonucu.baglam, `_ek_baglam`; `_async_mi` ilk stdout satirini artik geri veriyor (tek satirlik JSON kayboluyordu).

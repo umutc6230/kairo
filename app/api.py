@@ -40,7 +40,7 @@ from app.agent.hooks import HookDeposu
 from app.agent.izolasyon import adaptor_olustur
 from app.agent.masaustu import Masaustu
 from app.agent.mcp import McpYoneticisi
-from app.agent.policy import Istek, PolitikaMotoru, YanEtki, yerel_host_mu
+from app.agent.policy import Istek, PolitikaMotoru, YanEtki, maskele, yerel_host_mu
 from app.agent.runner import BITMIS as BITMIS_RUN
 from app.agent.runner import YAZAN_ARACLAR, AgentRunner, Butce, RunDeposu, RunDurum, olay_akisi
 from app.agent.takim import TakimPanosu
@@ -265,6 +265,7 @@ class AltOturumIstegi(BaseModel):
 
 class OneriRedIstegi(BaseModel):
     kaynak: str = Field(min_length=1, max_length=64)
+    karar: str = Field(default="reddedildi", pattern=r"^(reddedildi|is:[0-9a-f]{12})$")
 
 
 class AnahtarIstegi(BaseModel):
@@ -719,9 +720,16 @@ def uygulama_olustur(
         bekleme = ""
         if asama == "sirada" and _aktif_kok() != is_.proje_kok:
             bekleme = "Projesi açık değil; proje açılınca başlar."
+        soru: dict = {}
+        if durum == "cevap_bekliyor":  # T3: thread'in sorusu sohbette secenekli kart olur
+            with contextlib.suppress(Exception):
+                a = next(x for x in reversed(run_deposu.getir(is_.runlar[-1]).adimlar)
+                         if x.arac == "soru_sor")  # fmt: skip
+                secenek = [str(s)[:120] for s in (a.argumanlar.get("secenekler") or [])][:4]
+                soru = {"metin": str(a.argumanlar.get("soru", ""))[:600], "secenekler": secenek}
         return {**is_.model_dump(exclude={"gorev"}), "gorev": is_.gorev[:400], "asama": asama,
                 "run": is_.runlar[-1] if is_.runlar else "", "run_durum": durum or "",
-                "ozet": ozet[:600], "bekleme": bekleme}  # fmt: skip
+                "ozet": ozet[:600], "bekleme": bekleme, "soru": soru}  # fmt: skip
 
     def _sohbet_is_ac(baslik: str, gorev: str) -> dict:
         """Sohbetten thread: aktif projede is emri; dongu (2 sn) baslatir."""
@@ -765,9 +773,118 @@ def uygulama_olustur(
         is_.olay(f"Atama baslatildi ({run.id}).")
         superajan_deposu.guncelle(is_)
 
+    # ---- Superajan GitHub (D3-D5): /kairo yoklama, teslim (PR), takip, PR kapanisi ----
+    def _gh_yokla() -> dict:
+        """Yorum + issue listelerinden yeni /kairo isteklerini is emrine cevirir (ETag'li)."""
+        g = superajan_deposu.github()
+        a = g["ayar"]
+        if not (a.aktif and a.depo and a.proje_kok):
+            return {"durum": "kapali"}
+        yol = f"repos/{a.depo}/issues"
+        d1, e1, yorumlar = sa.gh_liste(
+            f"{yol}/comments?sort=updated&direction=desc&per_page=30", g["etag"].get("c", "")
+        )
+        d2, e2, konular = sa.gh_liste(
+            f"{yol}?state=all&sort=updated&direction=desc&per_page=30", g["etag"].get("i", "")
+        )
+        if d1 not in (200, 304) or d2 not in (200, 304):
+            raise UygulamaHatasi(f"GitHub okunamadi (HTTP {d1}/{d2}); gh girisini kontrol et.")
+        yeni = sa.adaylar(yorumlar, konular, set(a.izinli), set(g["gorulen"]))
+        acilan = takip = 0
+        for x in yeni:
+            konu = f"{a.depo}#{x['no']}"
+            isler_ = reversed(superajan_deposu.liste())
+            mevcut = next((i for i in isler_ if konu in i.konular), None)
+            if mevcut and mevcut.durum != "durduruldu":  # D5: ayni konuya takip / yeniden acma
+                mevcut.bekleyen_mesaj = maskele(x["metin"])[:4000]
+                mevcut.durum, mevcut.onay_bekliyor = "acik", a.mod == "gozle"
+                if mevcut.calisma_koku and not Path(mevcut.calisma_koku).is_dir():
+                    mevcut.calisma_koku, mevcut.dal = "", ""  # birlestirilmis/atilmis: yeni dal
+                mevcut.olay(f"GitHub takip: @{x['login']}")
+                superajan_deposu.guncelle(mevcut)
+                takip += 1
+            else:
+                ilk_satir = x["metin"].splitlines()[0][:80] if x["metin"] else ""
+                superajan_deposu.olustur(
+                    x["baslik"] or ilk_satir or konu, sa.github_gorev(a.depo, x),
+                    a.proje_kok, "github",
+                    {"yazan": x["login"], "guc": "acik", "mod": a.mod}, [konu], a.mod == "gozle",
+                )  # fmt: skip
+                acilan += 1
+        superajan_deposu.github_yaz(
+            a, [*g["gorulen"], *(x["anahtar"] for x in yeni)], {"c": e1, "i": e2}
+        )
+        return {"durum": "tamam", "acilan": acilan, "takip": takip}
+
+    def _teslim(iid: str) -> dict:
+        """D4: is emri dalini commit + push eder, PR acar, ilgili issue'lara yorum yazar."""
+        is_ = superajan_deposu.getir(iid)
+        if is_.pr_url:
+            return {"durum": "zaten", "pr_url": is_.pr_url}
+        if not is_.calisma_koku or not Path(is_.calisma_koku).is_dir() or not is_.dal:
+            raise UygulamaHatasi("Bu is emrinin teslim edilecek dali yok.")
+        depo = superajan_deposu.github()["ayar"].depo
+        kok = Path(is_.calisma_koku)
+        wt._git(kok, "add", "-A")
+        wt._git(kok, "-c", "user.name=Kairo", "-c", "user.email=ajan@yerel", "commit", "-m",
+                f"Is emri: {is_.baslik}"[:200])  # fmt: skip
+        kod, cikti = wt._git(kok, "push", "-u", "origin", is_.dal, sure=300)
+        if kod != 0:
+            raise UygulamaHatasi(f"git push basarisiz: {cikti[-400:]}")
+        ozet = maskele(_durum_ozet(is_)[1])[:3000]
+        ilgili = "\n".join(f"Ilgili: #{k.split('#')[-1]}" for k in is_.konular)
+        govde = f"{sa.ISARET}\nKairo is emri: {is_.baslik}\n\n{ozet}\n\n{ilgili}".strip()
+        arg = ["pr", "create", "--head", is_.dal, "--title", is_.baslik[:120], "--body", govde]
+        kod, cikti = sa.gh(*arg, *(["--repo", depo] if depo else []), cwd=str(kok))
+        url = next((s for s in reversed(cikti.split()) if "/pull/" in s), "")
+        if kod != 0 or not url:
+            raise UygulamaHatasi(f"PR acilamadi: {cikti[-400:]}")
+        for k in is_.konular:
+            sa.gh("issue", "comment", k.split("#")[-1], "--repo", k.split("#")[0],
+                  "--body", f"{sa.ISARET}\nKairo PR acti: {url}")  # fmt: skip
+        is_ = superajan_deposu.getir(iid)
+        is_.pr_url = url
+        is_.olay(f"Teslim: {url}")
+        superajan_deposu.guncelle(is_)
+        return {"durum": "acildi", "pr_url": url}
+
+    def _pr_durumlari() -> None:
+        """D5: PR birlesti/kapandiysa is emri biter."""
+        for is_ in [x for x in superajan_deposu.liste() if x.durum == "acik" and x.pr_url]:
+            kod, cikti = sa.gh("pr", "view", is_.pr_url, "--json", "state", "-q", ".state")
+            if kod == 0 and cikti.strip() in ("MERGED", "CLOSED"):
+                is_.durum = "bitti"
+                is_.olay(f"PR {cikti.strip().lower()}.")
+                superajan_deposu.guncelle(is_)
+
+    gh_zaman = {"son": 0.0}
+
+    async def _gh_tick() -> None:
+        """60 sn'de bir: yoklama, yap modunda dogrulanmis isi teslim, PR durumu."""
+        a = superajan_deposu.github()["ayar"]
+        if not a.aktif or time.monotonic() - gh_zaman["son"] < 60:
+            return
+        gh_zaman["son"] = time.monotonic()
+        await asyncio.to_thread(_gh_yokla)
+        if a.mod == "yap":
+            for is_ in superajan_deposu.liste():
+                if is_.kaynak != "github" or is_.durum != "acik" or is_.pr_url or not is_.runlar:
+                    continue
+                durum, ozet = _durum_ozet(is_)
+                if sa.asama(is_, durum, ozet) != "inceleme":
+                    continue
+                with contextlib.suppress(Exception):  # dogrulanmamis/kayip run teslim edilmez
+                    if run_deposu.getir(is_.runlar[-1]).sonuc.dogrulandi:
+                        await asyncio.to_thread(_teslim, is_.id)
+        await asyncio.to_thread(_pr_durumlari)
+
     async def _superajan_tick() -> None:
         """Siradaki is emirlerini baslatir: ayni anda en fazla ESZAMANLI, yalniz projesi acikken
         (araclar aktif projeye baglidir; kullanicinin acik projesi sessizce degistirilmez)."""
+        try:
+            await _gh_tick()
+        except Exception as e:  # noqa: BLE001 - GitHub hatasi yerel isleri durdurmaz
+            logger.warning(f"Superajan GitHub: {e}")
         isler = [x for x in superajan_deposu.liste() if x.durum == "acik"]
         asamalar = {x.id: sa.asama(x, *_durum_ozet(x)) for x in isler}
         calisan = sum(1 for a in asamalar.values() if a == "calisiyor")
@@ -937,6 +1054,47 @@ def uygulama_olustur(
             is_.olay("Ana dala birlestirildi.")
             superajan_deposu.guncelle(is_)
         return {**s, "is": _is_ozet(is_)}
+
+    @app.post("/api/superajan/isler/{iid}/baslat")
+    async def superajan_baslat(iid: str) -> dict:
+        """Gozle modu: GitHub'dan gelen is emrini kullanici onaylar."""
+        is_ = superajan_deposu.getir(iid)
+        is_.onay_bekliyor = False
+        is_.olay("Kullanici baslatti.")
+        superajan_deposu.guncelle(is_)
+        await _superajan_tick()
+        return _is_ozet(superajan_deposu.getir(iid))
+
+    @app.post("/api/superajan/isler/{iid}/teslim")
+    async def superajan_teslim(iid: str) -> dict:
+        s = await asyncio.to_thread(_teslim, iid)
+        return {**s, "is": _is_ozet(superajan_deposu.getir(iid))}
+
+    @app.get("/api/superajan/github")
+    async def superajan_github() -> dict:
+        return superajan_deposu.github()["ayar"].model_dump() | {"gh": bool(sa.gh_yolu())}
+
+    @app.put("/api/superajan/github")
+    async def superajan_github_kaydet(veri: dict) -> dict:
+        g = superajan_deposu.github()
+        ayar = sa.GithubAyar(**{k: v for k, v in veri.items() if k != "gh"}).dogrula()
+        ayar.proje_kok = ayar.proje_kok or _aktif_kok()
+        if ayar.aktif and not ayar.izinli:  # varsayilan izinli: gh hesabinin kendisi
+            kod, cikti = await asyncio.to_thread(sa.gh, "api", "user", "-q", ".login")
+            if kod != 0 or not cikti.strip():
+                raise UygulamaHatasi("gh hesabi okunamadi; once GitHub'a baglan.")
+            ayar.izinli = [cikti.strip().lower()]
+        if ayar.aktif and not (ayar.depo and ayar.proje_kok):
+            raise UygulamaHatasi("Depo ve proje klasoru gerekli.")
+        ayni = ayar.depo == g["ayar"].depo
+        superajan_deposu.github_yaz(ayar, g["gorulen"] if ayni else [], g["etag"] if ayni else {})
+        return ayar.model_dump()
+
+    @app.post("/api/superajan/yokla")
+    async def superajan_yokla() -> dict:
+        s = await asyncio.to_thread(_gh_yokla)
+        await _superajan_tick()
+        return s
 
     @app.post("/api/superajan/isler/{iid}/at")
     async def superajan_at(iid: str) -> dict:
@@ -1284,7 +1442,8 @@ def uygulama_olustur(
 
     @app.post("/api/oturumlar/{oturum_id}/oneri-reddet")
     async def oturum_oneri_reddet(oturum_id: str, istek: OneriRedIstegi) -> dict:
-        return {"oneri_kararlari": oturumlar.oneri_reddet(oturum_id, istek.kaynak).oneri_kararlari}
+        o = oturumlar.oneri_reddet(oturum_id, istek.kaynak, istek.karar)
+        return {"oneri_kararlari": o.oneri_kararlari}
 
     @app.post("/api/oturumlar/{oturum_id}/temizle")
     async def oturum_temizle(oturum_id: str) -> dict:
@@ -1561,7 +1720,15 @@ def uygulama_olustur(
 
     @app.post("/api/uzantilar/karantina")
     async def uzanti_karantina(veri: dict) -> dict:
-        return await asyncio.to_thread(uzantilar.karantinaya_al, str(veri.get("yol", "")))
+        yol = str(veri.get("yol", "")).strip()
+        if yol.startswith("https://"):  # Mods gibi: git adresinden (hook kapali, calistirilmaz)
+            return await asyncio.to_thread(uzantilar.git_karantina, yol)
+        return await asyncio.to_thread(uzantilar.karantinaya_al, yol)
+
+    @app.get("/api/uzantilar/ui")
+    async def uzanti_ui() -> dict:
+        """Mods UI yuzeyleri: durum cubugu metni, bildirim (toast), istem ustu bant."""
+        return {"yuzeyler": await asyncio.to_thread(uzantilar.ui)}
 
     @app.post("/api/uzantilar/kur")
     async def uzanti_kur(veri: dict) -> dict:

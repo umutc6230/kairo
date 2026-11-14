@@ -1,4 +1,5 @@
 // Giris noktasi: acilis, gezinme, kenar cubugu, durum cubugu, menuler, kisayollar.
+import { uzantiYuzeyleriKur } from "./uzantilar.js";
 import { ikon, ikonlariYerlestir } from "./ikonlar.js";
 import { kacir } from "./md.js";
 import { aramaAc, ayarKaydet, ayarlarAc, ayarlarKur, modelYukle, sunucuDurdur } from "./ayarlar.js";
@@ -190,6 +191,20 @@ async function oturumlariYenile() {
     durum.oturumlar = await api("/api/oturumlar");
   } catch { /* sessiz */ }
   oturumListesiCiz();
+}
+
+// Telefon (TermFlow koprusu) ayni API'ye yazar; pencere bunu ancak yoklayarak gorur.
+const imza = (o) => `${o.id}|${o.guncelleme}|${o.mesaj_sayisi}|${o.baslik}`;
+async function disDegisiklikleriAl() {
+  let yeni;
+  try { yeni = await api("/api/oturumlar"); } catch { return; }
+  const eski = new Map((durum.oturumlar || []).map((o) => [o.id, imza(o)]));
+  if (yeni.length === eski.size && yeni.every((o) => eski.get(o.id) === imza(o))) return;
+  durum.oturumlar = yeni;
+  oturumListesiCiz();
+  const acik = yeni.find((o) => o.id === durum.oturumId);
+  // kendi akisimiz suruyorsa ekran zaten guncel; bitince bir kez yeniden cizilir
+  if (acik && eski.get(acik.id) !== imza(acik) && !akisVar()) oturumAc(acik.id, true);
 }
 
 // Claude Code Desktop gibi: ayri ozellik sayfasi yok. Ozellestir = skill/talimat + modeller
@@ -510,6 +525,7 @@ async function baslat() {
   ozellestirSekmeleri();
   $("#sp-proje").onclick = () => projeAc();
   sagPanelKur({ baglayiciAc: () => ayarlarAc("mcp"), ayarAc: () => ayarlarAc() });
+  uzantiYuzeyleriKur();
   dockKur();
   rutinlerKur();
   ajanlarKur();
@@ -570,7 +586,7 @@ async function baslat() {
 
   await oturumlariYenile();
   git({ tur: "yeni", acilis: true });
-  setInterval(() => { if (!document.hidden) durumYenile(); }, 3000);
+  setInterval(() => { if (!document.hidden) { durumYenile(); disDegisiklikleriAl(); } }, 3000);
   document.documentElement.dataset.hazir = "1"; // tum isleyiciler bagli (E2E ve otomasyon bunu bekler)
 }
 

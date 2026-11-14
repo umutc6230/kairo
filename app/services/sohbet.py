@@ -8,6 +8,7 @@ from __future__ import annotations
 import asyncio
 import base64
 import json
+import re
 import time
 from collections.abc import AsyncIterator, Awaitable, Callable
 from typing import Any
@@ -34,6 +35,7 @@ from app.services.sohbet_araclari import (
     IS_EMRI_ARACI,
     PLAN_ARACI,
     SISTEM_NOTU,
+    UZANTI_YAZ_ARACI,
     DosyaAraclari,
     alt_oturum_isleyici,
     is_emri_isleyicileri,
@@ -471,6 +473,25 @@ def istatistik(llm: YerelLLM, bas: float, ilk: float | None, yukleme: float | No
     }
 
 
+def uzanti_kancali(uz, isleyiciler: dict) -> dict:
+    """Mods arac_cagrisi kancasi: uzanti cagriyi izler, engeller, argumani degistirir ya da
+    kendisi cevaplar. Kanca izin motorunu ATLATMAZ: degisen argumanla gercek isleyici yine
+    kendi izin kontrolunden gecer."""
+
+    def sar(ad: str, fonk):
+        def kancali(**kw):
+            k = uz.arac_kancasi(ad, kw)
+            if "engelle" in k:
+                return {"hata": k["engelle"], "karar": "ret"}
+            if "cevap" in k:
+                return {"sonuc": k["cevap"], "kaynak": f"uzanti {k['uzanti']} (dis veri)"}
+            return fonk(**k["argumanlar"])
+
+        return kancali
+
+    return {ad: sar(ad, f) for ad, f in isleyiciler.items()}
+
+
 async def arac_calistir(
     cagri: dict, isleyiciler: dict[str, Any], gonder: Callable[[Olay], None], etiket: dict
 ) -> tuple[dict, dict]:
@@ -481,7 +502,12 @@ async def arac_calistir(
         argumanlar = json.loads(ham) if isinstance(ham, str) else ham
     except json.JSONDecodeError:
         argumanlar = {}
-        sonuc: Any = {"hata": f"Gecersiz arguman JSON'u: {ham[:200]}"}
+        # Cogunlukla cevap uzunluk sinirinda kesilmistir: ayni uzun cagriyi tekrarlamak yine keser
+        sonuc: Any = {"hata": (
+            f"Gecersiz arguman JSON'u (muhtemelen uzunluk sinirinda kesildi, {len(ham)} karakter): "
+            f"...{ham[-120:]}. Ayni uzun cagriyi TEKRARLAMA: icerigi parcalara bol; once "
+            "proje_dosya_yaz ile ilk bolumu yaz, kalanini proje_dosya_yama ile sona ekle."
+        )}  # fmt: skip
     else:
         sonuc = None
     gonder({"tur": "arac_cagrisi", "id": cagri["id"], "ad": ad, "argumanlar": argumanlar, **etiket})
@@ -870,6 +896,25 @@ class SohbetServisi:
             if self.politika is not None:
                 araclar.append(CLI_ARACI)
                 isleyiciler["cli_ye_yaptir"] = self._cli_isleyici(alan, ayar)
+            # Mods: "Kairo mod yazsin" (yalniz karantinaya). Sema uzun: yalniz istekte uzanti/mod
+            # gectiginde sunulur; her istekte baglami (16K) doldurup arac sonuclarini kirptiriyordu
+            uzanti_istendi = re.search(r"uzant|\bmod(s|u|lar)?\b", (istek_metni or "").lower())
+            if self.uzantilar is not None and uzanti_istendi:
+                araclar.append(UZANTI_YAZ_ARACI)
+                uz = self.uzantilar
+
+                def uzanti_yaz(manifest: dict | None = None, ana_py: str = "") -> dict:
+                    try:
+                        r = uz.taslak_yaz(manifest or {}, ana_py)
+                    except (UygulamaHatasi, ValueError) as e:
+                        return {"hata": getattr(e, "mesaj", str(e))[:600]}
+                    return {
+                        "karantina": r["karantina"],
+                        "riskler": r["rapor"].get("riskler", []),
+                        "not": "KURULMADI. Kullanici Ayarlar > Uzantilar'da inceleyip kurar.",
+                    }
+
+                isleyiciler["uzanti_yaz"] = uzanti_yaz
             if self.is_emirleri is not None:
                 araclar += [IS_EMRI_ARACI, IS_DURUM_ARACI]
                 isleyiciler |= is_emri_isleyicileri(*self.is_emirleri)
@@ -901,6 +946,8 @@ class SohbetServisi:
             "skill": "\n\n".join(s for s in parcalar[6:] if s),
         }
         sistem = "\n\n".join(s for s in parcalar if s)
+        if self.uzantilar is not None and self.uzantilar.dinleyen_var("arac_cagrisi"):
+            isleyiciler = uzanti_kancali(self.uzantilar, isleyiciler)
         if not ayar.sohbet_araclari and alan.id == VARSAYILAN_ALAN_ID:
             return sistem, [], {}, otomatik  # kullanici sohbette araclari kapatti
         return sistem, araclar, isleyiciler, otomatik
@@ -1056,9 +1103,13 @@ class SohbetServisi:
                     p, c = await ek_parcalari(llm, self.ekler, ek, gonder)
                     parcalar += p
                     guncel += c
-                icerik: Any = istek.metin
+                metin = istek.metin
+                uz = self.uzantilar
+                if metin and uz is not None and uz.dinleyen_var("istem"):  # Mods: istem yeniden
+                    metin = await asyncio.to_thread(uz.istem_kancasi, metin)
+                icerik: Any = metin
                 if parcalar:
-                    icerik = [{"type": "text", "text": istek.metin}] if istek.metin else []
+                    icerik = [{"type": "text", "text": metin}] if metin else []
                     icerik += parcalar
                 seviye = istek.dusunme or ayar.dusunme
                 secim = await self.skill_sec(llm, ayar, istek.metin, onceki)
@@ -1104,19 +1155,29 @@ class SohbetServisi:
                 mesajlar = [{"role": "system", "content": sistem}] if sistem else []
                 mesajlar += onceki_mesajlar + [{"role": "user", "content": icerik}]
                 gonder({"tur": "durum", "metin": "Yanitlaniyor..."})
+                from app.agent.runner import cevap_tokeni
+
+                # Araclar varken model uzun dosya/rapor icerigini TEK arac argumaninda yazar:
+                # ayardaki kisa cevap siniri (or. 1024) argumani yarida kesiyor, JSON bozuluyordu
+                # ("Gecersiz arguman JSON'u"). Ajan gorevleriyle ayni pay kullanilir.
+                cevap_payi = (
+                    max(ayar.max_tokens, cevap_tokeni(ayar.baglam_token))
+                    if araclar
+                    else ayar.max_tokens
+                )
                 sonuc = await cevap_akit(
                     llm,
                     mesajlar,
                     gonder,
                     dusunme=istek.dusunme,
-                    max_tokens=ayar.max_tokens,
+                    max_tokens=cevap_payi,
                     sicaklik=ayar.sicaklik,
                     araclar=araclar or None,
                     isleyiciler=isleyiciler,
                     # ajan araclari varsa (yaz/komut) cok adimli is: 6 tur yetmiyordu (canli)
                     max_tur=0,  # sinirsiz; donguyu tekrar korumasi durdurur
                     baglam_token=ayar.baglam_token,
-                    rezerv=GUVENLIK_TOKEN + ayrilan_token(ayar.max_tokens, seviye),
+                    rezerv=GUVENLIK_TOKEN + ayrilan_token(cevap_payi, seviye),
                 )
                 sonuc["istatistik"]["yukleme_sn"] = yukleme
                 return sonuc
@@ -1177,6 +1238,11 @@ class SohbetServisi:
                 "metin": "Sohbet silindiği için bu cevap kaydedilmedi.",
             }
             return
+        if self.uzantilar is not None and self.uzantilar.dinleyen_var("tur_bitis"):
+            veri = {"oturum": oturum_id, "istek": istek.metin[:4000], "cevap": asistan.metin[:8000]}
+            asyncio.get_running_loop().run_in_executor(
+                None, self.uzantilar.olay, "tur_bitis", veri
+            )  # Mods tur_bitis: bilgilendirme, cevabi bekletmez
         yield {"tur": "bitti", "mesaj": asistan.model_dump()}
 
     def _kaydet(self, oturum_id: str, asistan: Mesaj) -> bool:

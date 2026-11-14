@@ -295,6 +295,56 @@ def test_guvenli_ac_klasor_disina_yazan_arsivi_reddeder(tmp_path) -> None:
         guvenli_ac(link, hedef)
 
 
+def _targz(yol: Path, uyeler: dict) -> str:
+    import io
+    import tarfile
+
+    with tarfile.open(yol, "w:gz") as t:
+        for ad, veri in uyeler.items():
+            bilgi = tarfile.TarInfo(ad)
+            bilgi.size = len(veri)
+            t.addfile(bilgi, io.BytesIO(veri))
+    return hashlib.sha256(yol.read_bytes()).hexdigest()
+
+
+def test_agent_desktop_tar_gz_ozetli_kurulur(tmp_path, monkeypatch) -> None:
+    kaynak = tmp_path / "k.tar.gz"
+    sha = _targz(kaynak, {"agent-desktop.exe": b"MZ-ad"})
+    monkeypatch.setitem(ap.PAKETLER, "agent-desktop", {**PAKETLER["agent-desktop"], "sha256": sha})
+    indirilen: list[str] = []
+
+    def indir(url: str, hedef: Path) -> None:
+        indirilen.append(url)
+        hedef.write_bytes(kaynak.read_bytes())
+
+    y = McpYoneticisi(tmp_path / "veri")
+    p = AracPaketleri(tmp_path / "veri", y, indir=indir, platform="win32")
+    assert p.kur("agent-desktop")["kurulu"]
+    assert indirilen == [PAKETLER["agent-desktop"]["url"]] and indirilen[0].endswith(".tar.gz")
+    s = y.liste()[0]
+    assert s.komut.endswith("agent-desktop/agent-desktop.exe") and s.argumanlar == ["mcp"]
+    assert not (tmp_path / "veri" / "araclar" / "agent-desktop" / "indirilen.tar.gz").exists()
+
+
+def test_guvenli_ac_tar_link_ve_disari_reddeder(tmp_path) -> None:
+    import tarfile
+
+    hedef = tmp_path / "h"
+    hedef.mkdir()
+    disari = tmp_path / "d.tar.gz"
+    _targz(disari, {"../kacak.txt": b"x"})
+    with pytest.raises(UygulamaHatasi, match="disina"):
+        guvenli_ac(disari, hedef)
+    link = tmp_path / "l.tar.gz"
+    with tarfile.open(link, "w:gz") as t:
+        b = tarfile.TarInfo("baglanti")
+        b.type, b.linkname = tarfile.SYMTYPE, "C:/Windows"
+        t.addfile(b)
+    with pytest.raises(UygulamaHatasi, match="link"):
+        guvenli_ac(link, hedef)
+    assert not (tmp_path / "kacak.txt").exists()
+
+
 # ------------------------------------------------------------------ API
 
 
@@ -303,7 +353,7 @@ async def test_api_liste_kur_kaldir(app, istemci, veri) -> None:
     app.state.arac_paketleri.bul = lambda ad: f"C:/sahte/{ad}"
     r = await istemci.get("/api/arac-paketleri")
     assert r.status_code == 200
-    assert {p["ad"] for p in r.json()["paketler"]} == {"rea", "craft-anything"}
+    assert {p["ad"] for p in r.json()["paketler"]} == {"rea", "craft-anything", "agent-desktop"}
 
     # istek govdesi adres/surum degistiremez: uc govde almaz, tablo sabittir
     r = await istemci.post("/api/arac-paketleri/rea/kur", json={"surum": "0.0.1", "url": "x"})

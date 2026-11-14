@@ -23,6 +23,7 @@ import re
 import shutil
 import subprocess
 import sys
+import tarfile
 import zipfile
 from collections.abc import Callable
 from pathlib import Path
@@ -109,6 +110,33 @@ PAKETLER: dict[str, dict[str, Any]] = {
             "güncelleyebilir, çalışırken ek araç indirebilir ve kodlama ajanları başlatabilir."
         ),
     },
+    "agent-desktop": {
+        "baslik": "agent-desktop (Vercel)",
+        "aciklama": (
+            "Masaüstü uygulamalarını erişilebilirlik ağacıyla görür ve kullanır: pencere "
+            "anlık görüntüsü, tıklama, yazma, kısayol (57 komut, MCP sunucusu)."
+        ),
+        "kaynak": "https://github.com/vercel-labs/agent-desktop",
+        "lisans": "Apache-2.0",
+        "tur": "zip",  # arsiv: tar.gz (guvenli_ac uzantiya gore acar)
+        "surum": "1.3.1",
+        "url": (
+            "https://github.com/vercel-labs/agent-desktop/releases/download/v1.3.1/"
+            "agent-desktop-v1.3.1-x86_64-pc-windows-msvc.tar.gz"
+        ),
+        # 2026-11-14: yayin 'digest' degeri ile indirilen dosyanin sha256'si ayni dogrulandi
+        "sha256": "6ee4b1e078f4e78792e79f16e32e4a78b9919464aa3c55629b7e27ed53a08c13",
+        "platform": "win32",
+        "boyut_mb": 4,
+        "calistirilabilir": "agent-desktop.exe",
+        "komut": "{exe}",
+        "argumanlar": ["mcp"],
+        "uyari": (
+            "Ekrandaki her programı görebilir ve tıklayabilir; her araç çağrısı Kairo'nun izin "
+            "motorundan geçer. Hazır derlenmiş program indirilir (yayın özeti doğrulanır). "
+            "Telemetri göndermez."
+        ),
+    },
 }
 
 
@@ -137,8 +165,18 @@ def _sha256(yol: Path) -> str:
 
 
 def guvenli_ac(arsiv: Path, hedef: Path) -> int:
-    """Zip'i hedefe acar; hedef disina cikan ya da sembolik link olan uye varsa HIC acmaz."""
+    """Zip/tar.gz acar; hedef disina cikan ya da sembolik link olan uye varsa HIC acmaz."""
     kok = hedef.resolve()
+    if arsiv.name.endswith(".tar.gz"):
+        with tarfile.open(arsiv, "r:gz") as t:
+            uyeler_ = t.getmembers()
+            for u in uyeler_:
+                if u.issym() or u.islnk() or not (u.isfile() or u.isdir()):
+                    raise UygulamaHatasi(f"Arsivde link/ozel dosya var, acilmadi: {u.name[:120]}")
+                if not (kok / u.name).resolve().is_relative_to(kok):
+                    raise UygulamaHatasi(f"Arsiv klasor disina yaziyor, acilmadi: {u.name[:120]}")
+            t.extractall(kok, filter="data")  # noqa: S202 - uyeler yukarida dogrulandi
+        return len(uyeler_)
     with zipfile.ZipFile(arsiv) as z:
         uyeler = z.infolist()
         for u in uyeler:
@@ -273,7 +311,7 @@ class AracPaketleri:
         return {"node": str(node)}
 
     def _zip_kur(self, t: dict, hedef: Path) -> dict:
-        arsiv = hedef / "indirilen.zip"
+        arsiv = hedef / ("indirilen.tar.gz" if t["url"].endswith(".tar.gz") else "indirilen.zip")
         try:
             self.indir(t["url"], arsiv)
         except (httpx.HTTPError, OSError) as e:
