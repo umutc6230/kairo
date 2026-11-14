@@ -187,13 +187,22 @@ export function sor(baslik, varsayilan = "") {
 }
 
 let acikMenu = null;
+let acikCapa = null;
+let disTiklama = null; // acik menunun "disariya tiklayinca kapat" dinleyicisi
 export function menuKapat() {
   acikMenu?.remove();
   acikMenu = null;
+  acikCapa = null;
+  // Dinleyici menuyle birlikte kaldirilir. Eskiden { once: true } ile kalip, menu ogeden secilerek
+  // kapandiginda (stopPropagation) askida kaliyor; sonraki acilis tiklamasi yeni menuyu aninda
+  // kapatiyordu ("bir kez aciliyor, sonra acilmiyor").
+  if (disTiklama) document.removeEventListener("click", disTiklama);
+  disTiklama = null;
 }
 
 /** ogeler: {metin, ikon, sag, secili, tehlike, eylem} | "ayrac" | {baslik} */
 export function menuAc(capa, ogeler, { yukari = false, sagaHizali = false } = {}) {
+  if (acikMenu && acikCapa === capa) { menuKapat(); return; } // ayni dugme: ac/kapa
   menuKapat();
   const m = el(`<div class="menu"></div>`);
   for (const o of ogeler) {
@@ -214,7 +223,13 @@ export function menuAc(capa, ogeler, { yukari = false, sagaHizali = false } = {}
   m.style.left = `${sol}px`;
   m.style.top = `${Math.max(8, Math.min(ust, innerHeight - mr.height - 8))}px`;
   acikMenu = m;
-  setTimeout(() => document.addEventListener("click", menuKapat, { once: true }), 0);
+  acikCapa = capa;
+  // acilis tiklamasi bitince kur; o arada menu kapandiysa (ya da yenisi acildiysa) kurma
+  setTimeout(() => {
+    if (acikMenu !== m) return;
+    disTiklama = (e) => { if (!m.contains(e.target)) menuKapat(); };
+    document.addEventListener("click", disTiklama);
+  }, 0);
 }
 
 export function modelProfil(anahtar) {

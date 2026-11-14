@@ -1,6 +1,13 @@
 # DURUM - kairo
 guncel: 2026-11-14 | son arac: Claude Code | dal: feature/ajan-katmani
 
+- 2026-11-14 (18): MENU HATASI: ortak.js menuAc her acilista { once: true } dis tiklama dinleyicisi kuruyordu; menu
+  ogeden secilerek kapaninca (stopPropagation) dinleyici askida kaliyor, sonraki acilis tiklamasi yeni menuyu aninda
+  kapatiyordu (baslik, mod, model menuleri "bir kez aciliyor, sonra acilmiyor"). Dinleyici menuKapat'ta kaldirilir,
+  ayni dugmeye ikinci tik kapatir. Ayri test sayfasinda dogrulandi. Derlendi + kuruldu 16:59.
+  CANLI THREAD DENEMESI (gecici veri + deneme git deposu, OpenRouter deepseek-v4.1-flash): iki isli mesaj ->
+  is_emri_baslat 2 thread, ikisi kendi is/<id> dalinda bitti (carp eklendi, README aciklamasi), "her sey ne durumda?"
+  -> is_emirleri_durum dogru ozet. Gecici veri silindi. Not: proje acik degilse arac "Once bir proje ac" doner.
 - 2026-11-14 (17): COMMIT YOK. Telefondan (TermFlow koprusu) yazilan mesajlar acik Kairo penceresinde gorunmuyordu: oturum listesi yalniz acilista/kendi islemlerinde cekiliyordu. app.js disDegisiklikleriAl: 3 sn'lik durum yoklamasinda /api/oturumlar imzasi (guncelleme|mesaj_sayisi|baslik) karsilastirilir, degisince liste ve (akis yokken) acik sohbet yeniden cizilir. Ayri veri klasorlu sunucuda tarayicida disaridan baslik degisikligiyle dogrulandi. Portable derlendi; teslim klasorune kopyalama kullanici onayi bekliyor (acik Kairo kapanmali).
 - 2026-11-13 (16): commit a4fc316 pushlandi. (1) BUYUT: cercevesiz pencere maximize() ile gorev cubugunu kapliyordu -> main.py PencereApi._calisma_alanina_sigdir: form.Bounds = Screen.WorkingArea, durum gercek sinirdan (bayrak acilista tutmuyordu). Gercek pencerede UIA ile olculdu: buyuk 0,0-1920,1140, gorev cubugu 1140-1200 acik, geri alma eski boyut. (2) AD: proje klasoru Projects\kairo, exe Kairo.exe, teslim Desktop\Portable Programlar\Kairo (data tasindi), spec paketleme/kairo.spec, pyproject/MCP clientInfo/User-Agent/OpenRouter Referer/version anahtari 'kairo' (eski 'yerel_ai_studio' anahtari arka plan tespitinde hala taniniyor). Baslangic kisayolu yeni exe'ye cevrildi. GitHub reposu henuz yerel-ai-studio adinda. Gecmis kayitlar ve degerlendirme raporlari eski adla birakildi.
 - 2026-11-13 (15): TAM PAKET KOSULDU: 679 gecti, 3 atladi (test_a9_masaustu haric, 14.5 dk); test_a9_masaustu ayri 5/5; ruff temiz. Teslim exe (10:45) kaynaktan yeni, yeniden derleme gerekmedi. COMMIT YOK, push onayi bekliyor.
