@@ -190,3 +190,22 @@ async def test_model_ile_skill_secimi(tmp_path) -> None:
         await model_ile_sec(Llm("1"), sk, "merhaba", "merhaba") is None
     )  # aday yok: model cagrilmaz
     assert secim_coz("Cevap: 9", sk) is None and secim_coz("", sk) is None
+
+
+def test_eksik_degiskenli_baslik_gonderilmez_ve_durumda_soylenir(tmp_path, monkeypatch):
+    """github plugin'i: "Bearer ${GITHUB_PERSONAL_ACCESS_TOKEN}" degisken yokken "Bearer " olup
+    HTTP'de LocalProtocolError veriyordu; artik baslik atlanir, durum 'kimlik bilgisi eksik'."""
+    from app.agent.mcp import McpYoneticisi
+
+    monkeypatch.delenv("YOK_TOKEN_XYZ", raising=False)
+    ham = {"type": "http", "url": "https://api.ornek.test/mcp/",
+           "headers": {"Authorization": "Bearer ${YOK_TOKEN_XYZ}", "X-Sabit": "${YOK2:-var}"}}  # fmt: skip
+    d = cc.mcp_donustur("github-github", ham, tmp_path)
+    assert d["basliklar"] == {"X-Sabit": "var"} and d["eksik_degiskenler"] == ["YOK_TOKEN_XYZ"]
+    y = McpYoneticisi(tmp_path)
+    y.ek_kaynak = lambda: [d]
+    durum = y.durumlar()["github-github"]
+    assert (
+        durum["durum"] == "hata" and "YOK_TOKEN_XYZ" in durum["hata"] and "Kimlik" in durum["hata"]
+    )
+    assert y.semalar_ve_isleyiciler(lambda *a: None) == ([], {})  # baglanmaya calisilmaz

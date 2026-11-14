@@ -259,6 +259,7 @@ function sohbetCiz(r) {
     ${bekleyenKartlari(r)}
     ${r.hata ? `<div class="uyari-kutu kucuk">${kacir(r.hata)}</div>` : ""}
     ${r.sonuc?.ozet ? `<div class="ajan-sonuc ajan-rapor"><div class="rapor-baslik">${basari ? '<span data-ikon="tik" class="yesil-ikon" aria-label="doğrulandı"></span> Tamamlandı' : "Sonuç"}${r.sonuc.kanit?.length ? ` <span class="soluk kucuk">(kanıt: adım ${kacir(r.sonuc.kanit.join(", "))})</span>` : ' <span class="rozet sari" title="Ajan, son dosya değişikliğinden sonra başarılı bir araç adımını kanıt olarak göstermedi. Cevap yanlış demek değil; otomatik kontrol edilmedi demek.">doğrulanmadı</span>'}<button class="ikon-btn" title="Cevabı kopyala" aria-label="Cevabı kopyala" data-kopya data-ikon="kopyala"></button></div><div class="md">${md(r.sonuc.ozet)}</div></div>` : ""}
+    ${incelemeHtml(r.inceleme)}
     ${r.calisma_koku && r.dal ? `<div class="ajan-izole soluk kucuk">Ayrı dalda çalıştı: <code>${kacir(r.dal)}</code>${["basarili", "dogrulanmadi"].includes(r.durum) ? `
       <div class="satir"><input class="alan" data-entegre-test placeholder="Birleştirmeden önce test komutu (isteğe bağlı)" style="flex:1">
       <button class="btn ana" data-entegre>Ana dala birleştir</button><button class="btn tehlike" data-at>Değişiklikleri at</button></div>` : ""}</div>` : ""}
@@ -604,4 +605,15 @@ export function sohbetteGorevGoster(kap, id) {
     if (!kap.isConnected) { clearInterval(zamanlayici); kapOverride = null; return; }
     gorevYenile(false);
   }, 1500);
+}
+// Gorev sonu otomatik inceleme (Chimera): model varsayimi, kanit degil
+const ONEM_SINIF = { kritik: "kirmizi", yuksek: "kirmizi", orta: "sari", dusuk: "" };
+function incelemeHtml(i) {
+  if (!i || !i.ozet && !(i.bulgular || []).length) return "";
+  const b = i.bulgular || [];
+  return `<details class="ajan-sonuc ajan-inceleme" ${b.some((x) => ["kritik", "yuksek"].includes(x.onem)) ? "open" : ""}>
+    <summary>Otomatik inceleme · ${b.length ? `${b.length} bulgu` : "sorun bulunmadı"} <span class="soluk kucuk">(model varsayımı)</span></summary>
+    ${i.ozet ? `<div class="soluk kucuk">${kacir(i.ozet)}</div>` : ""}
+    ${b.map((x) => `<div class="inceleme-bulgu"><span class="rozet ${ONEM_SINIF[x.onem] || ""}">${kacir(x.onem)}</span> <b>${kacir(x.baslik)}</b> <code>${kacir(x.dosya)}:${kacir(x.satir)}</code><div class="soluk kucuk">${kacir(x.neden)}</div></div>`).join("")}
+  </details>`;
 }

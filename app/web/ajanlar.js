@@ -2,6 +2,7 @@
 // klasoru, modeli, hafizasi ve FIFO kuyrugu vardir. Ajanlar birbirine is verebilir.
 // Arka uc: /api/ajanlar. Calisan isin adimlari gorevler.js ile canli gosterilir.
 import { sohbetteGorevGoster } from "./gorevler.js";
+import { isEmirleriCiz, yeniIsEmri } from "./superajan.js";
 import { kacir, md } from "./md.js";
 import { $, $$, api, bildir, onayla } from "./ortak.js";
 
@@ -92,7 +93,7 @@ async function detayCiz() {
   canli.hidden = !run;
   if (cli) {  // Claude Code / Codex: CLI'nin kendi ilerleme satirlari
     sonCanliRun = run;
-    canli.querySelector(".gr-detay").innerHTML = `<div class="soluk kucuk">${kacir(a.saglayici === "codex" ? "Codex" : "Claude Code")} çalışıyor… <button class="btn kucuk" id="aj-iptal">İşi durdur</button></div>
+    canli.querySelector(".gr-detay").innerHTML = `<div class="soluk kucuk">${kacir({ codex: "Codex", antigravity: "Antigravity" }[a.saglayici] || "Claude Code")} çalışıyor… <button class="btn kucuk" id="aj-iptal">İşi durdur</button></div>
       <ol class="adim-liste sade">${(a.canli || []).map((x) => `<li class="${x.startsWith("🔧") ? "soluk kucuk" : "ajan-aciklama"}">${x.startsWith("🔧") ? kacir(x) : md(x)}</li>`).join("") || '<li class="parilti kucuk">Başlıyor…</li>'}</ol>`;
     $("#aj-iptal").onclick = async () => { await api(`/api/ajanlar/${a.id}/iptal`, { method: "POST" }); detayCiz(); };
   } else if (run && run !== sonCanliRun) { sonCanliRun = run; sohbetteGorevGoster(canli.querySelector(".gr-detay"), run); }
@@ -117,13 +118,14 @@ function formAc(on = null) {
     <label class="proje-alan">Sağlayıcı<select class="secim" id="aj-f-saglayici">
       <option value="kairo" ${(a.saglayici || "kairo") === "kairo" ? "selected" : ""}>Kairo ajanı (OpenRouter / yerel model)</option>
       <option value="claude" ${a.saglayici === "claude" ? "selected" : ""}>Claude Code CLI (senin Claude aboneliğin)</option>
-      <option value="codex" ${a.saglayici === "codex" ? "selected" : ""}>Codex CLI (senin ChatGPT aboneliğin)</option></select>
+      <option value="codex" ${a.saglayici === "codex" ? "selected" : ""}>Codex CLI (senin ChatGPT aboneliğin)</option>
+      <option value="antigravity" ${a.saglayici === "antigravity" ? "selected" : ""}>Antigravity CLI (senin Google hesabın)</option></select>
       <span class="ayar-not" id="aj-f-kurulu"></span></label>
     <label class="proje-alan">Model (boş: varsayılan; Kairo için ör. deepseek/deepseek-v4.1-flash, Claude için ör. sonnet)<input class="alan" id="aj-f-model" value="${kacir(a.model)}"></label>
     <div class="satir"><button class="btn ana" id="aj-f-kaydet">${on ? "Kaydet" : "Oluştur"}</button><button class="btn" id="aj-f-vazgec">Vazgeç</button></div></div>`;
   api("/api/ajanlar-saglayicilar").then((s) => {
     const k = s.kurulu || {};
-    $("#aj-f-kurulu").textContent = `Kurulu: Claude Code ${k.claude ? "✓" : "✗"} · Codex ${k.codex ? "✓" : "✗"}. CLI ajanları kendi araçlarıyla çalışır; Kairo'da tam yetki açıksa onaysız çalışırlar.`;
+    $("#aj-f-kurulu").textContent = `Kurulu: Claude Code ${k.claude ? "✓" : "✗"} · Codex ${k.codex ? "✓" : "✗"} · Antigravity ${k.antigravity ? "✓" : "✗"}. CLI ajanları kendi araçlarıyla çalışır; Kairo'da tam yetki açıksa onaysız çalışırlar.`;
   }).catch(() => {});
   let avatar = a.avatar;
   $$("[data-av]", kap).forEach((b) => { b.onclick = () => { avatar = b.dataset.av; $$("[data-av]", kap).forEach((x) => x.classList.toggle("secili", x === b)); }; });
@@ -176,13 +178,18 @@ export function ajanlarKur() {
   if (tg) tg.ontoggle = () => { if (tg.open) telegramCiz(); };
   const yeni = $("#aj-yeni");
   if (yeni) yeni.onclick = () => formAc();
+  const is_ = $("#aj-is-yeni");
+  if (is_) is_.onclick = () => yeniIsEmri();
 }
 
 export function ajanlarYukle() {
   listeCiz();
+  isEmirleriCiz();
   clearInterval(yenileZamanlayici);
   yenileZamanlayici = setInterval(() => {
     if ($("#g-ajanlar")?.hidden) { clearInterval(yenileZamanlayici); return; }
     listeCiz();
+    // detay acikken yeniden cizim canli gorunumu sifirlamasin
+    if (!document.querySelector("#aj-isler-liste .is-detay:not([hidden])")) isEmirleriCiz();
   }, 3000);
 }

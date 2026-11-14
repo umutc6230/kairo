@@ -406,3 +406,22 @@ async def test_ayni_resim_tekrar_eklenince_eskisi_gonderilmez_uyari_yok(istemci,
         if p["type"] == "image_url"
     ]
     assert gecmis_gorsel == [] and son[-1]["content"][1]["type"] == "image_url"
+
+
+async def test_github_baglan_kapali_kaydi_acar(istemci, monkeypatch):
+    import subprocess
+    import types
+
+    import app.api as api_mod
+
+    monkeypatch.setattr(api_mod.shutil, "which", lambda _ad: "gh")
+    monkeypatch.setattr(
+        subprocess, "run", lambda *a, **k: types.SimpleNamespace(returncode=0, stdout="tok\n")
+    )
+    await istemci.post(
+        "/api/mcp", json={"ad": "github", "url": "https://api.githubcopilot.com/mcp/"}
+    )
+    await istemci.put("/api/mcp/github", json={"aktif": False})
+    assert (await istemci.post("/api/github/baglan")).json()["durum"] == "bagli"
+    s = next(x for x in (await istemci.get("/api/mcp")).json()["sunucular"] if x["ad"] == "github")
+    assert s["aktif"] is True

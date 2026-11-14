@@ -1,5 +1,5 @@
 # DURUM - kairo
-guncel: 2026-11-13 | son arac: Claude Code (diger hesaptan devam) | dal: feature/ajan-katmani
+guncel: 2026-11-14 | son arac: Claude Code | dal: feature/ajan-katmani
 
 - 2026-11-13 (16): commit a4fc316 pushlandi. (1) BUYUT: cercevesiz pencere maximize() ile gorev cubugunu kapliyordu -> main.py PencereApi._calisma_alanina_sigdir: form.Bounds = Screen.WorkingArea, durum gercek sinirdan (bayrak acilista tutmuyordu). Gercek pencerede UIA ile olculdu: buyuk 0,0-1920,1140, gorev cubugu 1140-1200 acik, geri alma eski boyut. (2) AD: proje klasoru Projects\kairo, exe Kairo.exe, teslim Desktop\Portable Programlar\Kairo (data tasindi), spec paketleme/kairo.spec, pyproject/MCP clientInfo/User-Agent/OpenRouter Referer/version anahtari 'kairo' (eski 'yerel_ai_studio' anahtari arka plan tespitinde hala taniniyor). Baslangic kisayolu yeni exe'ye cevrildi. GitHub reposu henuz yerel-ai-studio adinda. Gecmis kayitlar ve degerlendirme raporlari eski adla birakildi.
 - 2026-11-13 (15): TAM PAKET KOSULDU: 679 gecti, 3 atladi (test_a9_masaustu haric, 14.5 dk); test_a9_masaustu ayri 5/5; ruff temiz. Teslim exe (10:45) kaynaktan yeni, yeniden derleme gerekmedi. COMMIT YOK, push onayi bekliyor.
@@ -363,6 +363,12 @@ Python 3.12 + FastAPI + pywebview; arayuz vanilla JS. Paketleme: PORTABLE (kulla
   ozyineleme (alt cizgili ad); adres /v1 cift ekleniyordu; "İ".lower() hatasi; durdur kilitte asiliydi.
 
 ## Siradaki adim
+- WRONGSTACK B-E (kullanici istegi 2026-11-14, OGRENEN-SISTEM-PLANI.md). Onceki tur (GitHub + thread'ler) derlendi + teslim 09:40, acildi. B-E sonrasi tam paket gecti (test_a9_masaustu haric), derlendi + teslim 09:59 (data korundu), acildi. COMMIT YOK:
+  - [x] B dongu tespiti: runner.py _periyot_tekrari (2-3'luk desen >=3 tur -> DONGU_UYAR gibi atlanir) + _koc (ayni hata imzasi farkli argumanla 3 kez -> 'koc' notu; yazma sonrasi 'dogrula' notu). tests/test_ogrenen_b.py
+  - [x] C kanitli hafiza: Hafiza.dayanak ('yol::metin', dosya metni kaybedince not sisteme girmez), yararli/eski/yanlis + revizyon, ilgili() sorgu kelimesine gore en iyi 6 / 800 krk, yanlis>=2 dusurur; hafiza_yargila araci (hafiza_acik), hafizaya_ekle dayanak alir. tests/test_ogrenen_c.py
+  - [x] D runner._incelenmeli/_incele + api _gorev_incele: dosya yazan basarili/dogrulanmadi gorev bitince git diff HEAD -- yazilan dosyalar -> rv.istem/sonuclandir; Run.inceleme; kritik/yuksek bulgu dersler'e ('inceleme'). Ayar otomatik_inceleme (varsayilan acik, Ayarlar>Hafiza). gorevler.js incelemeHtml. tests/test_ogrenen_d.py. Gercek modelle DENENMEDI
+  - [x] E cli_ajan antigravity (agy -p --output-format stream-json, --conversation, accept-edits / --dangerously-skip-permissions; agy --help + canli cikti ile dogrulandi; denied_actions ozete yazilir). Ajan formunda secenek. Sohbet araci cli_ye_yaptir (YanEtki.komut, proje disi klasor reddi, saglayici|klasor basina konusma surer). tests/test_ogrenen_e.py. cli_ye_yaptir gercek CLI ile DENENMEDI
+- 2026-11-14 (llm oturumundan): GitHub 'Baglan' kapali (aktif:false) kaydi acmiyordu -> api.py github_baglan aktif:True (gh zaten girisli oldugu icin giris penceresi cikmaz, mevcut token kullanilir). test_api github testi. Video T1-T4 asagida [x]. Testler: superajan+api+alt_oturum+sohbet_araclari+baglam 65 gecti. KALAN: gercek modelle sohbetten thread acma denemesi, derle + teslim, commit/push onayi.
 - DEVAM EDEN PLAN (2026-11-13, Claude Code oturumu, commit YOK):
   - [x] Proje formu Klasor sec (main.py PencereApi.klasor_sec, proje.js data-klasor-sec)
   - [x] MCP stdio tools/call suresi timeout argumanina uyar (mcp.py arac_suresi, taskkill /T); test_mcp_sure
@@ -464,7 +470,36 @@ Python 3.12 + FastAPI + pywebview; arayuz vanilla JS. Paketleme: PORTABLE (kulla
   - [x] "Dogrulanmadi" yanlis alarmi: arastirma sonunda DURUM.md notu (BRAIN-POLICY) web kanitini gecersiz kiliyordu.
     runner.kayit_dosyasi_mi: DURUM.md/PROJE-REHBER.md/LESSONS.md/CHANGELOG.md, /journal/, /kayit/ yazimlari kanit
     kuralinda "son degisiklik" sayilmaz. Canli ornek run e4bdfd142a6a. test_dersler'e test.
-  - [ ] SIRADA: (1) dsh-superagent D1 (SUPERAJAN-PLANI.md; 3 soru kullaniciya); (2) agent-desktop karari.
+  - [x] SUPERAJAN D1 (2026-11-14, COMMIT YOK, kuruldu 09:19): app/agent/superajan.py (IsEmri, asama tablosu, gorev_metni,
+    SuperajanDeposu <veri>/superajan.json), worktree.git_mi/git_baslat (onayli git init + ilk commit), api.py
+    _superajan_tick (_ajan_dongusu icinde, ESZAMANLI=2, yalniz projesi acikken) + /api/superajan rotalari (isler,
+    git-baslat, mesaj, tekrar, durdur, birlestir, at, sil), app/web/superajan.js Ajanlar sayfasinda "Is emirleri"
+    paneli (insan bekleyenler once + tek eylem, bitenler katli). NOTICE-dsh-superagent.md. tests/test_superajan.py (15).
+    Onizlemede: GIT_YOK onayi -> git olustu -> is/<id> dalinda basladi; yerel 16K modelde baglam yetmedi -> Basarisiz +
+    Tekrar dene goruldu. Kullanici kararlari (onerilenler): bos klasorde onayli git init; sohbette her zaman kart;
+    GitHub hitabi /kairo. SIRADAKI: D2 sohbet karti dugmesi, D3 GitHub salt okunur, D4 teslim (PR), D5 takip.
+  - [x] Plugin MCP eksik degisken (2026-11-14): github plugin "Bearer ${GITHUB_PERSONAL_ACCESS_TOKEN}" degisken yokken
+    "Bearer " -> LocalProtocolError. cc_plugin.eksik_degiskenler + McpSunucu.eksik_degiskenler: baslik gonderilmez,
+    durum "Kimlik bilgisi eksik: X ortam degiskeni tanimli degil", baglanmaya calisilmaz. context7 plugin'i
+    ?client=claude-code-plugin adresi OAuth ister (401); duz adres anahtarsiz calisir, Claude Desktop'tan gelen
+    Context7 zaten bagli -> plugin MCP'si yinelenen, kapatilabilir.
+  - [x] VIDEO OZELLIKLERI (2026-11-14, COMMIT YOK, derlenmedi): Claude "proje sohbeti + thread'ler" (kullanici istegi 2026-11-14; videolar Desktop
+Ukftd_yGittV8xV.mp4,
+    ywaDohNHWf6fotse.mp4). Thread = superajan is emri. Maddeler:
+    - [x] T1 sohbet araci is_emri_baslat (birden cok is -> her biri thread) + cevabin altinda canli thread listesi (durum noktasi, tikla ac)
+      -> sohbet_araclari IS_EMRI_ARACI + is_emri_isleyicileri, api _sohbet_is_ac (aktif proje + git sart); superajan.js threadKarti (4 sn canli, nokta+rozet)
+    - [x] T2 sohbet araci is_emirleri_durum ("her sey ne durumda?") + sag panelde Threads grubu: Incelemeye hazir / Seni bekliyor / Calisiyor + gecen sure
+      -> IS_DURUM_ARACI (once insan bekleyen sirali); sagpanel.js threadlerYenile: Seni bekliyor / Incelemeye hazir / Sorun var / Calisiyor + gecen sure, tikla -> Ajanlar
+    - [x] T3 thread'in soru_sor sorusu proje sohbetinde secenekli kart (A onerilen / B, "Thread'i ac"); cevap thread'e gider
+      -> insan_bekliyor olunca kart satiri kendiliginden acilir, canli gorunumden (sohbetteGorevGoster) cevaplanir; ayri A/B karti YAPILMADI
+    - [x] T4 thread gorunumu: "Bu thread'i yonlendir" girdisi, /btw (ana sohbete gider, yeni thread), /fork <talimat> (yeni thread)
+      -> satir detayinda 'Bu thread'i yonlendir' (/mesaj), /btw -> ana sohbete gonderir, /fork <talimat> -> yeni thread (gorev 400 krk kesik ozetten)
+  - [ ] MODS (kullanici istegi 2026-11-14; code.claude.com/docs/en/plugins/mods/*): Kairo uzantilari (app/services/uzantilar.py,
+    ayri surec + JSON) Mods'a yaklastirilacak: olaylar arac_cagrisi (izle/engelle/arguman degistir/cevapla), istem
+    (prompt rewrite), tur_bitis; UI yuzeyleri durum cubugu metni, bildirim (toast), istem ustu bant (md + dugme),
+    baykus etiketi eki; dosya degisince yeniden yukleme; "Kairo mod yazsin" araci (+ karantina incelemesi);
+    GitHub'dan kurulum skill_ice gibi Claude Code denetimli. Guvenlik: ayri surec kalir (Mods sandbox'siz; Kairo daha sikidir).
+  - [ ] SIRADA: (1) dsh-superagent D2-D5 (SUPERAJAN-PLANI.md; 3 soru kullaniciya); (2) agent-desktop karari.
   - [ ] DSH-SUPERAGENT WINDOWS PORTU (kullanici istegi 2026-11-14, BASLANDI, kod YOK): belgeler okundu (000, 001).
     Kavramlar: Source->Trigger->Thread->Eval(gate+assessment)->Ticket(Mandate)->Assignment(Executor)->Channel.
     Kairo karsiligi: kaynak=GitHub (gh api, ETag), politika=izinli loginler, yurutucu=AgentRunner + worktree,

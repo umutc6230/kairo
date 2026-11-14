@@ -18,14 +18,14 @@ Alinmayacak: Kanban lease, Chronicle SQLite, vector-memory (ikinci model RAM ist
 (belgesiz Google ic API'si + ikiliden cikarilmis OAuth sirri; ToS/kirilganlik).
 
 ## Sira
-- [ ] A. Ders defteri app/agent/dersler.py: <veri>/dersler.jsonl; runner.py hata/dongu/kanit reddi/basarisiz bitiste yazar
+- [x] A. Ders defteri app/agent/dersler.py: <veri>/dersler.jsonl; runner.py hata/dongu/kanit reddi/basarisiz bitiste yazar
   (model cagrisi yok); yeni gorevde ilgili <=5 ders <=600 karakter sisteme; ayni hata tekrarlaninca arac sonucuna
   "daha once goruldu, ise yarayan: ...". Kabul: tekil imza+sayi, cozuldu+cozum, <=600 karakter, maskele.
-- [ ] B. Dongu tespiti: Adim.sonuc_ozeti, periyot 2-3 tekrar ve ayni hata farkli arguman; koc notlari (yazdiktan
+- [x] B. Dongu tespiti: Adim.sonuc_ozeti, periyot 2-3 tekrar ve ayni hata farkli arguman; koc notlari (yazdiktan
   sonra dogrula, politika reddi kesin).
-- [ ] C. Kanitli hafiza: dayanak (max 4 source_contains), revizyon, yargilar, hafiza_yargila araci; ilgili en iyi 6, 800 karakter.
-- [ ] D. Chimera: run bitince review.py degisen dosyalarla, bulgular derslere.
-- [ ] E. CLI'lar: cli_ajan.py'ye antigravity (agy.exe; headless argumanlari once `agy --help` ile dogrulanmali),
+- [x] C. Kanitli hafiza: dayanak (max 4 source_contains), revizyon, yargilar, hafiza_yargila araci; ilgili en iyi 6, 800 karakter.
+- [x] D. Chimera: run bitince review.py degisen dosyalarla, bulgular derslere.
+- [x] E. CLI'lar: cli_ajan.py'ye antigravity (agy.exe; headless argumanlari once `agy --help` ile dogrulanmali),
   sohbet araci cli_ye_yaptir(saglayici, gorev, klasor?) -> YanEtki.komut onayi, oturum basina resume.
 
 ## Guvenlik notu (WrongStack reposu)

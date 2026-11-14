@@ -3,6 +3,8 @@ modelinden uyarlandi). Kullanicinin KENDI aboneligi ve oturumu kullanilir; Kairo
 
 - Claude Code: `claude -p ... --output-format stream-json --verbose`; oturum `--resume <id>`.
 - Codex: `codex exec --json -C <klasor>`; oturum `codex exec resume <id>`.
+- Antigravity: `agy -p ... --output-format stream-json`; oturum `--conversation <id>`
+  (argumanlar 2026-11-14 `agy --help` ve canli ciktiyla dogrulandi).
 - Ortam: Kairo'nun izinli ortam listesi (ortam_allowlist). Bu, ust surecin (or. Claude Desktop)
   oturum degiskenlerini tasimaz; tasirsa ic ice CLI bos cikti verip cikiyordu (canli gozlem).
 - Izin: Kairo'da tam yetki aciksa Claude `bypassPermissions` / Codex `danger-full-access`;
@@ -24,7 +26,9 @@ from pathlib import Path
 
 from app.agent.dosyalar import ortam_allowlist
 
-SAGLAYICILAR = {"kairo": "Kairo ajani", "claude": "Claude Code", "codex": "Codex"}
+SAGLAYICILAR = {
+    "kairo": "Kairo ajani", "claude": "Claude Code", "codex": "Codex", "antigravity": "Antigravity",
+}  # fmt: skip
 MAX_LOG = 200
 ZAMAN_ASIMI = 3600
 
@@ -53,8 +57,14 @@ def codex_komutu() -> list[str] | None:
     return [y] if y else None
 
 
+def agy_yolu() -> str | None:
+    aday = Path(os.environ.get("LOCALAPPDATA", "")) / "agy" / "bin" / "agy.exe"
+    return str(aday) if aday.is_file() else shutil.which("agy")
+
+
 def durum() -> dict:
-    return {"claude": bool(claude_yolu()), "codex": bool(codex_komutu())}
+    return {"claude": bool(claude_yolu()), "codex": bool(codex_komutu()),
+            "antigravity": bool(agy_yolu())}  # fmt: skip
 
 
 def komut_kur(
@@ -84,6 +94,18 @@ def komut_kur(
         if model:
             k += ["-m", model]
         return [*k, "resume", oturum, istem] if oturum else [*k, istem]
+    if saglayici == "antigravity":
+        exe = agy_yolu()
+        if not exe:
+            raise RuntimeError("Antigravity CLI (agy) bulunamadi.")
+        istem = f"{ek_sistem}\n\n---\n{mesaj}" if ek_sistem and not oturum else mesaj
+        k = [exe, "-p", istem, "--output-format", "stream-json", "--add-dir", str(klasor)]
+        k += ["--dangerously-skip-permissions"] if tam_yetki else ["--mode", "accept-edits"]
+        if oturum:
+            k += ["--conversation", oturum]
+        if model:
+            k += ["--model", model]
+        return k
     raise RuntimeError(f"Bilinmeyen saglayici: {saglayici}")
 
 
@@ -113,6 +135,31 @@ def olay_isle(saglayici: str, e: dict, s: CliSonuc) -> None:
             s.ozet = str(e.get("result") or "").strip()
             s.maliyet_usd = float(e.get("total_cost_usd") or 0)
             s.durum = "basarisiz" if e.get("is_error") else "basarili"
+        return
+    if saglayici == "antigravity":
+        olay = e.get("event")
+        if e.get("conversation_id"):
+            s.oturum = e["conversation_id"]
+        if olay == "step_update":
+            st = e.get("step_update") or {}
+            if st.get("step_type") == "tool" and st.get("state") in ("DONE", "ERROR"):
+                arg = json.dumps((st.get("tool_info") or {}).get("parameters") or {},
+                                 ensure_ascii=False)[:160]  # fmt: skip
+                isaret = "🔧" if st["state"] == "DONE" else "⚠"
+                s.log.append(f"{isaret} {st.get('tool_name')} {arg}")
+        elif olay == "result":
+            res = e.get("result") or {}
+            s.oturum = res.get("conversation_id") or s.oturum
+            s.ozet = str(res.get("response") or "").strip()
+            basarili = res.get("status") == "SUCCESS" and bool(s.ozet)  # ret notundan once
+            reddedilen = [d.get("action") for d in res.get("denied_actions") or []]
+            if reddedilen:  # headless onay soramaz; kullaniciya neden eksik kaldigini soyle
+                s.ozet += (
+                    f"\n\n(Izin verilmedigi icin yapilamayan: {', '.join(map(str, reddedilen))}."
+                    " Tam yetki acilirsa calisir.)"
+                )
+            s.durum = "basarili" if basarili else "basarisiz"
+        s.log = s.log[-MAX_LOG:]
         return
     # codex
     if t == "thread.started":

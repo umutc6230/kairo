@@ -883,3 +883,23 @@ body.uzak-saglayici [data-yalniz-yerel] { display: none !important; }
 .ske-ad-sec { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; color: var(--sari); }
 .ske-ad-sec .alan { max-width: 260px; height: 30px; font-size: 13px; }
 .ske-riskli-kart { color: var(--sari); }
+
+/* ---- Superajan: is emirleri paneli (Ajanlar sayfasi) ---- */
+.aj-isler { display: flex; flex-direction: column; gap: 6px; margin-bottom: 18px; }
+.aj-isler .ek-liste { border: 1px solid var(--cizgi); border-radius: 12px; padding: 0 12px; }
+.is-satir .ek-satir .btn { flex-shrink: 0; }
+.is-detay { padding: 0 4px 12px; display: flex; flex-direction: column; gap: 8px; }
+.is-ozet { background: var(--yuzey2); border-radius: 8px; padding: 8px 10px; font-size: 13.5px; }
+
+/* Sohbetteki thread karti */
+.thread-kart { border: 1px solid var(--cizgi, #8884); border-radius: 8px; padding: 6px 8px; margin: 6px 0; }
+.thread-ust { margin-bottom: 4px; }
+.thread-bas { display: flex; align-items: center; gap: 8px; width: 100%; background: none; border: 0; color: inherit; padding: 4px 2px; cursor: pointer; text-align: left; }
+.thread-ad { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.thread-nokta { width: 8px; height: 8px; border-radius: 50%; background: #8888; flex: none; }
+.thread-nokta.yesil { background: #3a9d5d; } .thread-nokta.sari { background: #d9a520; }
+.thread-nokta.kirmizi { background: #d0473b; } .thread-nokta.mavi { background: #4a7fd8; }
+.thread-detay { padding: 4px 0 8px 16px; }
+.thread-yonlendir { display: flex; gap: 6px; margin-top: 6px; } .thread-yonlendir .alan { flex: 1; }
+.ajan-inceleme summary { cursor: pointer; }
+.inceleme-bulgu { margin: 6px 0; }

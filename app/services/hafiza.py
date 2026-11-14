@@ -8,6 +8,7 @@
 
 from __future__ import annotations
 
+import re
 import uuid
 from datetime import date, datetime
 from pathlib import Path
@@ -20,7 +21,11 @@ from app.exceptions import Bulunamadi, UygulamaHatasi
 from app.services.depo import json_oku, json_yaz
 
 MAX_KAYIT = 300
-MAX_SISTEM_KAYDI = 20
+MAX_SISTEM_KAYDI = 6  # Ogrenen sistem C: ilgiye gore en iyi 6
+MAX_SISTEM_KARAKTER = 800
+MAX_DAYANAK = 4
+_KELIME = re.compile(r"[a-z0-9çğıöşü_]{3,}")
+YARGILAR = ("yararli", "eski", "yanlis")
 
 
 class Hafiza(BaseModel):
@@ -32,6 +37,27 @@ class Hafiza(BaseModel):
     tarih: str = Field(default_factory=lambda: datetime.now().isoformat(timespec="seconds"))
     gecerlilik: str | None = None  # YYYY-MM-DD; sonrasinda kullanilmaz
     aktif: bool = True
+    # Kanit (WrongStack SAGE fikri): "dosya_yolu::icerdigi metin". Dosya artik metni icermiyorsa
+    # not ESKI sayilir ve sisteme girmez (kod degisti, bilgi bayatladi).
+    dayanak: list[str] = Field(default=[], max_length=MAX_DAYANAK)
+    yararli: int = 0
+    eski: int = 0
+    yanlis: int = 0
+    revizyon: int = 1
+
+    def dayanak_tutuyor_mu(self) -> bool:
+        for d in self.dayanak:
+            yol, _, parca = d.partition("::")
+            try:
+                if parca and parca not in Path(yol).read_text(encoding="utf-8", errors="ignore"):
+                    return False
+            except OSError:
+                return False
+        return True
+
+    def puan(self, kelimeler: set[str]) -> float:
+        ortak = len(kelimeler & set(_KELIME.findall(self.metin.lower())))
+        return ortak * 2 + self.yararli - 2 * self.yanlis - self.eski + (self.guven == "yuksek")
 
     def gecerli_mi(self, bugun: date | None = None) -> bool:
         if not self.aktif:
@@ -108,15 +134,45 @@ class HafizaDeposu:
             "kayitlar": self.liste(),
         }
 
-    def ilgili(self, kapsam: str) -> list[Hafiza]:
-        return [k for k in self._liste() if k.kapsam in ("genel", kapsam) and k.gecerli_mi()]
+    def ilgili(self, kapsam: str, sorgu: str = "") -> list[Hafiza]:
+        """Gecerli, yanlis sayilmamis, dayanagi tutan notlar; sorguya ilgiye gore siralanir."""
+        kelimeler = set(_KELIME.findall(sorgu.lower()))
+        uygun = [
+            k
+            for k in self._liste()
+            if k.kapsam in ("genel", kapsam) and k.gecerli_mi() and k.yanlis < 2
+            and k.dayanak_tutuyor_mu()
+        ]  # fmt: skip
+        # esit puanda yeni kayit once (eski davranis: son kayitlar)
+        return sorted(reversed(uygun), key=lambda k: k.puan(kelimeler), reverse=True)
 
-    def sistem_metni(self, kapsam: str) -> str:
-        kayitlar = self.ilgili(kapsam)[-MAX_SISTEM_KAYDI:]
-        if not kayitlar:
-            return ""
+    def yargila(self, kayit_id: str, yargi: str, duzeltme: str = "") -> dict:
+        """Ajan/kullanici notu degerlendirir; duzeltme metni yeni revizyon olur."""
+        if yargi not in YARGILAR:
+            raise UygulamaHatasi(f"Yargi su degerlerden biri olmali: {', '.join(YARGILAR)}")
+        kayitlar = self._liste()
+        for i, k in enumerate(kayitlar):
+            if k.id == kayit_id:
+                yeni = k.model_dump()
+                yeni[yargi] += 1
+                if duzeltme.strip():
+                    yeni |= {"metin": _sir_yok(duzeltme), "revizyon": k.revizyon + 1,
+                             "yanlis": 0, "eski": 0}  # fmt: skip
+                kayitlar[i] = Hafiza(**yeni)
+                self._yaz(kayitlar)
+                return kayitlar[i].model_dump()
+        raise Bulunamadi("Hafiza kaydi bulunamadi.")
+
+    def sistem_metni(self, kapsam: str, sorgu: str = "") -> str:
         satirlar = [
-            "HAFIZA (onceki oturumlardan notlar; dogrulanmamis olabilir, kanit yerine gecmez):"
+            "HAFIZA (onceki oturumlardan notlar; dogrulanmamis olabilir, kanit yerine gecmez. "
+            "Bir not yanlis ya da eskiyse hafiza_yargila ile bildir):"
         ]
-        satirlar += [f"- [{k.guven}, {k.kaynak}, {k.tarih[:10]}] {k.metin}" for k in kayitlar]
-        return "\n".join(satirlar)
+        boy = len(satirlar[0])
+        for k in self.ilgili(kapsam, sorgu)[:MAX_SISTEM_KAYDI]:
+            satir = f"- [{k.id}, {k.guven}, {k.tarih[:10]}] {k.metin}"
+            if boy + len(satir) > MAX_SISTEM_KARAKTER:
+                break
+            satirlar.append(satir)
+            boy += len(satir)
+        return "\n".join(satirlar) if len(satirlar) > 1 else ""

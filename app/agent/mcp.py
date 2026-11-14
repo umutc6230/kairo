@@ -58,6 +58,8 @@ class McpSunucu(BaseModel):
     aktif: bool = True
     tembel: bool = False  # araclar modele tek tek degil, ara/sema/cagir gecidiyle sunulur
     oauth: dict = {}  # OAuth girisi (mcp_oauth): token, yenileme, bitis; disari GITMEZ
+    # plugin .mcp.json'daki ${DEGISKEN} tanimli degil (or. GITHUB_PERSONAL_ACCESS_TOKEN)
+    eksik_degiskenler: list[str] = []
 
     @model_validator(mode="after")
     def _tasima(self) -> McpSunucu:
@@ -672,6 +674,13 @@ class McpYoneticisi:
             if not s.aktif:
                 sonuc[s.ad] = {"durum": "kapali"}
                 continue
+            if s.eksik_degiskenler:  # baglanmayi denemeden soyle (yoksa anlasilmaz HTTP hatasi)
+                sonuc[s.ad] = {
+                    "durum": "hata",
+                    "hata": "Kimlik bilgisi eksik: "
+                    f"{', '.join(s.eksik_degiskenler)} ortam degiskeni tanimli degil.",
+                }
+                continue
             b = self._baglanti(s)
             f = self._suren.get(s.ad)
             if f is None:
@@ -689,7 +698,9 @@ class McpYoneticisi:
         izin_uygula(arac_adi, salt_okunur, ozet) PolitikaMotoru kararini uygular."""
         semalar: list[dict] = []
         isleyiciler: dict = {}
-        hazir = self._paralel_hazirla([s for s in self.tum() if s.aktif])
+        hazir = self._paralel_hazirla(
+            [s for s in self.tum() if s.aktif and not s.eksik_degiskenler]
+        )
         for s, b in hazir:
             if tembel_mi(s, b.araclar):
                 ts, ti = _tembel_araclar(s, b, izin_uygula)

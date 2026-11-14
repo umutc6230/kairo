@@ -29,10 +29,14 @@ from app.services.sohbet_araclari import (
     AJAN_NOTU,
     AJAN_OLUSTUR_ARACI,
     ALT_OTURUM_ARACI,
+    CLI_ARACI,
+    IS_DURUM_ARACI,
+    IS_EMRI_ARACI,
     PLAN_ARACI,
     SISTEM_NOTU,
     DosyaAraclari,
     alt_oturum_isleyici,
+    is_emri_isleyicileri,
     plan_isleyici,
     sonuc_ozeti,
     varsayilan_kokler,
@@ -658,6 +662,8 @@ class SohbetServisi:
         self.mcp = None  # McpYoneticisi (api baglar)
         self.uzantilar = None  # UzantiYoneticisi (api baglar)
         self.ajan_olusturucu = None  # AjanDeposu.olustur (api baglar): sohbetten kalici ajan
+        self._cli_oturumlari: dict[str, str] = {}  # "saglayici|klasor" -> CLI konusma id
+        self.is_emirleri = None  # (ac, listele) api baglar: sohbetten thread (is emri)
         self.tarayici = None  # Tarayici (api baglar)
         self.masaustu = None  # Masaustu (api baglar)
         self.kod_zekasi: dict[str, Any] = {}  # alan id -> KodZekasi (dil sunuculari surer)
@@ -857,12 +863,18 @@ class SohbetServisi:
             if self.ajan_olusturucu is not None and self.politika is not None:
                 araclar.append(AJAN_OLUSTUR_ARACI)
                 isleyiciler["ajan_olustur"] = self._ajan_olustur_isleyici(alan)
+            if self.politika is not None:
+                araclar.append(CLI_ARACI)
+                isleyiciler["cli_ye_yaptir"] = self._cli_isleyici(alan, ayar)
+            if self.is_emirleri is not None:
+                araclar += [IS_EMRI_ARACI, IS_DURUM_ARACI]
+                isleyiciler |= is_emri_isleyicileri(*self.is_emirleri)
             skill_metni = skill_metni.replace(skl.SINIR, skl.SINIR_AJAN)
         else:
             not_ = f"{SISTEM_NOTU}\n{kapsam_notu(alan)}" if ayar.sohbet_araclari else ""
         proje_talimati = self.proje_talimat_metni(alan)
         hafiza = (
-            self.hafiza.sistem_metni(alan.id)
+            self.hafiza.sistem_metni(alan.id, istek_metni or "")
             if self.hafiza is not None and getattr(ayar, "hafiza_acik", False)
             else ""
         )
@@ -888,6 +900,41 @@ class SohbetServisi:
         if not ayar.sohbet_araclari and alan.id == VARSAYILAN_ALAN_ID:
             return sistem, [], {}, otomatik  # kullanici sohbette araclari kapatti
         return sistem, araclar, isleyiciler, otomatik
+
+    def _cli_isleyici(self, alan: CalismaAlani, ayar):
+        """Sohbetten Claude Code / Codex / Antigravity CLI'sine is (YanEtki.komut: onayli modda
+        sorulur). Ayni saglayici + klasor icin konusma surdurulur (oturum)."""
+        from pathlib import Path
+
+        from app.agent import cli_ajan
+        from app.agent.yazma import sonuc_veya_hata
+
+        politika, oturumlar = self.politika, self._cli_oturumlari
+
+        def yap(saglayici: str = "", gorev: str = "", klasor: str = "") -> dict:
+            if saglayici not in ("claude", "codex", "antigravity") or not str(gorev).strip():
+                return {"hata": "saglayici (claude|codex|antigravity) ve gorev gerekli."}
+            kokler = alan.izinli_kokler
+            hedef = Path(klasor).resolve() if klasor else (kokler[0] if kokler else Path.home())
+            if klasor and not any(hedef == k or k in hedef.parents for k in kokler):
+                return {"hata": "Klasor acik projenin disinda; once o klasoru proje olarak ac."}
+            politika.uygula(
+                Istek(arac="cli_ye_yaptir", yan_etki=YanEtki.komut,
+                      ozet=f"{cli_ajan.SAGLAYICILAR[saglayici]}: {str(gorev)[:120]}",
+                      komut=f"{saglayici} @ {hedef}\n{gorev}"[:4000]),
+                alan,
+            )  # fmt: skip
+            anahtar = f"{saglayici}|{hedef}"
+            s = asyncio.run(cli_ajan.calistir(
+                saglayici, str(gorev), hedef, oturum=oturumlar.get(anahtar, ""),
+                tam_yetki=bool(getattr(ayar, "tam_yetki", False)),
+            ))  # fmt: skip
+            if s.oturum:
+                oturumlar[anahtar] = s.oturum
+            return {"durum": s.durum, "ozet": s.ozet[:6000], "adimlar": s.log[-15:],
+                    "maliyet_usd": s.maliyet_usd}  # fmt: skip
+
+        return lambda **kw: sonuc_veya_hata(yap, **kw)
 
     def _ajan_olustur_isleyici(self, alan: CalismaAlani):
         from app.agent.yazma import sonuc_veya_hata

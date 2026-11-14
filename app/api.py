@@ -42,7 +42,7 @@ from app.agent.masaustu import Masaustu
 from app.agent.mcp import McpYoneticisi
 from app.agent.policy import Istek, PolitikaMotoru, YanEtki, yerel_host_mu
 from app.agent.runner import BITMIS as BITMIS_RUN
-from app.agent.runner import AgentRunner, Butce, RunDeposu, RunDurum, olay_akisi
+from app.agent.runner import YAZAN_ARACLAR, AgentRunner, Butce, RunDeposu, RunDurum, olay_akisi
 from app.agent.takim import TakimPanosu
 from app.agent.tarayici import Tarayici, playwright_var
 from app.agent.terminal import KomutServisi
@@ -131,6 +131,13 @@ class GorevIstegi(BaseModel):
     etkilesimli: bool = False  # sohbetten: ajan soru_sor ile kullaniciya soru sorabilir
 
 
+class IsEmriIstegi(BaseModel):
+    gorev: str = Field(default="", max_length=8000)
+    baslik: str = Field(default="", max_length=120)
+    proje_kok: str = Field(default="", max_length=4096)
+    kaynak: Literal["elle", "sohbet"] = "elle"
+
+
 class EntegreIstegi(BaseModel):
     test_komutu: str = Field(default="", max_length=2000)
 
@@ -154,11 +161,36 @@ HAFIZA_ARACI = {
         "(or. 'testler pytest -q ile calisir'). Sir, gecici durum ya da tahmin yazma.",
         "parameters": {
             "type": "object",
-            "properties": {"metin": {"type": "string"}},
+            "properties": {
+                "metin": {"type": "string"},
+                "dayanak": {
+                    "type": "array", "maxItems": 4, "items": {"type": "string"},
+                    "description": "Kanit: 'dosya_tam_yolu::dosyada gecen kisa metin'. Dosya "
+                    "degisip metin kaybolursa not otomatik eskir.",
+                },
+            },
             "required": ["metin"],
         },
     },
-}
+}  # fmt: skip
+
+HAFIZA_YARGI_ARACI = {
+    "type": "function",
+    "function": {
+        "name": "hafiza_yargila",
+        "description": "Sistemdeki HAFIZA notlarindan birini degerlendirir: yararli (ise yaradi), "
+        "eski (artik gecerli degil), yanlis. Yanlis/eski ise dogrusunu `duzeltme` ile yaz.",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "id": {"type": "string"},
+                "yargi": {"type": "string", "enum": ["yararli", "eski", "yanlis"]},
+                "duzeltme": {"type": "string"},
+            },
+            "required": ["id", "yargi"],
+        },
+    },
+}  # fmt: skip
 
 
 class HafizaIstegi(BaseModel):
@@ -382,13 +414,27 @@ def uygulama_olustur(
         if a.otomatik_ogrenme:  # kullanici actiysa ajan kalici not ekleyebilir (dusuk guven)
             araclar_ = [*araclar_, HAFIZA_ARACI]
 
-            def hafizaya_ekle(metin: str) -> dict:
+            def hafizaya_ekle(metin: str, dayanak: list | None = None) -> dict:
                 try:
-                    return hafiza.ekle(metin, kaynak="ajan", guven="dusuk", kapsam=alan.id)
-                except UygulamaHatasi as e:
-                    return {"hata": e.mesaj}
+                    dayanak_ = [str(x)[:500] for x in (dayanak or [])][:4]
+                    return hafiza.ekle(
+                        metin, kaynak="ajan", guven="dusuk", kapsam=alan.id, dayanak=dayanak_
+                    )
+                except (UygulamaHatasi, ValueError) as e:
+                    return {"hata": getattr(e, "mesaj", str(e))}
 
             isleyiciler = {**isleyiciler, "hafizaya_ekle": hafizaya_ekle}
+        if a.hafiza_acik:  # notlar sisteme giriyorsa ajan onlari degerlendirebilir (SAGE)
+            araclar_ = [*araclar_, HAFIZA_YARGI_ARACI]
+
+            def hafiza_yargila(id: str, yargi: str, duzeltme: str = "") -> dict:  # noqa: A002
+                try:
+                    k = hafiza.yargila(id, yargi, duzeltme)
+                    return {"tamam": True, "revizyon": k["revizyon"]}
+                except (UygulamaHatasi, Bulunamadi) as e:
+                    return {"hata": e.mesaj}
+
+            isleyiciler = {**isleyiciler, "hafiza_yargila": hafiza_yargila}
 
         def artifact_olustur(ad: str, tur: str, icerik: str) -> dict:
             try:
@@ -457,6 +503,34 @@ def uygulama_olustur(
     from app.agent.dersler import DersDefteri
 
     ajan.dersler = DersDefteri(veri_dizini)  # gorevler arasi hatalardan ogrenme
+
+    async def _gorev_incele(run) -> dict | None:
+        """D (Chimera): gorevin yazdigi dosyalarin git diff'i -> review (model varsayimi)."""
+        if not ayarlar.oku().otomatik_inceleme:
+            return None
+        kok = run.calisma_koku or ajan.kok()
+        dosyalar = sorted({a.dosya for a in run.adimlar if a.dosya and a.arac in YAZAN_ARACLAR})
+        if not kok or not dosyalar:
+            return None
+
+        def _diff() -> str:
+            r = subprocess.run(
+                ["git", "-C", kok, "diff", "HEAD", "--", *dosyalar], capture_output=True,
+                text=True, encoding="utf-8", errors="replace", timeout=30,
+                creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
+            )  # fmt: skip
+            return r.stdout if r.returncode == 0 else ""
+
+        diff = await asyncio.to_thread(_diff)
+        if not diff.strip():
+            return None
+        async with yonetici.kullan() as llm:
+            cevap = await llm.json_cikti(
+                rv.istem(diff), rv.SEMA, ad="review", max_tokens=3000, dusunme="kapali"
+            )
+        return rv.sonuclandir(cevap if isinstance(cevap, dict) else {}, diff)
+
+    ajan.inceleyici = _gorev_incele
     ajan_deposu = AjanDeposu(veri_dizini)
     sohbet.ajan_olusturucu = ajan_deposu.olustur  # sohbette ajan_olustur araci
     ajan_dinleyicileri: list = []  # (ajan, is, run) -> None; Telegram cevabi vb.
@@ -562,7 +636,7 @@ def uygulama_olustur(
             if alinan is None:
                 continue
             a, oge = alinan
-            if a.saglayici in ("claude", "codex"):
+            if a.saglayici in ("claude", "codex", "antigravity"):
                 try:
                     ajan_deposu.basladi(a.id, await _cli_baslat(a, oge))
                 except Exception as e:  # noqa: BLE001
@@ -621,12 +695,107 @@ def uygulama_olustur(
 
     ajan_dinleyicileri.append(_telegram_cevap)
 
+    # ---- Superajan: is emirleri (dsh-superagent tasarimi; SUPERAJAN-PLANI.md) ----
+    from app.agent import superajan as sa
+
+    superajan_deposu = sa.SuperajanDeposu(veri_dizini)
+
+    def _aktif_kok() -> str:
+        alan = sohbet.projeler.aktif() if sohbet.projeler else None
+        return str(Path(alan.kokler[0])) if alan and alan.kokler else ""
+
+    def _durum_ozet(is_: sa.IsEmri) -> tuple[str | None, str]:
+        if not is_.runlar:
+            return None, ""
+        try:
+            r = run_deposu.getir(is_.runlar[-1])
+        except Exception:  # noqa: BLE001 - silinmis run bitmis sayilir
+            return "basarisiz", "Gorev kaydi bulunamadi."
+        return str(r.durum.value), (r.sonuc.ozet or r.hata or "")
+
+    def _is_ozet(is_: sa.IsEmri) -> dict:
+        durum, ozet = _durum_ozet(is_)
+        asama = sa.asama(is_, durum, ozet)
+        bekleme = ""
+        if asama == "sirada" and _aktif_kok() != is_.proje_kok:
+            bekleme = "Projesi açık değil; proje açılınca başlar."
+        return {**is_.model_dump(exclude={"gorev"}), "gorev": is_.gorev[:400], "asama": asama,
+                "run": is_.runlar[-1] if is_.runlar else "", "run_durum": durum or "",
+                "ozet": ozet[:600], "bekleme": bekleme}  # fmt: skip
+
+    def _sohbet_is_ac(baslik: str, gorev: str) -> dict:
+        """Sohbetten thread: aktif projede is emri; dongu (2 sn) baslatir."""
+        kok = _aktif_kok()
+        if not kok:
+            raise UygulamaHatasi("Once bir proje ac.")
+        if not wt.git_mi(Path(kok)):
+            raise UygulamaHatasi("Proje bir git deposu degil; thread ayri dalda calisir.")
+        is_ = superajan_deposu.olustur(baslik, gorev, kok, "sohbet",
+                                       {"yazan": "model", "guc": "cikarim"})  # fmt: skip
+        return _is_ozet(is_)
+
+    def _sohbet_is_liste() -> list[dict]:
+        kok = _aktif_kok()
+        isler = [_is_ozet(x) for x in reversed(superajan_deposu.liste()) if x.proje_kok == kok]
+        sira = {a: i for i, a in enumerate((*sa.INSAN_BEKLIYOR, "calisiyor", "sirada"))}
+        return sorted(isler, key=lambda x: sira.get(x["asama"], 99))
+
+    sohbet.is_emirleri = (_sohbet_is_ac, _sohbet_is_liste)
+
+    async def _is_baslat(is_: sa.IsEmri) -> None:
+        """Bir atama: ilk atamada worktree + dal olusur; sonrakiler ayni dalda onceki ozetle."""
+        izole_kur = None
+        if not is_.calisma_koku:
+            proje = Path(is_.proje_kok)
+
+            def izole_kur(run_id: str) -> tuple[str, str]:
+                yol, dal = wt.olustur(proje, veri_dizini / "worktrees", run_id, "is")
+                return str(yol), dal
+
+        run = await ajan.baslat(
+            sa.gorev_metni(is_, is_.bekleyen_mesaj), [], model=ayarlar.oku().aktif_model,
+            izole_kur=izole_kur, onceki=is_.runlar[-1] if is_.runlar else "",
+            etkilesimli=True, calisma_koku=is_.calisma_koku,
+        )  # fmt: skip
+        is_ = superajan_deposu.getir(is_.id)
+        is_.runlar = [*is_.runlar, run.id]
+        is_.calisma_koku = is_.calisma_koku or run.calisma_koku
+        is_.dal = is_.dal or run.dal
+        is_.bekleyen_mesaj = ""
+        is_.olay(f"Atama baslatildi ({run.id}).")
+        superajan_deposu.guncelle(is_)
+
+    async def _superajan_tick() -> None:
+        """Siradaki is emirlerini baslatir: ayni anda en fazla ESZAMANLI, yalniz projesi acikken
+        (araclar aktif projeye baglidir; kullanicinin acik projesi sessizce degistirilmez)."""
+        isler = [x for x in superajan_deposu.liste() if x.durum == "acik"]
+        asamalar = {x.id: sa.asama(x, *_durum_ozet(x)) for x in isler}
+        calisan = sum(1 for a in asamalar.values() if a == "calisiyor")
+        kok = _aktif_kok()
+        for is_ in isler:
+            if calisan >= sa.ESZAMANLI:
+                return
+            if asamalar[is_.id] != "sirada" or is_.proje_kok != kok:
+                continue
+            try:
+                await _is_baslat(is_)
+                calisan += 1
+            except Exception as e:  # noqa: BLE001 - kaydedilir, dongu durmaz
+                is_ = superajan_deposu.getir(is_.id)
+                is_.durum = "durduruldu"
+                is_.olay(f"Baslatilamadi: {e}")
+                superajan_deposu.guncelle(is_)
+
     async def _ajan_dongusu() -> None:
         while True:
             try:
                 await _ajan_dagit()
             except Exception as e:  # noqa: BLE001
                 logger.warning(f"Ajan kuyrugu: {e}")
+            try:
+                await _superajan_tick()
+            except Exception as e:  # noqa: BLE001
+                logger.warning(f"Superajan: {e}")
             await asyncio.sleep(2)
 
     ajan.takim = TakimPanosu(veri_dizini)
@@ -682,8 +851,112 @@ def uygulama_olustur(
 
     app = FastAPI(title=URUN_ADI, version=__version__, lifespan=omur)
     app.state.ajan_deposu = ajan_deposu
+    app.state.superajan = superajan_deposu
+    app.state.superajan_tick = _superajan_tick
     app.state.ajan_dagit = _ajan_dagit
     app.state.ajan_runner = ajan
+
+    # ---- Superajan rotalari: elle is emri, takip, teslim (birlestir / at), durdur ----
+    @app.get("/api/superajan")
+    async def superajan_liste() -> dict:
+        isler = [_is_ozet(x) for x in reversed(superajan_deposu.liste())]
+        bekleyen = sum(1 for x in isler if x["asama"] in sa.INSAN_BEKLIYOR)
+        return {"isler": isler, "aktif_proje": _aktif_kok(), "insan_bekliyor": bekleyen}
+
+    @app.post("/api/superajan/isler")
+    async def superajan_yeni(istek: IsEmriIstegi) -> dict:
+        kok = istek.proje_kok or _aktif_kok()
+        if not kok:
+            raise UygulamaHatasi("Once bir proje ac ya da proje klasoru sec.")
+        if not await asyncio.to_thread(wt.git_mi, Path(kok)):
+            # arayuz bu kodu gorunce kullaniciya "git deposu olusturulsun mu?" diye sorar
+            raise UygulamaHatasi(
+                "GIT_YOK: Is emri ayri dalda calisir; proje bir git deposu olmali."
+            )
+        dogrula(model_yetenegi(), araclar_gerekli=True, dusunme=ayarlar.oku().dusunme)
+        baslik = istek.baslik.strip() or istek.gorev.strip().splitlines()[0][:80]
+        is_ = superajan_deposu.olustur(baslik, istek.gorev, kok, istek.kaynak,
+                                       {"yazan": "kullanici", "guc": "acik"})  # fmt: skip
+        await _superajan_tick()
+        return _is_ozet(superajan_deposu.getir(is_.id))
+
+    @app.post("/api/superajan/git-baslat")
+    async def superajan_git_baslat(istek: IsEmriIstegi) -> dict:
+        kok = istek.proje_kok or _aktif_kok()
+        if not kok:
+            raise UygulamaHatasi("Once bir proje ac.")
+        return await asyncio.to_thread(wt.git_baslat, Path(kok))
+
+    @app.post("/api/superajan/isler/{iid}/mesaj")
+    async def superajan_mesaj(iid: str, istek: GorevMesaji) -> dict:
+        """Takip: calisan atamaya yonlendirme olur; bitmis is emrine yeni atama acar."""
+        is_ = superajan_deposu.getir(iid)
+        if is_.durum != "acik":
+            raise UygulamaHatasi("Bu is emri kapali.")
+        durum, _ = _durum_ozet(is_)
+        if durum in ("calisiyor", "duraklatildi", "onay_bekliyor", "cevap_bekliyor"):
+            await ajan.mesaj(is_.runlar[-1], istek.metin)
+        else:
+            is_.bekleyen_mesaj = istek.metin.strip()[:4000]
+            is_.olay("Takip mesaji: yeni atama sirada.")
+            superajan_deposu.guncelle(is_)
+            await _superajan_tick()
+        return _is_ozet(superajan_deposu.getir(iid))
+
+    @app.post("/api/superajan/isler/{iid}/tekrar")
+    async def superajan_tekrar(iid: str) -> dict:
+        is_ = superajan_deposu.getir(iid)
+        is_.durum, is_.bekleyen_mesaj = "acik", "Onceki atama bitti; isi tamamla ya da duzelt."
+        is_.olay("Tekrar istendi.")
+        superajan_deposu.guncelle(is_)
+        await _superajan_tick()
+        return _is_ozet(superajan_deposu.getir(iid))
+
+    @app.post("/api/superajan/isler/{iid}/durdur")
+    async def superajan_durdur(iid: str) -> dict:
+        """Kalici durdurma (yalniz kullanici): calisan atama iptal, yeni girdi baslatmaz."""
+        is_ = superajan_deposu.getir(iid)
+        if is_.runlar and ajan.calisiyor_mu(is_.runlar[-1]):
+            await ajan.iptal(is_.runlar[-1])
+        is_.durum = "durduruldu"
+        is_.olay("Kullanici durdurdu.")
+        superajan_deposu.guncelle(is_)
+        return _is_ozet(is_)
+
+    @app.post("/api/superajan/isler/{iid}/birlestir")
+    async def superajan_birlestir(iid: str, istek: EntegreIstegi) -> dict:
+        is_ = superajan_deposu.getir(iid)
+        if not is_.calisma_koku or not is_.dal:
+            raise UygulamaHatasi("Bu is emrinin birlestirilecek dali yok.")
+        s = await asyncio.to_thread(
+            wt.entegre_et, Path(is_.proje_kok), Path(is_.calisma_koku), is_.dal,
+            f"Is emri: {is_.baslik}", istek.test_komutu,
+        )  # fmt: skip
+        if s.get("durum") == "birlestirildi":
+            is_.durum = "bitti"
+            is_.olay("Ana dala birlestirildi.")
+            superajan_deposu.guncelle(is_)
+        return {**s, "is": _is_ozet(is_)}
+
+    @app.post("/api/superajan/isler/{iid}/at")
+    async def superajan_at(iid: str) -> dict:
+        is_ = superajan_deposu.getir(iid)
+        if is_.runlar and ajan.calisiyor_mu(is_.runlar[-1]):
+            await ajan.iptal(is_.runlar[-1])
+        if is_.calisma_koku and is_.dal:
+            await asyncio.to_thread(wt.at, Path(is_.proje_kok), Path(is_.calisma_koku), is_.dal)
+        is_.durum = "bitti"
+        is_.olay("Degisiklikler atildi (ana dala dokunulmadi).")
+        superajan_deposu.guncelle(is_)
+        return _is_ozet(is_)
+
+    @app.delete("/api/superajan/isler/{iid}")
+    async def superajan_sil(iid: str) -> dict:
+        is_ = superajan_deposu.getir(iid)
+        if is_.durum == "acik" and is_.runlar:
+            raise UygulamaHatasi("Acik is emri silinmez; once birlestir, at ya da durdur.")
+        superajan_deposu.sil(iid)
+        return {"silindi": iid}
 
     @app.get("/api/ajanlar")
     async def ajan_listesi() -> dict:
@@ -1441,7 +1714,8 @@ def uygulama_olustur(
                 creationflags=getattr(subprocess, "CREATE_NEW_CONSOLE", 0),
             )  # fmt: skip
             return {"durum": "giris_bekliyor"}
-        veri = {"ad": "github", "url": "https://api.githubcopilot.com/mcp/",
+        # aktif: onceden kapatilmis kayit token yazilinca da kapali kaliyordu ("giris gelmiyor")
+        veri = {"ad": "github", "url": "https://api.githubcopilot.com/mcp/", "aktif": True,
                 "basliklar": {"Authorization": f"Bearer {token}"}}  # fmt: skip
         if any(x.ad == "github" for x in mcp.liste()):
             mcp.guncelle("github", veri)

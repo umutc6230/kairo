@@ -421,6 +421,103 @@ def alt_oturum_isleyici(baslik: str = "", gorev: str = "") -> dict:
     }
 
 
+# Thread'ler (Claude "proje sohbeti" gibi): her is ayri is emri, kendi dalinda arka planda calisir
+IS_EMRI_ARACI = {
+    "type": "function",
+    "function": {
+        "name": "is_emri_baslat",
+        "description": "Kullanici birden cok bagimsiz isi (ya da arka planda yurusun istedigi "
+        "bir isi) verdiginde her birini ayri THREAD olarak baslatir: her thread kendi git dalinda, "
+        "ayri ajanla arka planda calisir, ana kod degismez. "
+        "Isleri burada kendin yapma; baslatip kisaca soyle.",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "isler": {
+                    "type": "array",
+                    "items": {
+                        "type": "object",
+                        "properties": {
+                            "baslik": {"type": "string", "description": "Kisa baslik (<60)"},
+                            "gorev": {"type": "string", "description": "Is ve bitti olcutu"},
+                        },
+                        "required": ["baslik", "gorev"],
+                    },
+                },
+            },
+            "required": ["isler"],
+        },
+    },
+}  # fmt: skip
+
+IS_DURUM_ARACI = {
+    "type": "function",
+    "function": {
+        "name": "is_emirleri_durum",
+        "description": "Bu projedeki thread'lerin (is emirleri) durumunu getirir: calisiyor, seni "
+        "bekliyor (soru/onay), incelemeye hazir, bitti. 'Her sey ne durumda?' gibi "
+        "sorularda kullan; cevapta once kullanicinin elini bekleyenleri soyle.",
+        "parameters": {"type": "object", "properties": {}},
+    },
+}  # fmt: skip
+
+
+def is_emri_isleyicileri(ac, listele) -> dict:
+    """ac(baslik, gorev) -> ozet dict; listele() -> ozet listesi (api baglar)."""
+
+    def baslat(isler: list | None = None) -> dict:
+        isler = [x for x in (isler or []) if isinstance(x, dict)][:8]
+        if not isler:
+            return {"hata": "En az bir is (baslik + gorev) gerekli."}
+        acilan, hatalar = [], []
+        for x in isler:
+            baslik, gorev = str(x.get("baslik", "")).strip(), str(x.get("gorev", "")).strip()
+            if not gorev:
+                hatalar.append(f"{baslik or '?'}: gorev bos")
+                continue
+            try:
+                acilan.append(ac(baslik or gorev.splitlines()[0][:60], gorev))
+            except Exception as e:  # noqa: BLE001 - modele Turkce hata doner
+                hatalar.append(f"{baslik}: {e}")
+        sonuc: dict = {"threadler": [_kisa(o) for o in acilan]}
+        if hatalar:
+            sonuc["hatalar"] = hatalar
+        if acilan:
+            sonuc["not"] = "Thread'ler arka planda calisiyor; kullanici canli listeden izler."
+        return sonuc
+
+    def durum() -> dict:
+        return {"threadler": [_kisa(o) for o in listele()[:30]]}
+
+    return {"is_emri_baslat": baslat, "is_emirleri_durum": durum}
+
+
+def _kisa(o: dict) -> dict:
+    return {k: o.get(k, "") for k in ("id", "baslik", "asama", "ozet", "olusturma", "guncelleme")}
+
+
+CLI_ARACI = {
+    "type": "function",
+    "function": {
+        "name": "cli_ye_yaptir",
+        "description": "Kullanicinin kurulu kodlama CLI'sine (Claude Code, Codex, Antigravity) "
+        "bir isi yaptirir ve sonucunu dondurur; CLI kendi araclari ve kullanicinin "
+        "aboneligiyle calisir. "
+        "Kullanici o CLI'yi istediginde ya da is ona daha uygunsa kullan. Ayni sohbette ayni "
+        "CLI onceki konusmayi surdurur.",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "saglayici": {"type": "string", "enum": ["claude", "codex", "antigravity"]},
+                "gorev": {"type": "string", "description": "Is, dosyalar, bitti olcutu"},
+                "klasor": {"type": "string", "description": "Bos: acik proje klasoru"},
+            },
+            "required": ["saglayici", "gorev"],
+        },
+    },
+}  # fmt: skip
+
+
 AVATARLAR = ("🤖", "🦉", "🧠", "🛠️", "🔎", "✍️", "📊", "🧪", "🕵️", "🎨", "📦", "⚙️")
 AJAN_OLUSTUR_ARACI = {
     "type": "function",
@@ -437,7 +534,9 @@ AJAN_OLUSTUR_ARACI = {
                 "aciklama": {"type": "string", "description": "Diger ajanlarin gordugu tek cumle"},
                 "talimat": {"type": "string"},
                 "klasor": {"type": "string", "description": "Tam yol; bos: Kairo klasoru"},
-                "saglayici": {"type": "string", "enum": ["kairo", "claude", "codex"]},
+                "saglayici": {
+                    "type": "string", "enum": ["kairo", "claude", "codex", "antigravity"],
+                },
                 "model": {"type": "string", "description": "Bos: varsayilan model"},
             },
             "required": ["ad", "avatar", "aciklama", "talimat"],

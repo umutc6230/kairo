@@ -157,6 +157,29 @@ async function islerYenile() {
   } catch { /* sessiz */ }
 }
 
+// Thread'ler (is emirleri), aktif proje: once kullanicinin elini bekleyenler, sonra calisanlar
+const TH_GRUP = [
+  ["Seni bekliyor", ["insan_bekliyor"], "sari"],
+  ["İncelemeye hazır", ["inceleme", "taslak"], "yesil"],
+  ["Sorun var", ["basarisiz"], "kirmizi"],
+  ["Çalışıyor", ["calisiyor", "sirada"], "mavi"],
+];
+async function threadlerYenile() {
+  const kap = $("#sp-threadler");
+  if (!kap || $("#sag-panel").hidden) return;
+  try {
+    const v = await api("/api/superajan");
+    const isler = v.isler.filter((x) => x.proje_kok === v.aktif_proje);
+    const sn = (x) => Math.max(0, (Date.now() - new Date(x.olusturma).getTime()) / 1000);
+    kap.innerHTML = TH_GRUP.map(([ad, asamalar, sinif]) => {
+      const g = isler.filter((x) => asamalar.includes(x.asama));
+      return g.length ? `<div class="sp-satir soluk kucuk"><span class="thread-nokta ${sinif}"></span><span class="sp-ad">${ad}</span><span>${g.length}</span></div>${g.map((x) =>
+        `<button class="sp-satir sp-tik sp-is" data-git-ajanlar title="${kacir(x.baslik)}"><span class="sp-ad">${kacir(x.baslik)}</span><span class="soluk kucuk">${SURE(sn(x))}</span></button>`).join("")}` : "";
+    }).join("") || '<span class="soluk kucuk">Yok</span>';
+    kap.querySelectorAll("[data-git-ajanlar]").forEach((b) => { b.onclick = () => document.querySelector('.nav-oge[data-git="ajanlar"]')?.click(); });
+  } catch { /* sessiz */ }
+}
+
 const DOLAR = (x) => `$${Number(x).toFixed(Math.abs(Number(x)) < 10 ? 2 : 0)}`;
 
 // Durum cubugu: OpenRouter kalan limiti/bakiyesi (anahtar sunucuda; buraya yalniz tutarlar gelir)
@@ -202,6 +225,8 @@ export function sagPanelKur({ baglayiciAc, ayarAc }) {
   $("#sp-dosya-yenile").onclick = dosyaAgaciniYenile;
   dosyaPaneliAyarla(localStorage.getItem(DOSYA_ANAHTAR) === "1");
   setInterval(islerYenile, 4000);
+  setInterval(threadlerYenile, 5000);
+  threadlerYenile();
   setTimeout(orLimitYenile, 1500); // ayarlar yuklendikten sonra
   setInterval(orLimitYenile, 60000);
   $("#dc-or-limit").onclick = async () => { await orLimitYenile(); bildir($("#dc-or-limit").title, "bilgi", 5000); };

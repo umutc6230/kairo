@@ -59,6 +59,13 @@ DONGU_MESAJI = (
     "Bu cagriyi ayni argumanlarla {} kez yaptin; sonuc degismez. "
     "Sonucu kullan, FARKLI bir adim at ya da gorevi_bitir'i cagir."
 )
+# Ogrenen sistem B (WrongStack agent-feedback fikri): sonuc-duyarli tekrar + koc notlari
+AYNI_HATA_KOC = 3  # ayni aracta ayni hata (farkli argumanla) bu kadar gelirse koc notu
+KOC_HATA = (
+    "KOC: Bu hata {} kez farkli argumanlarla tekrarlandi; argumanla oynamak ise yaramiyor. "
+    "Dur, nedenini arastir (dosyayi/ciktiyi oku, --help, belge) ya da baska bir yol sec."
+)
+KOC_YAZ = "KOC: Yazdin; bitti demeden once sonucu dogrula (dosyayi oku ya da testi calistir)."
 
 
 def cevap_tokeni(baglam: int) -> int:
@@ -179,6 +186,7 @@ class Run(BaseModel):
     onceki: str = ""  # ayni sohbetteki onceki gorev (konusma surekliligi)
     gecmis: str = ""  # onceki turlarin ozeti; sonraki tura aynen tasinir
     etkilesimli: bool = False  # sohbetten baslatildi: soru_sor araci sunulur
+    inceleme: dict = {}  # D (Chimera): gorev sonu otomatik inceleme {ozet, bulgular, ...}
     calisma_koku: str = ""  # izole worktree (A8.3) ya da kalici ajanin klasoru; bos = proje kokunde
     dal: str = ""
     ajan_id: str = ""  # kalici ajanin isi (ajanlar.py): kimlik/talimat ek_sistem'de
@@ -433,6 +441,9 @@ class AgentRunner:
         self.araclar_kok: Callable[[str, str], tuple] | None = None
         self.kok: Callable[[], str] | None = None  # aktif proje koku: hook'larin cwd'si
         self.dersler: Any = None  # DersDefteri (api baglar): gorevler arasi hatalardan ogrenme
+        # D (Chimera): async (run) -> inceleme dict | None; api baglar (ayar + git diff + model)
+        self.inceleyici: Callable[[Run], Any] | None = None
+        self._incelemeler: set[asyncio.Task] = set()
         # kalici ajan araclari (api baglar): run -> (semalar, isleyiciler)
         self.ajan_araclari: Callable[[Any], tuple[list, dict]] | None = None
         self.takim: Any = None  # TakimPanosu (api baglar)
@@ -659,6 +670,31 @@ class AgentRunner:
             sayi += 1
         return sayi
 
+    @staticmethod
+    def _periyot_tekrari(run: Run, a: Adim) -> int:
+        """A-B-A-B / A-B-C-A-B-C dongusu: son adimlar 2 ya da 3'luk bir desenin kac turu?
+        Yalniz basarili adimlar; tek tur (1) donguye sayilmaz."""
+        if a.arac in DONGU_MUAF:
+            return 0
+
+        def imza(b: Adim) -> tuple[str, str]:
+            return b.arac, json.dumps(b.argumanlar, sort_keys=True, ensure_ascii=False)
+
+        dizi = [b for b in run.adimlar if b.arac not in DONGU_MUAF][-18:]
+        if any(b.durum is not AdimDurum.tamam for b in dizi[-6:]):
+            return 0  # hatali tekrar ayri korumada (hata_sayaci)
+        imzalar = [imza(b) for b in dizi] + [imza(a)]
+        en_iyi = 0
+        for p in (2, 3):
+            desen = imzalar[-p:]
+            if len(set(desen)) < 2:
+                continue  # tek arac tekrari _ayni_cagri_sayisi'nin isi
+            tur, i = 0, len(imzalar)
+            while i - p >= 0 and imzalar[i - p : i] == desen:
+                tur, i = tur + 1, i - p
+            en_iyi = max(en_iyi, tur)
+        return en_iyi if en_iyi >= 2 else 0
+
     def _arac_mesaji(self, run: Run, a: Adim, sonuc: Any) -> None:
         if isinstance(sonuc, dict) and isinstance(sonuc.get("cikis_kodu"), int):
             a.cikis_kodu = sonuc["cikis_kodu"]  # kanit kontrolu kirpilmis metne guvenmez
@@ -830,7 +866,7 @@ class AgentRunner:
                     a = self._adim_olustur(run, c)
                     if i == 0 and icerik:  # ayni mesajdaki ilk cagri aciklamayi tasir
                         a.aciklama = icerik[:8000]
-                    tekrar = self._ayni_cagri_sayisi(run, a)
+                    tekrar = max(self._ayni_cagri_sayisi(run, a), self._periyot_tekrari(run, a))
                     run.adimlar.append(a)
                     if tekrar >= DONGU_DUR:
                         dongu = True
@@ -858,6 +894,10 @@ class AgentRunner:
             self.depo.kaydet(run)
             self._iptal.discard(run_id)
             self._duraklat.discard(run_id)
+            if self._incelenmeli(run):
+                t = asyncio.create_task(self._incele(run.id))
+                self._incelemeler.add(t)
+                t.add_done_callback(self._incelemeler.discard)
             if self.dersler is not None and run.durum is RunDurum.basarisiz and run.hata:
                 with contextlib.suppress(OSError, ValueError):  # butce/dongu/ret bitisi de ders
                     self.dersler.hata("gorev", run.hata, run.hedef)
@@ -1103,6 +1143,7 @@ class AgentRunner:
             a.durum = AdimDurum.tamam
         if a.durum is not AdimDurum.tamam:
             run.hata_sayaci[anahtar] = run.hata_sayaci.get(anahtar, 0) + 1
+        sonuc = self._koc(run, a, sonuc)
         sonuc = self._ders_isle(run, a, sonuc)
         self._arac_mesaji(run, a, sonuc)
         self.depo.kaydet(run)
@@ -1112,6 +1153,46 @@ class AgentRunner:
                 {"run": run.id, "arac": a.arac, "durum": str(a.durum), "sonuc": a.sonuc[:2000]},
                 arac=a.arac,
             )  # fmt: skip
+
+    def _incelenmeli(self, run: Run) -> bool:
+        return (
+            self.inceleyici is not None and not run.parent
+            and run.durum in (RunDurum.basarili, RunDurum.dogrulanmadi)
+            and any(a.arac in YAZAN_ARACLAR and a.durum is AdimDurum.tamam for a in run.adimlar)
+        )  # fmt: skip
+
+    async def _incele(self, run_id: str) -> None:
+        """Gorev bitince degisen dosyalari inceletir; ciddi bulgular ders defterine girer."""
+        try:
+            run = self.depo.getir(run_id)
+            sonuc = await self.inceleyici(run)
+            if not sonuc:
+                return
+            run = self.depo.getir(run_id)  # inceleme surerken run degismis olabilir
+            run.inceleme = sonuc
+            self.depo.kaydet(run)
+            for b in sonuc.get("bulgular", []):
+                if self.dersler is not None and b.get("onem") in ("kritik", "yuksek"):
+                    neden = f"{b.get('baslik', '')}: {b.get('neden', '')}"
+                    self.dersler.hata("inceleme", neden, run.hedef)
+        except Exception as e:  # noqa: BLE001 - inceleme yardimci; gorev sonucu bozulmaz
+            logger.warning("Gorev sonu inceleme yapilamadi ({}): {}", run_id, e)
+
+    @staticmethod
+    def _koc(run: Run, a: Adim, sonuc: Any) -> Any:
+        """Koc: ayni hata farkli argumanla tekrarlaniyorsa yon degistir; yazdiysan dogrula."""
+        if not isinstance(sonuc, dict):
+            return sonuc
+        if a.durum is AdimDurum.hata and sonuc.get("hata"):
+            from app.agent.dersler import imza
+
+            k = f"koc:{imza(a.arac, str(sonuc['hata']))}"
+            run.hata_sayaci[k] = run.hata_sayaci.get(k, 0) + 1
+            if run.hata_sayaci[k] >= AYNI_HATA_KOC:
+                return {**sonuc, "koc": KOC_HATA.format(run.hata_sayaci[k])}
+        elif a.durum is AdimDurum.tamam and a.arac in YAZAN_ARACLAR:
+            return {**sonuc, "koc": KOC_YAZ}
+        return sonuc
 
     def _ders_isle(self, run: Run, a: Adim, sonuc: Any) -> Any:
         """Hata/ret ders defterine yazilir; daha once gorulduyse ders arac sonucuna eklenir.

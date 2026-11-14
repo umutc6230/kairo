@@ -42,6 +42,35 @@ def depo_koku(proje: Path) -> Path:
     return Path(cikti)
 
 
+def git_mi(proje: Path) -> bool:
+    """Klasor en az bir commit'i olan bir git deposunda mi (worktree HEAD ister)."""
+    try:
+        return _git(proje, "rev-parse", "--verify", "HEAD")[0] == 0
+    except UygulamaHatasi:
+        return False
+
+
+def git_baslat(proje: Path) -> dict:
+    """Git deposu olmayan (ya da hic commit'i olmayan) klasoru izole calismaya hazirlar:
+    git init + mevcut dosyalarla ilk commit. YALNIZ kullanici onayiyla cagrilir (arayuz sorar).
+    .gitignore'a uyulur; git kimligi yoksa yalniz bu commit icin Kairo adi kullanilir."""
+    if not proje.is_dir():
+        raise UygulamaHatasi(f"Klasor bulunamadi: {proje}")
+    if git_mi(proje):
+        return {"durum": "zaten_git"}
+    if _git(proje, "rev-parse", "--git-dir")[0] != 0:
+        kod, cikti = _git(proje, "init")
+        if kod != 0:
+            raise UygulamaHatasi(f"git init basarisiz: {cikti[:300]}")
+    _git(proje, "add", "-A", sure=600)
+    kimlik = [] if _git(proje, "config", "user.email")[0] == 0 else [
+        "-c", "user.name=Kairo", "-c", "user.email=kairo@localhost"]  # fmt: skip
+    kod, cikti = _git(proje, *kimlik, "commit", "--allow-empty", "-m", "Ilk commit (Kairo)")
+    if kod != 0:
+        raise UygulamaHatasi(f"Ilk commit olusturulamadi: {cikti[:300]}")
+    return {"durum": "olusturuldu"}
+
+
 def olustur(proje: Path, hedef_dizin: Path, run_id: str, onek: str = "ajan") -> tuple[Path, str]:
     kok = depo_koku(proje)
     dal = f"{onek or 'ajan'}/{run_id}"

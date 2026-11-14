@@ -116,6 +116,8 @@ export function ayarlarAc(sekme = "ai") {
         <label class="anahtar"><input type="checkbox" id="hf-acik" ${a.hafiza_acik ? "checked" : ""}><span></span></label></div>
       <div class="anahtar-satir"><div><div>Otomatik öğrenme</div><div class="ayar-not">Ajan, işine yarayacak kalıcı proje bilgilerini kendisi not edebilir (düşük güvenle). Gizli bilgi içeren not hiçbir zaman kaydedilmez.</div></div>
         <label class="anahtar"><input type="checkbox" id="hf-ogrenme" ${a.otomatik_ogrenme ? "checked" : ""}><span></span></label></div>
+      <div class="anahtar-satir"><div><div>Görev sonu otomatik inceleme</div><div class="ayar-not">Ajan dosya değiştirdiyse görev bitince değişiklikler model tarafından incelenir; ciddi bulgular sonraki görevlere ders olarak eklenir. Model çağrısı yapar.</div></div>
+        <label class="anahtar"><input type="checkbox" id="hf-inceleme" ${a.otomatik_inceleme ? "checked" : ""}><span></span></label></div>
       <div class="satir"><input class="alan" id="hf-yeni" placeholder="Yeni not: ör. Testler pytest -q ile çalışır" style="flex:1" maxlength="1000">
         <button class="btn" id="hf-ekle">Ekle</button><button class="btn" id="hf-disa">Dışa aktar</button></div>
       <div id="hf-liste" class="ayar-grup"></div>
@@ -253,6 +255,7 @@ export function ayarlarAc(sekme = "ai") {
   };
   $("#hf-acik", govde).onchange = (e) => kaydet({ hafiza_acik: e.target.checked });
   $("#hf-ogrenme", govde).onchange = (e) => kaydet({ otomatik_ogrenme: e.target.checked });
+  $("#hf-inceleme", govde).onchange = (e) => kaydet({ otomatik_inceleme: e.target.checked });
   $("#hf-ekle", govde).onclick = async () => {
     const g = $("#hf-yeni", govde);
     if (!g.value.trim()) return;

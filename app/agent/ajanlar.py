@@ -128,7 +128,7 @@ class AjanDeposu:
     # ---- olustur / duzenle / sil ----
     def olustur(self, veri: dict) -> Ajan:
         izinli = {"ad", "avatar", "aciklama", "talimat", "klasor", "model", "saglayici"}
-        if veri.get("saglayici", "kairo") not in ("kairo", "claude", "codex"):
+        if veri.get("saglayici", "kairo") not in ("kairo", "claude", "codex", "antigravity"):
             raise UygulamaHatasi("Saglayici kairo, claude ya da codex olmali.")
         a = Ajan(**{k: v for k, v in veri.items() if k in izinli})
         if not AD_DESENI.match(a.ad):
@@ -149,7 +149,7 @@ class AjanDeposu:
     def duzenle(self, ajan_id: str, veri: dict) -> Ajan:
         izinli = {"ad", "avatar", "aciklama", "talimat", "klasor", "model", "duraklatildi",
                   "saglayici", "cli_oturum"}  # fmt: skip
-        if veri.get("saglayici", "kairo") not in ("kairo", "claude", "codex"):
+        if veri.get("saglayici", "kairo") not in ("kairo", "claude", "codex", "antigravity"):
             raise UygulamaHatasi("Saglayici kairo, claude ya da codex olmali.")
 
         def f(a: Ajan) -> None:

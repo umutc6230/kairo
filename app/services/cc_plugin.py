@@ -214,14 +214,31 @@ def komut_genislet(govde: str, arg: str, kok: Path) -> str:
     return degisken_ac(metin, kok)
 
 
+def eksik_degiskenler(metin: str) -> list[str]:
+    """Varsayilani olmayan ve bu bilgisayarda tanimli olmayan ${DEGISKEN}'ler."""
+    return [m.group(1) for m in re.finditer(r"\$\{([A-Za-z_][A-Za-z0-9_]*)\}", metin)
+            if m.group(1) != "CLAUDE_PLUGIN_ROOT" and not os.environ.get(m.group(1))]  # fmt: skip
+
+
 def mcp_donustur(ad: str, ham: dict, kok: Path) -> dict | None:
     """Claude Code .mcp.json girdisi -> McpSunucu alanlari."""
     if not isinstance(ham, dict):
         return None
     if ham.get("type") in ("http", "sse") or ham.get("url"):
+        basliklar, eksik = {}, []
+        for k, v in (ham.get("headers") or {}).items():
+            # "Bearer ${TOKEN}" TOKEN yokken "Bearer " olup HTTP katmaninda LocalProtocolError
+            # veriyordu; eksik degiskenli baslik gonderilmez, sunucu "kimlik eksik" diye gorunur
+            if yok := eksik_degiskenler(str(v)):
+                eksik += yok
+                continue
+            if (deger := degisken_ac(str(v), kok).strip()) and deger.lower() not in (
+                "bearer",
+                "token",
+            ):
+                basliklar[k] = deger
         return {"ad": ad, "url": degisken_ac(str(ham.get("url", "")), kok),
-                "basliklar": {k: degisken_ac(str(v), kok) for k, v in (ham.get("headers") or {}).items()
-                              if degisken_ac(str(v), kok)}}  # fmt: skip
+                "basliklar": basliklar, "eksik_degiskenler": sorted(set(eksik))}  # fmt: skip
     if ham.get("command"):
         return {"ad": ad, "komut": degisken_ac(str(ham["command"]), kok),
                 "argumanlar": [degisken_ac(str(a), kok) for a in ham.get("args") or []],

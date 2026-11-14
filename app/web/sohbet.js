@@ -1,5 +1,6 @@
 // Sohbet gorunumu: mesajlar, dusunce blogu, yazma alani, ekler, akis ve durdurma.
 import { sohbetteGorevGoster } from "./gorevler.js";
+import { threadKarti } from "./superajan.js";
 import { masaustuBildirimi } from "./ayarlar2.js";
 import { girdiYardimKur, oneriTusu } from "./girdi.js";
 import { komutListesi, komutMu } from "./komutlar.js";
@@ -305,6 +306,11 @@ function asistanMesaji() {
         return;
       }
       const a = [...d.querySelectorAll(".arac-adim")].find((x) => x.dataset.id === o.id) || this.aracCagrisi(o);
+      if ((o.ad === "is_emri_baslat" || o.ad === "is_emirleri_durum") && !d.querySelector(`.thread-kart[data-id="${o.id}"]`)) {
+        let ids = [];
+        try { ids = (JSON.parse(o.sonuc).threadler || []).map((t) => t.id); } catch { /* hata metni: kart yok */ }
+        if (ids.length) threadKarti(ids, d.querySelector(".arac-adimlari")).dataset.id = o.id;
+      }
       if (o.ad === "plan_guncelle") {
         try { this.planCiz(JSON.parse(o.sonuc).plan); } catch { /* hata/kesik: arguman cizimi kalir */ }
         return;

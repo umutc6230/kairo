@@ -220,6 +220,11 @@
           <div class="sayfa-ic genis">
             <div class="satir"><h1 style="flex:1">Ajanlar</h1><button class="btn ana" id="aj-yeni"><span data-ikon="arti"></span>Yeni ajan</button></div>
             <p class="soluk">Kalıcı çalışma arkadaşları: her biri kendi klasöründe, kendi talimatı ve modeliyle çalışır, önceki işlerini hatırlar, işleri sıraya alır ve birbirine iş verebilir.</p>
+            <section class="aj-isler" aria-labelledby="aj-isler-baslik">
+              <div class="ek-bolum-baslik"><b id="aj-isler-baslik">İş emirleri <span id="aj-isler-sayi"></span></b><span class="ek-sag"><button class="btn kucuk ana" id="aj-is-yeni"><span data-ikon="arti"></span>Yeni iş emri</button></span></div>
+              <div class="soluk kucuk">İşi ayrı bir dalda ajana yaptır; bitince incele, istersen ana dala birleştir. Yalnız seni bekleyenler öne çıkar.</div>
+              <div id="aj-isler-liste"></div>
+            </section>
             <div id="aj-form" hidden></div>
             <div class="aj-duzen"><div id="aj-liste" class="aj-liste"></div><div id="aj-detay" class="aj-detay"></div></div>
             <details class="kart" id="aj-telegram"><summary><b>Telegram</b> <span class="soluk kucuk">telefondan ajanlara mesaj at</span></summary><div id="aj-tg"></div></details>
@@ -327,6 +332,9 @@
         <div class="sp-ayrac"></div>
         <button class="sp-satir sp-tik" id="sp-baglayici-baslik" aria-expanded="false" aria-controls="sp-baglayici-detay"><span class="sp-ad">Bağlayıcılar <span class="sp-ok" data-ikon="sag"></span></span><span id="sp-baglayici" class="soluk kucuk"></span></button>
         <div id="sp-baglayici-detay" class="sp-detay" hidden></div>
+        <div class="sp-ayrac"></div>
+        <div class="sp-bolum">Thread'ler</div>
+        <div id="sp-threadler" class="sp-isler"><span class="soluk kucuk">Yok</span></div>
         <div class="sp-ayrac"></div>
         <div class="sp-bolum">Arka plan işleri</div>
         <div id="sp-isler" class="sp-isler"><span class="soluk kucuk">Yok</span></div>

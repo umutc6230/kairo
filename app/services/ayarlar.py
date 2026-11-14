@@ -97,6 +97,7 @@ class KullaniciAyarlari(BaseModel):
     saat_dilimi: str = "Europe/Istanbul"  # A11: zamanlamalarin varsayilani
     lsp_sunuculari: dict[str, str] = {}  # A10.1: {".py": "pylsp"}; yalniz kullanici tanimlar
     otomatik_ogrenme: bool = False  # ajan kendi not ekleyebilir (A4.4: kullanici acar)
+    otomatik_inceleme: bool = True  # gorev dosya yazdiysa bitince model inceler (Chimera)
     # ---- Claude Desktop ayar karsiliklari ----
     tema: Literal["sistem", "acik", "koyu"] = "koyu"
     yazi_boyutu: Literal["kucuk", "orta", "buyuk"] = "orta"
