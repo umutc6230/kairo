@@ -79,7 +79,7 @@ Python 3.12 + FastAPI + pywebview; arayuz vanilla JS. Paketleme: PORTABLE (kulla
 - [x] A2 kalan: arka plan isine stdin (komut_girdi), git_dal/git_commit (YanEtki.git: otomatik modda da
       onay; onay islemin tam metnine bagli; commit yalniz adi verilen dosyalar), hunk bazli geri alma
       (/api/checkpointler/{id}/hunklar, /hunk-geri-al; cakismada dokunmaz). tests/test_a2_kalan.py 11 test
-- [ ] A2 ertelenen: git worktree (A8 alt ajanlarla), push/merge (dis etki, ayri is), arayuzde hunk secimi
+- [ ] A2 ertelenen: arayuzde hunk secimi. (git worktree A8.3'te, push/PR superajan D4'te yapildi)
 - [x] A1.8 izolasyon adaptoru (app/agent/izolasyon.py): yok (Job Object) | konteyner (Podman/Docker,
       --network none, yalniz proje koku bagli, cap-drop ALL, no-new-privileges, --pull=never). Konteyner
       kullanilamazsa komut CALISMAZ (sessiz dusus yok). Izolasyon yoksa otomatik modda da komut onay
@@ -149,8 +149,7 @@ Python 3.12 + FastAPI + pywebview; arayuz vanilla JS. Paketleme: PORTABLE (kulla
       uzak sunucunun araclari izinli isaretlense de HER ZAMAN onay ister; resources/list (ilan edilirse).
       Arayuz: Baglayicilar'da URL + Authorization, "uzak" rozeti. Sahte uzak sunucuyla 5 test.
 - [x] A7.5 katalog: data/plugin-katalog.json {name, version, yol, sha256}; klasor hash'i uyusmazsa kurulmaz.
-- [ ] A7 kalan: OAuth akisi (simdilik baslik elle), MCP prompts, uzanti/Mods API'si (A7.6: izole worker),
-      plugin eval + token/sure raporu (ertelendi).
+- [ ] A7 kalan: MCP prompts, plugin eval + token/sure raporu (ertelendi). (OAuth akisi ve Mods yapildi: mcp_oauth.py, fb16470)
 - [x] A8.1/A8.4 alt ajan (runner alt_ajan araci): ayri baglam, dar arac seti, YAZMA yalniz sahip olunan
       dosyalara, butce ebeveynin kalanindan KESILIR (cogalmaz, harcama ebeveyne yazilir), derinlik 1,
       ayni dosyaya iki calisan alt ajan olamaz, ebeveyn iptali cocugu da iptal eder, cokmede adim belirsiz.
@@ -278,8 +277,8 @@ Python 3.12 + FastAPI + pywebview; arayuz vanilla JS. Paketleme: PORTABLE (kulla
 - 2026-11-10 (16): A6 bitti (hooks + slash + hook UI; tarayicida dogrulandi). DIKKAT: ayni dalda paralel
   bir oturum A6.1/A6.2 commit'ledi (14da54a, 1c791d4); benim skill commit'im (81b748a) onlarla ust uste.
   399 test geciyor.
-- [ ] A5 ajan ekrani
-- [ ] A7 MCP/plugin/mods | A8 alt ajanlar | A9-A12 | A13 kalite kapisi
+- [x] A5 ajan ekrani
+- [x] A7 MCP/plugin/mods | A8 alt ajanlar | A9-A12 (A13 kalite kapisi ayri maddede: %98.9, hedef %99)
 
 ## Son oturum
 - 2026-11-10 (15): A6.2 tamamlandi; 16 yeni test (kapsam disi/yasak tur/zincir arguman/onay
@@ -558,16 +557,16 @@ Ukftd_yGittV8xV.mp4,
     (prompt rewrite), tur_bitis; UI yuzeyleri durum cubugu metni, bildirim (toast), istem ustu bant (md + dugme),
     baykus etiketi eki; dosya degisince yeniden yukleme; "Kairo mod yazsin" araci (+ karantina incelemesi);
     GitHub'dan kurulum skill_ice gibi Claude Code denetimli. Guvenlik: ayri surec kalir (Mods sandbox'siz; Kairo daha sikidir).
-  - [ ] SIRADA: (1) dsh-superagent D2-D5 (SUPERAJAN-PLANI.md; 3 soru kullaniciya); (2) agent-desktop karari.
-  - [ ] DSH-SUPERAGENT WINDOWS PORTU (kullanici istegi 2026-11-14, BASLANDI, kod YOK): belgeler okundu (000, 001).
+  - [x] (eskidi) SIRADA: dsh-superagent D2-D5 ve agent-desktop -> ikisi de yapildi (yukarida D2-D5 ve agent-desktop maddeleri, commit fb16470).
+  - [x] DSH-SUPERAGENT WINDOWS PORTU (yapildi: D1-D5, commit 3691830/fb16470; bu not ilk gunden kalma): belgeler okundu (000, 001).
     Kavramlar: Source->Trigger->Thread->Eval(gate+assessment)->Ticket(Mandate)->Assignment(Executor)->Channel.
     Kairo karsiligi: kaynak=GitHub (gh api, ETag), politika=izinli loginler, yurutucu=AgentRunner + worktree,
     kanal=gh yorum/PR, panel. KALAN: 002-007 belgeleri, plan, uygulama. Repo: %TEMP%/tarama-dsh-superagent/repo.
   - [x] (2026-11-14 bitti, 3691830) Ogrenen sistem B-D (OGRENEN-SISTEM-PLANI.md): akilli dongu tespiti, kanitli hafiza, gorev sonu otomatik inceleme.
-  - [ ] dsh-superagent (deepseek-ai, MIT, 2026-11-14 tarandi, temiz): DeepSeek Harness (dsh) bundle'i; tmux + fcntl
+  - [x] dsh-superagent (deepseek-ai, MIT, 2026-11-14 tarandi, temiz; Kairo'ya port edildi): DeepSeek Harness (dsh) bundle'i; tmux + fcntl
     (Linux/macOS), GitHub ajan hesabi + issue dinleyicisi gerektirir, Windows'ta calismaz, Kairo'ya gomulemez. Kullanici
     karari bekliyor: tasarimindan (orchestrator/worker, kabul politikasi) Kairo'da "Uygulama Yapici" varsayilan ajan.
-  - [ ] agent-desktop (vercel-labs, Apache-2.0, Rust, 2026-11-14 tarandi): erisilebilirlik agaciyla masaustu kontrolu,
+  - [x] agent-desktop (vercel-labs, Apache-2.0, Rust, 2026-11-14 tarandi; arac paketi olarak eklendi): erisilebilirlik agaciyla masaustu kontrolu,
     `agent-desktop mcp` stdio MCP. npm postinstall GitHub release'ten ikili indirir (ayni release'teki SHA256 ile).
     Telemetri/disari veri yok. Kullanici karari bekliyor: arac_paketleri ile sabit surum + sabit SHA256 kurulum + MCP.
   - [ ] ERTELENDI (kullanici 2026-11-13): langchain-ai/social-media-agent varsayilan ajan olarak eklenmedi; istenirse once guvenlik taramasi, sonra kod kopyalamadan talimatli 'Sosyal Medya' ajani (paylasim onayli)
