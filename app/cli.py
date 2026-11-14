@@ -110,6 +110,10 @@ def calistir(args: argparse.Namespace, s: Studio) -> int:
 
 
 def main(argv: list[str]) -> int:
+    # Windows konsolu cp1254: --json ciktisindaki '✓' gibi karakterde print cokuyordu (canli)
+    for akis in (sys.stdout, sys.stderr):
+        if hasattr(akis, "reconfigure"):
+            akis.reconfigure(encoding="utf-8", errors="replace")
     args = arg_ayristir(argv)
     if args.openrouter_model:  # CI: gecici veri klasorunde saglayici secimi
         from app.config import veri_dizini

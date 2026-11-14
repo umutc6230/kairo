@@ -518,7 +518,9 @@ async def arac_calistir(
             sonuc = {"hata": f"Bilinmeyen arac: {ad}"}
         else:
             try:
-                sonuc = await asyncio.to_thread(fonk, **argumanlar)
+                from app.agent.runner import arguman_adlari
+
+                sonuc = await asyncio.to_thread(fonk, **arguman_adlari(argumanlar))
             except (TypeError, ValueError, OSError) as e:
                 sonuc = {"hata": f"{type(e).__name__}: {e}"}
     metin, kesildi = sonuc_kisalt(sonuc)

@@ -88,6 +88,15 @@ YON_DOLASMA = (
 KOC_YAZ = "KOC: Yazdin; bitti demeden once sonucu dogrula (dosyayi oku ya da testi calistir)."
 
 
+_TR_ASCII = str.maketrans("çğıöşüÇĞİÖŞÜ", "cgiosuCGIOSU")
+
+
+def arguman_adlari(argumanlar: dict) -> dict:
+    """Model arguman ADINI Turkcelestirebiliyor ('açıklama'); semalar ASCII ('aciklama').
+    Canli: komut_calistir TypeError ile dusuyordu. Yalniz anahtarlar cevrilir, degerler degil."""
+    return {str(k).translate(_TR_ASCII): v for k, v in argumanlar.items()}
+
+
 def cevap_tokeni(baglam: int) -> int:
     """Model cevabi (arac argumanlari dahil) icin pay. 2048 sabitken uzun bir rapor/dosya tek
     proje_dosya_yaz cagrisina sigmiyor, model kesilip arac cagiramadan duruyordu."""
@@ -1152,7 +1161,7 @@ class AgentRunner:
         self._aracta.add(run.id)
         jeton = AKTIF_RUN.set(run.id)  # komutlar bu goreve kaydedilir (iptal)
         try:
-            sonuc = await asyncio.to_thread(fonk, **a.argumanlar)
+            sonuc = await asyncio.to_thread(fonk, **arguman_adlari(a.argumanlar))
         except (TypeError, ValueError, OSError, UygulamaHatasi) as e:
             sonuc = {"hata": f"{type(e).__name__}: {e}"}
         finally:

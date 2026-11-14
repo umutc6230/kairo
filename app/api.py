@@ -467,6 +467,7 @@ def uygulama_olustur(
     def model_yetenegi() -> ModelYetenegi:
         a = ayarlar.oku()
         if a.saglayici == "openrouter" and a.or_model:
+            openrouter.eksik_modeli_getir(a.or_model)
             return uzak_yetenek(a.or_model, openrouter.liste_yolu)
         return yerel_yetenek(a.model, a.baglam_token)
 

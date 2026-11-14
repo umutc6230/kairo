@@ -373,7 +373,13 @@ Python 3.12 + FastAPI + pywebview; arayuz vanilla JS. Paketleme: PORTABLE (kulla
   - [x] agent-desktop arac paketi (v1.3.1 x86_64 tar.gz, sha256 6ee4b1e0..., guvenli_ac tar.gz destegi; kurulum kullanici tiklamasiyla) (sabit surum + SHA256) + MCP
   - [x] MODS: arac_cagrisi (engelle/arguman/cevap), istem, tur_bitis, ui yetenegi (durum/bildirim/bant), dosya degisince yeniden yukleme, git'ten karantina, uzanti_yaz araci (yalniz karantina). tests/test_mods.py
   - [x] T3 thread sorusu secenekli kart (_is_ozet soru + superajan.js soruCiz)
-  - [ ] KARSILASTIRMA (kullanici istegi): 'benim github istatistiklerimi rapor olarak olustur, pdf ve docx indirilebilir ver' -> Claude Code + Kairo; Kairo'daki eksikleri tamamla
+  - [x] KARSILASTIRMA (2026-11-14, ../karsilastirma-github-rapor): 'github istatistiklerimi rapor yap, pdf+docx ver'.
+    Claude Code: 11 tur, 3.5 dk, $1.52, 2 sayfa PDF/DOCX, 3 grafik, rapor.py+test, private repo uyarisi.
+    Kairo (OpenRouter deepseek-v4.1-flash, tam yetki): 3. denemede basarili, 19 adim, 2 dk, 6 sayfa, 6 tablo, 4 grafik, kendi dogruladi.
+    Kairo'da bulunan ve DUZELTILEN hatalar: (1) model onbellekte yoksa 'arac desteklemiyor' reddi -> openrouter.eksik_modeli_getir
+    (2) model arguman adini Turkcelestiriyor ('açıklama') -> runner.arguman_adlari (ajan+sohbet) (3) CLI --json cp1254'te cokuyordu -> utf-8
+    (4) private veri uyarisi yok / istenmeden Masaustu'ne kopyaladi -> AJAN_NOTU kisa kurali (SISTEM'e eklenince 16K CLI testi tasiyordu).
+    Bulgu: 16K baglamda talimat+arac payi cok dar; her ek satir onay sonrasi arac sonucunu kirptiriyor.
 - WRONGSTACK KALAN 4/6/7 TAMAM (2026-11-14): tam paket 747 gecti 3 atladi (test_a9_masaustu haric), derlendi + teslim 10:57 (data korundu), acildi, commit+push:
   - [x] 7 arastirma ozeti: runner SISTEM + sohbet AJAN_NOTU'na kural (kaynak URL, API adi, surum, belirsizlik, uydurma). tests/test_ogrenen_7.py
   - [x] 6 lsp.py LspIstemci.yenile (didClose + eski tani silinir; once didOpen tek seferdi, tanilar bayat kaliyordu) + KodZekasi.yazma_sonrasi_tani/tani_ekle; sohbet.py proje_dosya_yaz/yama sarilir -> 'lsp_tanilari' (yalniz severity 1, en fazla 10). Dil sunucusu tanimli degilse etkisiz. tests/test_a10_lsp.py (+2)

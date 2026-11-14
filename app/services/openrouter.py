@@ -13,6 +13,7 @@ from pathlib import Path
 from typing import Any
 
 import httpx
+from loguru import logger
 
 from app.services.depo import json_oku, json_yaz
 from app.services.yerel_llm import ModelCevapHatasi, YerelLLM
@@ -236,6 +237,27 @@ class OpenRouterDeposu:
         return sonuc
 
     # ---- model listesi ----
+    def eksik_modeli_getir(self, model_id: str) -> None:
+        """Secili model onbellekte yoksa listeyi bir kez (5 dk'da en fazla) senkron yeniler.
+        Onbelleksiz kurulumda (CLI, yeni veri klasoru) yetenek denetimi modeli 'aracsiz'
+        sanip ajan gorevini reddediyordu."""
+        onb = json_oku(self.liste_yolu, None) or {}
+        if any(m.get("id") == model_id for m in onb.get("modeller", [])):
+            return
+        if self.transport is not None or time.time() - getattr(self, "_son_eksik_deneme", 0) < 300:
+            return  # testlerde (sahte tasima) gercek aga cikilmaz
+        self._son_eksik_deneme = time.time()
+        try:
+            with httpx.Client(timeout=20.0) as c:
+                r = c.get(f"{self.adres}/models")
+                r.raise_for_status()
+                ham = r.json()["data"]
+        except (httpx.HTTPError, KeyError, TypeError, ValueError) as e:
+            logger.warning("OpenRouter model listesi alinamadi: {}", e)
+            return
+        liste = sorted((_sadelestir(m) for m in ham if m.get("id")), key=lambda m: m["ad"])
+        json_yaz(self.liste_yolu, {"zaman": time.time(), "modeller": liste})
+
     async def modeller(self, yenile: bool = False) -> dict:
         onb = json_oku(self.liste_yolu, None)
         taze = onb and time.time() - onb.get("zaman", 0) < ONBELLEK_SN
