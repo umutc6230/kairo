@@ -9,6 +9,7 @@ import os
 import secrets
 import shutil
 import subprocess
+import threading
 import time
 import uuid
 import webbrowser
@@ -945,13 +946,16 @@ def uygulama_olustur(
             telegram.baslat(_telegram_mesaj)
         if gecit:  # genel "hizli ac" kisayolu (Claude Desktop Quick Entry)
             kisayol.ayarla(a.hizli_kisayol)
-        if gecit:  # Claude Code plugin'lerini arka planda ice aktar (acilisi bekletmez)
-            asyncio.get_running_loop().run_in_executor(None, _cc_esitle)
+        if gecit:  # Claude Code plugin'lerini arka planda ice aktar (acilisi bekletmez).
+            # daemon: buyuk plugin taramasi (telegram ~3600 dosya, ~1 dk) kapanisi bekletmesin;
+            # yarim kalan is sonraki acilista bastan yapilir (durum en sonda yazilir).
+            threading.Thread(target=_cc_esitle, name="cc-esitle", daemon=True).start()
         if gecit:  # MCP sunuculari ve arac semalari ilk mesajdan once arka planda isinsin
             asyncio.get_running_loop().run_in_executor(None, _isit_baglam)
         if a.saglayici == "openrouter":  # baglanti havuzu (SSL ~1.5 sn) ilk mesajdan once
             asyncio.get_running_loop().run_in_executor(None, openrouter._tasima)
         yield
+        cc_dur.set()  # surmekte olan plugin esitlemesi sureci acik tutmasin
         if zd:
             zd.cancel()
         ad_.cancel()
@@ -1601,9 +1605,11 @@ def uygulama_olustur(
         return await asyncio.to_thread(pluginler.katalogdan_karantina, ad)
 
     # ---- Claude Code plugin uyumlulugu ----
+    cc_dur = threading.Event()  # kapanista arka plan esitlemesini keser
+
     def _cc_esitle() -> dict:
         try:
-            o = pluginler.claude_code_esitle()
+            o = pluginler.claude_code_esitle(cc_dur)
             logger.info("Claude Code plugin esitleme: {}", o)
             return o
         except Exception as e:  # noqa: BLE001 - acilisi bozmaz

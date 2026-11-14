@@ -17,6 +17,7 @@ import re
 import shutil
 import subprocess
 import tempfile
+import threading
 from datetime import datetime
 from pathlib import Path
 
@@ -146,6 +147,11 @@ class PluginDeposu:
         k = Path(kaynak).expanduser()
         if not k.is_dir():
             raise UygulamaHatasi(f"Klasor bulunamadi: {kaynak}")
+        dosyalar = [p for p in k.rglob("*") if p.is_file()]
+        if len(dosyalar) > MAX_DOSYA or sum(p.stat().st_size for p in dosyalar) > MAX_BOYUT:
+            raise UygulamaHatasi(
+                f"Plugin cok buyuk ({MAX_DOSYA} dosya / {MAX_BOYUT // 2**20} MB siniri)."
+            )
         if cc.ham_manifest(k) is None:
             # Claude Code 'strict: false': manifest marketplace'te olabilir; ad/surum klasorden
             icerik = [p for p in k.iterdir() if p.name not in (".in_use", ".orphaned_at")]
@@ -154,6 +160,7 @@ class PluginDeposu:
             surum = cc.surum_normalize(k.name) if k.name[:1].isdigit() else "0.0.0"
             ad_ = ad or (k.parent.name if k.name[:1].isdigit() else k.name)
             m = Manifest(name=cc.ad_normalize(ad_.split("@")[0]), version=surum)
+            self._politika(m.name)
             hedef = self.karantina / f"{m.name}-{m.version}"
             if hedef.exists():
                 shutil.rmtree(hedef)
@@ -168,9 +175,6 @@ class PluginDeposu:
                     "karantina": hedef.name, "bilesenler": _ozet(cc.bilesenler(hedef))}  # fmt: skip
         m = _manifest_oku(k)
         self._politika(m.name)
-        dosyalar = [p for p in k.rglob("*") if p.is_file()]
-        if len(dosyalar) > MAX_DOSYA or sum(p.stat().st_size for p in dosyalar) > MAX_BOYUT:
-            raise UygulamaHatasi("Plugin cok buyuk (500 dosya / 20 MB siniri).")
         hedef = self.karantina / f"{m.name}-{m.version}"
         if hedef.exists():
             shutil.rmtree(hedef)
@@ -226,8 +230,9 @@ class PluginDeposu:
         return [{**p, "esitleme": durum.get(p["ad"], {}).get("durum", "")}
                 for p in cc.claude_code_kurulu()]  # fmt: skip
 
-    def claude_code_esitle(self) -> dict:
+    def claude_code_esitle(self, dur: threading.Event | None = None) -> dict:
         """Claude Code'da kurulu plugin'leri otomatik ice aktarir ve guncel tutar.
+        - `dur` set edilince (uygulama kapaniyor) kalan plugin'ler sonraki acilisa birakilir.
         - Ayni kurulum yolu islendiyse atlanir; surum degisince yol degisir ve guncellenir.
         - Inceleme raporunda risk varsa KURULMAZ, karantinada onay bekler.
         - Kullanicinin kaldirdigi plugin tekrar kurulmaz. Hook/MCP her zaman kapali baslar.
@@ -237,6 +242,8 @@ class PluginDeposu:
         kayit = self._kayit()
         ozet = {"kuruldu": [], "inceleme": [], "hata": [], "atlandi": 0}
         for p in cc.claude_code_kurulu():
+            if dur is not None and dur.is_set():
+                break  # yapilan kadari kaydedilir; kapanis bir plugin'den fazla beklemez
             anahtar, d = p["ad"], durum.get(p["ad"], {})
             if d.get("durum") == "kuruldu" and d.get("ad") not in kayit:
                 d["durum"] = "kaldirildi"  # kullanici Kairo'dan kaldirdi: zorla geri getirme

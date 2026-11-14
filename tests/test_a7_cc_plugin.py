@@ -7,7 +7,10 @@ import json
 import sys
 from pathlib import Path
 
+import pytest
+
 from app.agent.hooks import HookDeposu
+from app.exceptions import UygulamaHatasi
 from app.services import cc_plugin as cc
 from app.services.pluginler import PluginDeposu
 
@@ -164,6 +167,19 @@ def test_claude_code_esitle(tmp_path, monkeypatch) -> None:
     assert d.claude_code_esitle()["kuruldu"] == []  # kullanicinin kaldirdigi geri gelmez
 
 
+def test_claude_code_esitle_kapanista_durur(tmp_path, monkeypatch) -> None:
+    import threading
+
+    kaynak = cc_plugin(tmp_path / "cc")
+    giris = {"ad": "ornek@pazar", "yol": str(kaynak), "surum": "2.1", "bos": False}
+    monkeypatch.setattr(cc, "claude_code_kurulu", lambda: [giris])
+    dur = threading.Event()
+    dur.set()  # uygulama kapaniyor: hicbir plugin islenmez, sonraki acilisa kalir
+    d = PluginDeposu(tmp_path / "veri")
+    assert d.claude_code_esitle(dur) == {"kuruldu": [], "inceleme": [], "hata": [], "atlandi": 0}
+    assert d.claude_code_esitle()["kuruldu"] == ["ornek-plugin"]
+
+
 async def test_model_ile_skill_secimi(tmp_path) -> None:
     from app.services.skiller import SkillDeposu, model_ile_sec, secim_coz
 
@@ -209,3 +225,19 @@ def test_eksik_degiskenli_baslik_gonderilmez_ve_durumda_soylenir(tmp_path, monke
         durum["durum"] == "hata" and "YOK_TOKEN_XYZ" in durum["hata"] and "Kimlik" in durum["hata"]
     )
     assert y.semalar_ve_isleyiciler(lambda *a: None) == ([], {})  # baglanmaya calisilmaz
+
+
+def test_manifestsiz_plugin_de_politika_ve_boyut_denetiminden_gecer(tmp_path, monkeypatch) -> None:
+    from app.services import pluginler as pl
+
+    k = tmp_path / "rust-lsp" / "1.0.0"
+    k.mkdir(parents=True)
+    (k / "README.md").write_text("lsp", encoding="utf-8")
+    d = PluginDeposu(tmp_path / "veri")
+    d.politika_yolu.write_text(json.dumps({"izinli": ["baska"]}), encoding="utf-8")
+    with pytest.raises(UygulamaHatasi, match="izinli"):
+        d.karantinaya_al(str(k), "rust-lsp@pazar")
+    d.politika_yolu.unlink()
+    monkeypatch.setattr(pl, "MAX_DOSYA", 0)
+    with pytest.raises(UygulamaHatasi, match="cok buyuk"):
+        d.karantinaya_al(str(k), "rust-lsp@pazar")

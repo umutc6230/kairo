@@ -1,6 +1,12 @@
 # DURUM - kairo
 guncel: 2026-11-14 | son arac: Claude Code | dal: feature/ajan-katmani
 
+- 2026-11-14 (19): GERCEK PENCERE E2E (A5 kalan) yazildi, gecti. Buldugu 2 hata duzeltildi: (1) pencere
+  kapaninca surec kapanmiyordu: acilistaki Claude Code plugin esitlemesi (telegram 3622 dosya taramasi ~1 dk)
+  executor thread'inde kapanisi bekletiyordu -> daemon thread + kapanista cc_dur ile durur (api.py omur).
+  (2) manifest'siz plugin yolu boyut siniri ve kurum politikasini atliyordu -> iki yol da denetleniyor
+  (pluginler.karantinaya_al). test_a7_cc_plugin +2. Not: WebView2 iframe'lere chrome.webview verir ama
+  pywebview yalniz ust cerceve mesajini isler (E2E bunu dogruluyor). Derleme/teslim YOK (kod degisti).
 - 2026-11-14 (18): MENU HATASI: ortak.js menuAc her acilista { once: true } dis tiklama dinleyicisi kuruyordu; menu
   ogeden secilerek kapaninca (stopPropagation) dinleyici askida kaliyor, sonraki acilis tiklamasi yeni menuyu aninda
   kapatiyordu (baslik, mod, model menuleri "bir kez aciliyor, sonra acilmiyor"). Dinleyici menuKapat'ta kaldirilir,
@@ -117,7 +123,8 @@ Python 3.12 + FastAPI + pywebview; arayuz vanilla JS. Paketleme: PORTABLE (kulla
 - [x] A5.7 yerel ses dikte (app/web/dikte.js + /api/dikte): mikrofon -> 16 kHz WAV -> yerel Gemma 4;
       Web Speech (bulut) YOK; model sesi anlamiyorsa / OpenRouter seciliyse dugme devre disi + neden.
       Kayit gostergesi, sure, 30 sn sinir, Esc iptal, izin hatasi.
-- [ ] A5 kalan: gercek WebView2 penceresinde E2E (pywebview iframe kopru enjeksiyonu kontrolu)
+- [x] A5 kalan: gercek WebView2 penceresinde E2E (tests/test_a5_webview2_e2e.py; CDP ile gercek pencereye
+  baglanir: kopru ana sayfada, sandbox iframe'lere sizmiyor, menu tekrar acilir, kapat sureci bitirir)
 - [x] A6.1 skill metadata (app/services/skiller.py): surum, required/allowed-tools, sha256 hash, guven
       (kullanici/proje), bozuk frontmatter satirli hata -> listelenir ama YUKLENMEZ (otomatik dahil);
       proje skill'i yalniz guvenilir projede (.claude/skills); PUT /api/skiller/{ad} duzenle,
