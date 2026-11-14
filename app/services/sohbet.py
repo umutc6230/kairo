@@ -31,6 +31,7 @@ from app.services.sohbet_araclari import (
     AJAN_OLUSTUR_ARACI,
     ALT_OTURUM_ARACI,
     CLI_ARACI,
+    GORSEL_ARACI,
     IS_DURUM_ARACI,
     IS_EMRI_ARACI,
     PLAN_ARACI,
@@ -523,6 +524,7 @@ async def arac_calistir(
                 sonuc = await asyncio.to_thread(fonk, **arguman_adlari(argumanlar))
             except (TypeError, ValueError, OSError) as e:
                 sonuc = {"hata": f"{type(e).__name__}: {e}"}
+    gorsel = sonuc.pop("_gorsel", None) if isinstance(sonuc, dict) else None
     metin, kesildi = sonuc_kisalt(sonuc)
     kayit = {
         "id": cagri["id"],
@@ -538,7 +540,41 @@ async def arac_calistir(
     from app.agent.runner import dis_zarf
 
     mesaj = {"role": "tool", "tool_call_id": cagri["id"], "content": dis_zarf(ad, metin)}
+    if gorsel:  # gorsel_oku: tur sonunda ayri kullanici mesajiyla modele verilir (sira kurali)
+        mesaj["_gorsel"] = gorsel
     return mesaj, kayit
+
+
+def gorsel_mesaji(gorseller: list[dict]) -> dict:
+    """gorsel_oku sonuclari: bir turun TUM arac mesajlarindan sonra tek kullanici mesaji
+    (OpenAI bicimi: assistant tool_calls'tan sonra tool mesajlari arasina baska rol girmez)."""
+    icerik: list[dict] = []
+    for g in gorseller:
+        icerik.append({"type": "text", "text": f"[gorsel_oku sonucu: {g['yol']}] (dosya verisi)"})
+        icerik.append({"type": "image_url", "image_url": {"url": g["url"]}})
+    return {"role": "user", "content": icerik}
+
+
+def gorsel_oku(kapsam, yol: str, max_kenar: int = 1600) -> dict:
+    """Proje icindeki gorseli kucultup modele goruntu olarak verir (_gorsel ile tasinir)."""
+    import base64
+    import io
+
+    from PIL import Image, UnidentifiedImageError
+
+    p = kapsam.coz(yol)
+    try:
+        with Image.open(p) as im:
+            im = im.convert("RGB")
+            im.thumbnail((max_kenar, max_kenar))
+            boyut = f"{im.width}x{im.height}"
+            tampon = io.BytesIO()
+            im.save(tampon, "JPEG", quality=85)
+    except (UnidentifiedImageError, OSError) as e:
+        return {"hata": f"Gorsel acilamadi ({type(e).__name__}): {yol}"}
+    url = "data:image/jpeg;base64," + base64.b64encode(tampon.getvalue()).decode()
+    return {"yol": str(yol), "boyut": boyut, "not": "Gorsel bu turdan sonra sana verildi; bak.",
+            "_gorsel": {"yol": str(yol), "url": url}}  # fmt: skip
 
 
 async def cevap_akit(
@@ -634,10 +670,15 @@ async def cevap_akit(
         mesajlar.append(
             {"role": "assistant", "content": "".join(tur_metni), "tool_calls": cagrilar}
         )
+        gorseller = []
         for c in cagrilar:
             mesaj, kayit = await arac_calistir(c, isleyiciler or {}, gonder, etiket)
+            if g := mesaj.pop("_gorsel", None):
+                gorseller.append(g)
             mesajlar.append(mesaj)
             kayitlar.append(kayit)
+        if gorseller:
+            mesajlar.append(gorsel_mesaji(gorseller))
         # Yalniz plan guncelleyen tur is yapmaz: tur butcesinden dusme (en fazla 6 kez)
         if plan_turu < 6 and all(c["function"]["name"] == "plan_guncelle" for c in cagrilar):
             plan_turu += 1
@@ -691,6 +732,7 @@ class SohbetServisi:
         self.uzantilar = None  # UzantiYoneticisi (api baglar)
         self.ajan_olusturucu = None  # AjanDeposu.olustur (api baglar): sohbetten kalici ajan
         self._cli_oturumlari: dict[str, str] = {}  # "saglayici|klasor" -> CLI konusma id
+        self.goruntu_var = None  # () -> bool (api baglar): secili model gorsel okuyabiliyor mu
         self.is_emirleri = None  # (ac, listele) api baglar: sohbetten thread (is emri)
         self.tarayici = None  # Tarayici (api baglar)
         self.masaustu = None  # Masaustu (api baglar)
@@ -895,6 +937,19 @@ class SohbetServisi:
             if self.ajan_olusturucu is not None and self.politika is not None:
                 araclar.append(AJAN_OLUSTUR_ARACI)
                 isleyiciler["ajan_olustur"] = self._ajan_olustur_isleyici(alan)
+            gorsel_istendi = re.search(  # 16K baglamda her istege eklenince sonuclari kirpiyordu
+                r"\.(png|jpe?g|webp|bmp|gif|tiff?)\b|g[oö]rsel|resim|foto|ocr|fatura|tara|"
+                r"ekran g[oö]r|screenshot|image",
+                (istek_metni or "").lower(),
+            )
+            if gorsel_istendi and self.goruntu_var is not None and self.goruntu_var():
+                # Karsilastirma bulgusu: model gorsel okuyabildigi halde dosyayi goremiyor,
+                # OCR icin Tesseract kurmaya kalkiyordu (29 adim)
+                from app.agent.yazma import sonuc_veya_hata
+
+                araclar.append(GORSEL_ARACI)
+                kapsam_ = ajan_kaydi.kapsam
+                isleyiciler["gorsel_oku"] = lambda yol: sonuc_veya_hata(gorsel_oku, kapsam_, yol)
             if self.politika is not None:
                 araclar.append(CLI_ARACI)
                 isleyiciler["cli_ye_yaptir"] = self._cli_isleyici(alan, ayar)

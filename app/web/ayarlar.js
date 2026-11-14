@@ -45,21 +45,34 @@ export function ayarlarAc(sekme = "ai") {
     <div class="modal-govde" data-panel="ai">
       <nav class="ay-atla" aria-label="AI ayar bölümleri"><button type="button" data-atla="ay-b-model">Model</button><button type="button" data-atla="ay-b-dusunme">Düşünme</button><button type="button" data-atla="ay-b-yetki">Yetkiler</button><button type="button" data-atla="ay-b-cevap">Cevap</button><button type="button" data-atla="ay-b-yerel" data-yerel>Yerel motor</button></nav>
       <h3 class="ay-bolum" id="ay-b-model">Model</h3>
-      <div class="ayar-grup"><label>Sağlayıcı</label>
-        <label class="secenek-kart ${a.saglayici !== "openrouter" ? "secili" : ""}"><input type="radio" name="ay-sag" value="yerel" ${a.saglayici !== "openrouter" ? "checked" : ""}><div><div class="ust">Yerel (llama.cpp) <span class="rozet yesil">internetsiz</span></div>
-        <div class="alt">Modeller bu bilgisayarda çalışır, veri dışarı çıkmaz. API anahtarı gerekmez.</div></div></label>
-        <label class="secenek-kart ${a.saglayici === "openrouter" ? "secili" : ""}"><input type="radio" name="ay-sag" value="openrouter" ${a.saglayici === "openrouter" ? "checked" : ""}><div><div class="ust">OpenRouter <span class="rozet sari">internet</span></div>
-        <div class="alt">Uzak modeller (ücretsiz ve ücretli). Mesajlar ve ekler OpenRouter'a gönderilir. API anahtarı gerekir.</div></div></label></div>
-      <div class="ayar-grup" id="ay-or" ${a.saglayici === "openrouter" ? "" : "hidden"}><label>OpenRouter</label>
-        <div class="satir"><span id="ay-or-anahtar" class="ayar-not"></span>
-          <input class="alan" id="ay-or-yeni" type="password" autocomplete="off" placeholder="sk-or-... anahtarı yapıştır" style="flex:1">
-          <button class="btn" id="ay-or-kaydet">Kaydet</button><button class="btn tehlike" id="ay-or-sil">Sil</button></div>
-        <div class="satir"><input class="alan" id="ay-or-ara" placeholder="OpenRouter modeli ara..." style="flex:1">
-          <label class="onay"><input type="checkbox" id="ay-or-ucretsiz" checked> Yalnız ücretsiz</label>
-          <button class="btn" id="ay-or-yenile">Yenile</button></div>
-        <div id="ay-or-uyari" class="ayar-not"></div>
-        <div id="ay-or-modeller" class="ayar-grup" style="max-height:320px;overflow:auto"></div>
-        <div class="satir"><button class="btn" id="ay-or-test"><span data-ikon="oynat"></span>Seçili OpenRouter modelini test et</button><span id="ay-or-test-sonuc" class="ayar-not">Araç tanımlı kısa bir istek atar; süre ve maliyet gösterilir.</span></div></div>
+      <!-- 1) Ozet: su an hangi model calisiyor (Cursor/Open WebUI gibi once cevap) -->
+      <div class="ay-aktif" id="ay-aktif" aria-live="polite"></div>
+      <!-- 2) Saglayici: iki secenekli kisa anahtar (buyuk kartlar yerine) -->
+      <div class="ay-sag-sec" role="radiogroup" aria-label="Sağlayıcı">
+        <label class="ay-sag-hap"><input type="radio" name="ay-sag" value="yerel" ${a.saglayici !== "openrouter" ? "checked" : ""}><span>Bu bilgisayar</span><small>internetsiz · ücretsiz</small></label>
+        <label class="ay-sag-hap"><input type="radio" name="ay-sag" value="openrouter" ${a.saglayici === "openrouter" ? "checked" : ""}><span>OpenRouter</span><small>bulut · yüzlerce model</small></label>
+      </div>
+      <div class="ayar-grup" id="ay-or" ${a.saglayici === "openrouter" ? "" : "hidden"}>
+        <!-- 3) Anahtar: tek satir durum; degistirme alani yalniz istenince -->
+        <div class="ay-anahtar-satir"><span class="ay-etiket">API anahtarı</span><span id="ay-or-anahtar"></span>
+          <span class="ay-sag-dugme"><button class="btn kucuk" id="ay-or-degistir">Değiştir</button><button class="btn kucuk tehlike" id="ay-or-sil">Sil</button></span></div>
+        <div class="satir" id="ay-or-anahtar-gir" hidden>
+          <input class="alan" id="ay-or-yeni" type="password" autocomplete="off" placeholder="sk-or-... anahtarını yapıştır" style="flex:1">
+          <button class="btn ana" id="ay-or-kaydet">Kaydet</button></div>
+        <!-- 4) Model secici: ara + filtre cipleri + tek satirlik liste -->
+        <details class="ay-secici" id="ay-or-secici">
+          <summary><span>Model seç</span><span class="soluk kucuk" id="ay-or-uyari"></span></summary>
+          <div class="ay-secici-ust">
+            <input class="alan" id="ay-or-ara" placeholder="Model ara… (ör. deepseek, gemini, claude)" style="flex:1">
+            <button class="btn kucuk" id="ay-or-yenile" title="Listeyi OpenRouter'dan yeniden al">Yenile</button></div>
+          <div class="ay-filtre" role="group" aria-label="Filtreler">
+            <label class="ay-cip"><input type="checkbox" id="ay-or-ucretsiz" checked> Ücretsiz</label>
+            <label class="ay-cip"><input type="checkbox" data-filtre="araclar" checked> Araç kullanır</label>
+            <label class="ay-cip"><input type="checkbox" data-filtre="goruntu"> Görsel okur</label>
+            <label class="ay-cip"><input type="checkbox" data-filtre="dusunme"> Düşünür</label></div>
+          <div id="ay-or-modeller" class="ay-model-liste" role="listbox" aria-label="OpenRouter modelleri"></div>
+        </details>
+        <span id="ay-or-test-sonuc" hidden></span><button id="ay-or-test" hidden></button></div>
       <div class="ayar-grup" data-yerel><label>Yerel model</label>
         <div class="satir"><input class="alan" id="ay-ara" placeholder="Model ara..."><label class="onay"><input type="checkbox" id="ay-indirilen"> Yalnız indirilenler</label>
         <label class="onay" title="Yerel modellerin hepsi ücretsizdir"><input type="checkbox" checked disabled> Yalnız ücretsiz</label></div>
@@ -540,7 +553,7 @@ export function ayarlarAc(sekme = "ai") {
   const modelleriCiz = () => {
     $("#ay-modeller", govde).innerHTML = modelKartlari($("#ay-ara", govde).value, $("#ay-indirilen", govde).checked);
     $$("input[name=ay-model]", govde).forEach((r) => {
-      r.onchange = async () => { await kaydet({ model: r.value }); modelleriCiz(); };
+      r.onchange = async () => { await kaydet({ model: r.value }); modelleriCiz(); aktifCiz(); };
     });
   };
   $("#ay-ara", govde).oninput = modelleriCiz;
@@ -549,29 +562,75 @@ export function ayarlarAc(sekme = "ai") {
 
   // ---- OpenRouter ----
   let orListe = [];
+  let orAnahtarVar = false;
   const orAnahtarCiz = async () => {
     const d = await api("/api/openrouter/anahtar");
-    $("#ay-or-anahtar", govde).innerHTML = d.var ? `Anahtar: <code>${kacir(d.maskeli)}</code>` : '<span class="rozet kirmizi">anahtar yok</span>';
+    orAnahtarVar = d.var;
+    $("#ay-or-anahtar", govde).innerHTML = d.var
+      ? `<code>${kacir(d.maskeli)}</code> <span class="rozet yesil">kayıtlı</span>`
+      : '<span class="rozet kirmizi">yok</span> <a href="https://openrouter.ai/keys" target="_blank" rel="noopener" class="kucuk">anahtar al</a>';
     $("#ay-or-sil", govde).hidden = !d.var;
+    $("#ay-or-degistir", govde).textContent = d.var ? "Değiştir" : "Ekle";
+    $("#ay-or-anahtar-gir", govde).hidden = d.var; // anahtar yoksa giris alani hemen acik
+    aktifCiz();
   };
+  const ctx = (n) => (n >= 1e6 ? `${sayi(n / 1e6, n % 1e6 ? 1 : 0)}M` : `${Math.round(n / 1000)}K`);
+  const fiyat = (m) => (m.ucretsiz ? "ücretsiz" : `$${m.giris_1m} / $${m.cikis_1m}`);
+  const yetenekler = (m) => [m.araclar && "araç", m.goruntu && "görsel", m.dusunme && "düşünme"].filter(Boolean);
   const orModelleriCiz = () => {
     const kucuk = $("#ay-or-ara", govde).value.toLowerCase();
     const ucretsiz = $("#ay-or-ucretsiz", govde).checked;
+    const filtre = $$("[data-filtre]:checked", govde).map((x) => x.dataset.filtre);
     const sec = durum.ayarlar.or_model;
-    const liste = orListe.filter((m) => (!ucretsiz || m.ucretsiz) && (!kucuk || `${m.ad} ${m.id}`.toLowerCase().includes(kucuk)));
-    $("#ay-or-modeller", govde).innerHTML = liste.slice(0, 200).map((m) => `<label class="secenek-kart ${m.id === sec ? "secili" : ""}">
-      <input type="radio" name="ay-or-model" value="${kacir(m.id)}" ${m.id === sec ? "checked" : ""}>
-      <div><div class="ust">${kacir(m.ad)}
-        ${m.ucretsiz ? '<span class="rozet yesil">ücretsiz</span>' : `<span class="rozet">$${m.giris_1m} / $${m.cikis_1m} (1M token)</span>`}
-        <span class="rozet">context ${m.baglam.toLocaleString("tr-TR")}</span>
-        <span class="rozet ${m.araclar ? "yesil" : "sari"}">${m.araclar ? "araç" : "araç yok"}</span>
-        ${m.goruntu ? '<span class="rozet yesil">resim</span>' : ""}${m.json ? '<span class="rozet">JSON şema</span>' : ""}${m.dusunme ? '<span class="rozet">düşünme</span>' : ""}</div>
-        <div class="alt"><code>${kacir(m.id)}</code>${m.araclar ? "" : " · sohbet araçları bu modelde çalışmaz"}</div></div></label>`).join("")
-      || '<div class="ayar-not">Eşleşen model yok.</div>';
-    $$("input[name=ay-or-model]", govde).forEach((r) => {
-      r.onchange = async () => { await kaydet({ or_model: r.value }); orModelleriCiz(); dusunmeCiz(); };
+    const liste = orListe.filter((m) => (!ucretsiz || m.ucretsiz) && filtre.every((f) => m[f])
+      && (!kucuk || `${m.ad} ${m.id}`.toLowerCase().includes(kucuk)));
+    // secili model filtreye takilsa da en ustte gorunur (ucretli secimken "Ucretsiz" gizliyordu)
+    const secili = orListe.find((m) => m.id === sec);
+    if (secili && !kucuk && !liste.includes(secili)) liste.unshift(secili);
+    else if (secili && liste.includes(secili)) liste.sort((a, b) => (b === secili) - (a === secili));
+    $("#ay-or-modeller", govde).innerHTML = liste.slice(0, 200).map((m) => `<button type="button" class="ay-model-satir ${m.id === sec ? "secili" : ""}" role="option" aria-selected="${m.id === sec}" data-id="${kacir(m.id)}" title="${kacir(m.id)}">
+      <span class="ay-model-ad">${kacir(m.ad)}</span>
+      <span class="ay-model-yet">${yetenekler(m).map((y) => `<span class="ay-yet">${y}</span>`).join("")}</span>
+      <span class="ay-model-meta">${ctx(m.baglam)} · ${fiyat(m)}</span>${m.id === sec ? '<span class="ay-tik" aria-hidden="true">✓</span>' : ""}</button>`).join("")
+      || '<div class="ayar-not">Eşleşen model yok; filtreleri gevşet.</div>';
+    $("#ay-or-uyari", govde).textContent = `${liste.length} / ${orListe.length} model`;
+    $$(".ay-model-satir", govde).forEach((b) => {
+      b.onclick = async () => {
+        await kaydet({ or_model: b.dataset.id }, true);
+        $("#ay-or-secici", govde).open = false;
+        orModelleriCiz(); dusunmeCiz(); aktifCiz();
+        bildir("Model seçildi", "basari", 1200);
+      };
     });
   };
+  // Ozet karti: kullanilan model + yetenekleri + Degistir / Dene
+  function aktifCiz() {
+    const k = $("#ay-aktif", govde);
+    const or = durum.ayarlar.saglayici === "openrouter";
+    let ad, alt = [];
+    if (or) {
+      const m = orListe.find((x) => x.id === durum.ayarlar.or_model);
+      ad = m ? m.ad : durum.ayarlar.or_model || "Model seçilmedi";
+      if (m) alt = [`${ctx(m.baglam)} bağlam`, fiyat(m), ...yetenekler(m)];
+      if (!orAnahtarVar) alt.unshift("⚠ API anahtarı yok");
+      if (m && !m.araclar) alt.push("⚠ araç kullanamaz: ajan işleri çalışmaz");
+    } else {
+      const m = (durum.sunucu?.modeller || []).find((x) => x.anahtar === durum.ayarlar.model);
+      ad = m ? m.ad || m.anahtar : durum.ayarlar.model;
+      alt = ["bu bilgisayarda", m && !m.dosya_var ? "⚠ dosya indirilmemiş" : "internetsiz"];
+    }
+    k.innerHTML = `<div class="ay-aktif-sol"><div class="soluk kucuk">Kullanılan model · ${or ? "OpenRouter" : "Bu bilgisayar"}</div>
+      <div class="ay-aktif-ad">${kacir(ad)}</div><div class="ay-aktif-alt">${alt.filter(Boolean).map((x) => `<span class="${String(x).startsWith("⚠") ? "uyari-metin" : ""}">${kacir(x)}</span>`).join(" · ")}</div>
+      <div id="ay-aktif-sonuc" class="ayar-not"></div></div>
+      <div class="ay-aktif-sag"><button class="btn kucuk" id="ay-aktif-degistir">Değiştir</button><button class="btn kucuk ana" id="ay-aktif-dene"><span data-ikon="oynat"></span>Dene</button></div>`;
+    ikonlariYerlestir(k);
+    $("#ay-aktif-degistir", k).onclick = () => {
+      const hedef = or ? $("#ay-or-secici", govde) : $("#ay-modeller", govde);
+      if (or) { hedef.open = true; setTimeout(() => $("#ay-or-ara", govde).focus(), 50); }
+      hedef.scrollIntoView({ behavior: "smooth", block: "start" });
+    };
+    $("#ay-aktif-dene", k).onclick = () => (or ? $("#ay-or-test", govde) : $("#ay-test", govde)).click();
+  }
   const orListeYukle = async (yenile = false) => {
     $("#ay-or-uyari", govde).innerHTML = '<span class="parilti">Model listesi alınıyor…</span>';
     try {
@@ -583,6 +642,8 @@ export function ayarlarAc(sekme = "ai") {
     }
     orModelleriCiz();
     dusunmeCiz();
+    aktifCiz();
+    if (!durum.ayarlar.or_model) $("#ay-or-secici", govde).open = true; // secim yoksa acik gelsin
   };
   let orYuklendi = false;
   const orPanel = () => {
@@ -590,15 +651,21 @@ export function ayarlarAc(sekme = "ai") {
     $("#ay-or", govde).hidden = !acik;
     $$("[data-yerel]", govde).forEach((x) => { x.hidden = acik; });
     dusunmeCiz();
+    aktifCiz();
     if (acik && !orYuklendi) { orYuklendi = true; orAnahtarCiz(); orListeYukle(); }
   };
   $$("input[name=ay-sag]", govde).forEach((r) => {
     r.onchange = async () => {
       await kaydet({ saglayici: r.value });
-      $$("input[name=ay-sag]", govde).forEach((x) => x.closest(".secenek-kart").classList.toggle("secili", x.checked));
       orPanel();
     };
   });
+  $("#ay-or-degistir", govde).onclick = () => {
+    const g = $("#ay-or-anahtar-gir", govde);
+    g.hidden = !g.hidden;
+    if (!g.hidden) $("#ay-or-yeni", govde).focus();
+  };
+  $$("[data-filtre]", govde).forEach((x) => { x.onchange = orModelleriCiz; });
   $("#ay-or-kaydet", govde).onclick = async () => {
     const g = $("#ay-or-yeni", govde);
     try {
@@ -618,7 +685,7 @@ export function ayarlarAc(sekme = "ai") {
   $("#ay-or-yenile", govde).onclick = () => orListeYukle(true);
   $("#ay-or-test", govde).onclick = async (e) => {
     const b = e.currentTarget;
-    const sonuc = $("#ay-or-test-sonuc", govde);
+    const sonuc = $("#ay-aktif-sonuc", govde) || $("#ay-or-test-sonuc", govde);
     b.disabled = true;
     sonuc.innerHTML = '<span class="parilti">Deneniyor…</span>';
     try {
@@ -708,7 +775,7 @@ export function ayarlarAc(sekme = "ai") {
 
   $("#ay-test", govde).onclick = async (e) => {
     const b = e.currentTarget;
-    const sonuc = $("#ay-test-sonuc", govde);
+    const sonuc = $("#ay-aktif-sonuc", govde) || $("#ay-test-sonuc", govde);
     b.disabled = true;
     sonuc.innerHTML = '<span class="parilti">Model hazırlanıyor ve deneniyor…</span>';
     try {

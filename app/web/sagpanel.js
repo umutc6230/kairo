@@ -132,29 +132,134 @@ function dosyaPaneliAyarla(acik) {
   if (acik) dosyaAgaciniYenile();
 }
 
-const SURE = (sn) => (sn >= 60 ? `${Math.floor(sn / 60)} dk` : `${Math.max(0, Math.round(sn))} sn`);
+// Claude Code gibi sure: "45s", "17m 54s", "2h 11m"
+const SURE = (sn) => {
+  sn = Math.max(0, Math.round(sn || 0));
+  if (sn < 60) return `${sn}s`;
+  if (sn < 3600) return `${Math.floor(sn / 60)}m ${sn % 60}s`;
+  return `${Math.floor(sn / 3600)}h ${Math.floor((sn % 3600) / 60)}m`;
+};
 const CALISAN = new Set(["calisiyor", "onay_bekliyor", "karar_bekliyor", "duraklatildi", "bekliyor"]);
 
-// Claude Code'daki "Background tasks": calisan komut ve ajan gorevleri + biten sayisi
+// Komut ve ajan gorevlerini tek listeye cevirir (en yeni once)
+async function isListesi() {
+  const [{ isler }, { gorevler }] = await Promise.all([api("/api/komutlar"), api("/api/gorevler")]);
+  const simdi = Date.now();
+  const komut = isler.map((i) => ({
+    tur: "komut", id: i.id, ad: i.komut, calisiyor: i.durum === "calisiyor", bas: i.baslangic,
+    sure: i.sure_sn ?? (simdi - new Date(i.baslangic).getTime()) / 1000,
+  }));
+  const gorev = gorevler.map((g) => ({
+    tur: "gorev", id: g.id, ad: g.hedef || "Ajan görevi", calisiyor: CALISAN.has(g.durum), bas: g.olusturma,
+    sure: g.kullanim?.sure_sn ?? 0, durum: g.durum,
+  }));
+  return [...komut, ...gorev].sort((a, b) => String(b.bas).localeCompare(String(a.bas)));
+}
+
+const durdurBtn = (x) => `<button class="ikon-btn kucuk-ikon is-durdur" data-durdur="${kacir(x.tur)}:${kacir(x.id)}" title="Durdur" aria-label="Durdur">${ikon("durdur")}</button>`;
+
+async function isDurdur(deger) {
+  const [tur, id] = deger.split(":");
+  try {
+    await api(tur === "komut" ? `/api/komutlar/${id}/durdur` : `/api/gorevler/${id}/iptal`, { method: "POST", govde: {} });
+  } catch (e) { bildir(e.message, "hata"); }
+}
+
+// Claude Code'daki "Background tasks": calisanlar (sure + durdur) ve "N bitti"; tiklayinca ayrinti
 async function islerYenile() {
   const kap = $("#sp-isler");
   if (!kap || $("#sag-panel").hidden) return;
   try {
-    const [{ isler }, { gorevler }] = await Promise.all([api("/api/komutlar"), api("/api/gorevler")]);
-    const satirlar = [];
-    let biten = 0;
-    for (const i of isler) {
-      if (i.durum !== "calisiyor") { biten++; continue; }
-      satirlar.push(`<div class="sp-satir sp-is" title="${kacir(i.komut)}">${ikon("arkaPlan")}<span class="sp-ad">${kacir(i.komut)}</span></div>`);
-    }
-    for (const g of gorevler) {
-      if (!CALISAN.has(g.durum)) { biten++; continue; }
-      const sn = g.kullanim?.sure_sn ?? 0;
-      satirlar.push(`<div class="sp-satir sp-is" title="${kacir(g.hedef || "")}">${ikon("gorevler")}<span class="sp-ad">${kacir(g.hedef || "Ajan görevi")}</span><span class="soluk kucuk">${SURE(sn)}</span></div>`);
-    }
-    if (biten) satirlar.push(`<div class="sp-satir soluk">${ikon("tik")}<span class="sp-ad">${biten} bitti</span></div>`);
-    kap.innerHTML = satirlar.join("") || '<span class="soluk kucuk">Yok</span>';
+    const liste = await isListesi();
+    const calisan = liste.filter((x) => x.calisiyor);
+    const biten = liste.length - calisan.length;
+    kap.innerHTML = calisan.map((x) => `<div class="sp-satir sp-is sp-tik" data-ac="${kacir(x.id)}" title="${kacir(x.ad)}">${ikon(x.tur === "komut" ? "arkaPlan" : "gorevler")}<span class="sp-ad">${kacir(x.ad)}</span><span class="soluk kucuk">${SURE(x.sure)}</span>${durdurBtn(x)}</div>`).join("")
+      + (biten ? `<button class="sp-satir sp-tik soluk" data-ac="">${ikon("tik")}<span class="sp-ad">${biten} bitti</span></button>` : "")
+      || '<span class="soluk kucuk">Yok</span>';
+    kap.querySelectorAll("[data-durdur]").forEach((b) => { b.onclick = (e) => { e.stopPropagation(); isDurdur(b.dataset.durdur).then(islerYenile); }; });
+    kap.querySelectorAll("[data-ac]").forEach((b) => { b.onclick = () => arkaPlanAc(b.dataset.ac); });
+    if (!$("#arka-panel")?.hidden) arkaPlanCiz();
   } catch { /* sessiz */ }
+}
+
+// Ayrinti gorunumu: calisanlar canli ciktiyla ustte, "Bitti N" altinda acilir kartlar
+const acikKart = new Set();
+function arkaPlanAc(id) {
+  let p = $("#arka-panel");
+  if (!p) {
+    p = el(`<section id="arka-panel" class="arka-panel" aria-label="Arka plan işleri">
+      <div class="arka-baslik"><b>Arka plan işleri</b><span class="sp-sag"><button class="ikon-btn kucuk-ikon" data-kapat title="Kapat" aria-label="Kapat">${ikon("x")}</button></span></div>
+      <div class="arka-govde"></div></section>`);
+    $("#sag-panel").append(p);
+    $("[data-kapat]", p).onclick = () => { p.hidden = true; };
+  }
+  p.hidden = false;
+  if (id) acikKart.add(id);
+  arkaPlanCiz();
+}
+
+async function arkaPlanCiz() {
+  const p = $("#arka-panel");
+  if (!p || p.hidden) return;
+  const govde = $(".arka-govde", p);
+  let liste;
+  try { liste = await isListesi(); } catch { return; }
+  const calisan = liste.filter((x) => x.calisiyor);
+  const biten = liste.filter((x) => !x.calisiyor);
+  // bolum iskeleti bir kez: acik kartlarin kaydirma/icerigi her yenilemede bozulmasin
+  if (!$(".arka-calisan", govde)) {
+    govde.innerHTML = '<div class="arka-calisan"></div><details class="arka-biten" open><summary class="soluk">Bitti <span class="arka-sayi"></span></summary><div class="arka-biten-liste"></div></details>';
+  }
+  $(".arka-sayi", govde).textContent = biten.length;
+  kartlariEsitle($(".arka-calisan", govde), calisan, true);
+  kartlariEsitle($(".arka-biten-liste", govde), biten, false);
+}
+
+function kartlariEsitle(kap, isler, canli) {
+  const idler = new Set(isler.map((x) => x.id));
+  kap.querySelectorAll(".arka-kart").forEach((k) => { if (!idler.has(k.dataset.id)) k.remove(); });
+  isler.forEach((x, i) => {
+    let k = kap.querySelector(`.arka-kart[data-id="${CSS.escape(x.id)}"]`);
+    if (!k) {
+      k = el(`<div class="arka-kart" data-id="${kacir(x.id)}"><button class="arka-kart-bas"><span class="ok" data-ikon="sag"></span><span class="arka-ad"></span><span class="arka-sure soluk kucuk"></span></button><div class="arka-kart-govde" hidden></div></div>`);
+      ikonlariYerlestir(k);
+      $(".arka-kart-bas", k).onclick = () => kartAcKapa(k, x);
+    }
+    if (kap.children[i] !== k) kap.insertBefore(k, kap.children[i] || null);
+    $(".arka-ad", k).textContent = x.ad;
+    $(".arka-sure", k).innerHTML = SURE(x.sure) + (canli ? " " + durdurBtn(x) : "");
+    $(".arka-sure [data-durdur]", k)?.addEventListener("click", (e) => { e.stopPropagation(); isDurdur(e.currentTarget.dataset.durdur).then(arkaPlanCiz); });
+    if ((canli || acikKart.has(x.id)) && $(".arka-kart-govde", k).hidden) kartAcKapa(k, x);
+    else if (canli && x.tur === "komut") kartGovdeCiz(k, x); // calisan komutun ciktisi canli akar
+  });
+}
+
+function kartAcKapa(k, x) {
+  const g = $(".arka-kart-govde", k);
+  g.hidden = !g.hidden;
+  k.classList.toggle("acik", !g.hidden);
+  if (g.hidden) { acikKart.delete(x.id); return; }
+  acikKart.add(x.id);
+  kartGovdeCiz(k, x);
+}
+
+async function kartGovdeCiz(k, x) {
+  const g = $(".arka-kart-govde", k);
+  if (x.tur === "gorev") { // ajan gorevi: adim adim calisma akisi (gorevler.js ile ayni gorunum)
+    if (!g.dataset.cizildi) {
+      g.dataset.cizildi = "1";
+      const { sohbetteGorevGoster } = await import("./gorevler.js");
+      sohbetteGorevGoster(g, x.id);
+    }
+    return;
+  }
+  try {
+    const d = await api(`/api/komutlar/${x.id}`);
+    const altta = g.scrollHeight - g.scrollTop - g.clientHeight < 30;
+    const sonuc = d.durum === "calisiyor" ? "" : `\n[${d.cikis_kodu != null ? `exited with code ${d.cikis_kodu}` : d.durum}]`;
+    g.innerHTML = `<pre class="arka-komut">$ ${kacir(d.komut)}</pre><pre class="arka-cikti">${kacir(d.cikti || "")}${kacir(sonuc)}</pre>`;
+    if (altta) g.scrollTop = g.scrollHeight;
+  } catch (e) { g.innerHTML = `<div class="soluk kucuk">${kacir(e.message)}</div>`; }
 }
 
 // Thread'ler (is emirleri), aktif proje: once kullanicinin elini bekleyenler, sonra calisanlar

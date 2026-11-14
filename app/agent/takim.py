@@ -59,7 +59,22 @@ class TakimPanosu:
             elif g.durum == "alindi" and g.kira_bitis < simdi:
                 g.durum, g.sahip = "acik", ""  # yetim: geri acilir
 
-    def isleyiciler(self, kok: str, ajan: str) -> dict[str, Any]:
+    def teslim_al(self, kok: str, kimlikler: set[str]) -> list[dict]:
+        """Claude ekipleri gibi itmeli teslim: runner her model cagrisindan once bu ajana gelen
+        okunmamis mesajlari alir ve baglama ekler (alicinin 'oku' demesi gerekmez)."""
+        p = self._oku(kok)
+        hedef = {k.lower() for k in kimlikler if k} | {"hepsi"}
+        gelen = [m for m in p.mesajlar if str(m["kime"]).lower() in hedef and not m["okundu"]
+                 and str(m["kimden"]).lower() not in hedef]  # fmt: skip
+        if gelen:
+            for m in gelen:
+                m["okundu"] = True
+            self._yaz(kok, p)
+        return [{k: m[k] for k in ("kimden", "metin")} for m in gelen]
+
+    def isleyiciler(self, kok: str, ajan: str, ad: str = "") -> dict[str, Any]:
+        gonderen = ad or ajan  # mesajlarda okunur ad (or. Arastirmaci, lider)
+
         def gorev_ekle(baslik: str, bagimli: list[str] | None = None) -> dict:
             p = self._oku(kok)
             ids = {g.id for g in p.gorevler}
@@ -109,15 +124,16 @@ class TakimPanosu:
             mid = mesaj_id or uuid.uuid4().hex[:10]
             if any(m["id"] == mid for m in p.mesajlar):
                 return {"tekrar": mid}  # ayni mesaj ikinci kez teslim edilmez
-            p.mesajlar.append({"id": mid, "kimden": ajan, "kime": alici, "metin": str(metin)[:2000],
-                               "okundu": False})  # fmt: skip
+            p.mesajlar.append({"id": mid, "kimden": gonderen, "kime": str(alici).strip(),
+                               "metin": str(metin)[:2000], "okundu": False})  # fmt: skip
             self._yaz(kok, p)
             return {"gonderildi": mid}
 
         def mesajlari_oku() -> dict:
             p = self._oku(kok)
             self._bakim(p, ajan)
-            gelen = [m for m in p.mesajlar if m["kime"] in (ajan, "hepsi") and not m["okundu"]]
+            kim = {ajan.lower(), gonderen.lower(), "hepsi"}
+            gelen = [m for m in p.mesajlar if str(m["kime"]).lower() in kim and not m["okundu"]]
             for m in gelen:
                 m["okundu"] = True
             self._yaz(kok, p)
@@ -150,7 +166,8 @@ SEMALAR = [
     _f("takim_gorev_al", "Acik bir gorevi uzerine alir (sureli; panoyu kullandikca yenilenir).",
        {"id": S}, ["id"]),
     _f("takim_gorev_tamamla", "Aldigin gorevi sonucuyla tamamlar.", {"id": S, "sonuc": S}, ["id"]),
-    _f("takim_mesaj_gonder", "Takimdan birine (ajan kimligi ya da 'hepsi') mesaj gonderir.",
+    _f("takim_mesaj_gonder", "Takim uyesine mesaj: alici = uye adi (or. Yazar), 'lider' ya da "
+       "'hepsi'. Mesaj aliciya KENDILIGINDEN ulasir (bir sonraki adiminda gorur).",
        {"alici": S, "metin": S, "mesaj_id": S}, ["alici", "metin"]),
     _f("takim_mesajlari_oku", "Sana gelen okunmamis mesajlari doner.", {}, []),
 ]  # fmt: skip

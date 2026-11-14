@@ -202,15 +202,25 @@ function asistanMesaji() {
       <button class="dusunce-baslik"><span data-ikon="beyin"></span><span class="dusunce-etiket">Düşünüyor…</span><span class="ok" data-ikon="sag"></span></button>
       <div class="dusunce-icerik"></div>
     </div>
-    <div class="sohbet-plan" hidden></div>
-    <div class="arac-adimlari"></div>
+    <button class="etkinlik-baslik" hidden aria-expanded="true"><span class="etkinlik-metin">Çalışıyor</span><span class="ok" data-ikon="sag"></span></button>
+    <div class="etkinlik-govde">
+      <div class="sohbet-plan" hidden></div>
+      <div class="arac-adimlari"></div>
+    </div>
     <div class="govde-metin md"></div>
     <div class="uyarilar"></div>
+    <div class="canli-alt" hidden><span class="nokta3" aria-hidden="true"><i></i><i></i><i></i></span><span class="canli-sure"></span></div>
     <div class="mesaj-alt" hidden><button class="ikon-btn" title="Kopyala" data-ikon="kopyala"></button><span class="istat istat-cipleri"></span></div>
   </div>`);
   const dusunceKutu = d.querySelector(".dusunce");
   d.querySelector(".baykus-kap").innerHTML = ikon("logo");
   d.querySelector(".dusunce-baslik").onclick = () => dusunceKutu.classList.toggle("acik");
+  // Claude gibi "Editing ›": tiklayinca arac adimlari katlanir/acilir
+  const etk = d.querySelector(".etkinlik-baslik");
+  etk.onclick = () => {
+    const kapali = d.classList.toggle("etkinlik-kapali");
+    etk.setAttribute("aria-expanded", String(!kapali));
+  };
   const o = {
     el: d,
     metin: "",
@@ -232,9 +242,40 @@ function asistanMesaji() {
       // beklerken "Model hazirlaniyor... 8 sn" gibi canli sayac
       this.model = model;
       this.sayacDurdur = canliSayac(d.querySelector(".durum-satiri .sayac"), "· ");
+      // Claude gibi alt satir: "••• 1m 54s · 845 tokens" (token: akan metinden tahmin)
+      const alt = d.querySelector(".canli-alt");
+      const bas = performance.now();
+      alt.hidden = false;
+      const yaz = () => {
+        const sn = Math.round((performance.now() - bas) / 1000);
+        const sure = sn < 60 ? `${sn}s` : `${Math.floor(sn / 60)}m ${sn % 60}s`;
+        const token = Math.round((this.metin.length + this.dusunce.length + (this.aracKarakter || 0)) / 4);
+        alt.querySelector(".canli-sure").textContent = `${sure} · ${sayi(token, 0)} tokens`;
+      };
+      yaz();
+      this.altSayac = setInterval(yaz, 500);
     },
     gecen() {
+      clearInterval(this.altSayac);
+      d.querySelector(".canli-alt").hidden = true;
+      const etk = d.querySelector(".etkinlik-baslik");
+      if (!etk.hidden) { // bitti: "Editing" yerine kac adim calistigi
+        const n = d.querySelectorAll(".arac-adimlari .arac-adim:not([hidden])").length;
+        etk.querySelector(".etkinlik-metin").textContent = n ? `${n} adım` : "Tamamlandı";
+        etk.classList.remove("parilti");
+      }
       return this.sayacDurdur ? this.sayacDurdur() : null;
+    },
+    etkinlik(ad, arg) {
+      const etk = d.querySelector(".etkinlik-baslik");
+      etk.hidden = false;
+      etk.classList.toggle("parilti", !!this.altSayac); // kayitli mesajda canli parilti yok
+      this.aracKarakter = (this.aracKarakter || 0) + JSON.stringify(arg || {}).length;
+      const ETIKET = [[/dosya_(yaz|yama|tasi|sil)|ajan_olustur|uzanti_yaz/, "Düzenliyor"],
+        [/komut_calistir|cli_ye_yaptir/, "Komut çalıştırıyor"], [/web_|tarayici_/, "Web'de arıyor"],
+        [/oku|listele|ara|glob|git_|kod_|gorsel/, "Okuyor"], [/plan_guncelle/, "Planlıyor"],
+        [/alt_ajan|is_emri|alt_oturum/, "Ajan başlatıyor"]];
+      etk.querySelector(".etkinlik-metin").textContent = (ETIKET.find(([r]) => r.test(ad)) || [null, "Araç kullanıyor"])[1];
     },
     durum(metin) {
       const s = d.querySelector(".durum-satiri");
@@ -295,6 +336,7 @@ function asistanMesaji() {
     },
     aracCagrisi(o) {
       this.durum("");
+      this.etkinlik(o.ad, o.argumanlar);
       if (this.sayacDurdur) this.mod("calisiyor");
       if (o.ad === "alt_oturum_oner") {
         if (this.sayac) this.dusunceBitir();

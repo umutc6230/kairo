@@ -750,6 +750,7 @@ def uygulama_olustur(
         return sorted(isler, key=lambda x: sira.get(x["asama"], 99))
 
     sohbet.is_emirleri = (_sohbet_is_ac, _sohbet_is_liste)
+    sohbet.goruntu_var = lambda: model_yetenegi().goruntu
 
     async def _is_baslat(is_: sa.IsEmri) -> None:
         """Bir atama: ilk atamada worktree + dal olusur; sonrakiler ayni dalda onceki ozetle."""

@@ -219,6 +219,7 @@ class Run(BaseModel):
     inceleme: dict = {}  # D (Chimera): gorev sonu otomatik inceleme {ozet, bulgular, ...}
     calisma_koku: str = ""  # izole worktree (A8.3) ya da kalici ajanin klasoru; bos = proje kokunde
     dal: str = ""
+    ad: str = ""  # takim uyesi adi (alt_ajan 'ad'); lider bos (mesajlarda 'lider')
     ajan_id: str = ""  # kalici ajanin isi (ajanlar.py): kimlik/talimat ek_sistem'de
     ek_sistem: str = ""
     # ders defteri: hata veren arac -> imza; ayni arac sonra basarili olursa cozum kaydedilir
@@ -321,6 +322,7 @@ ALT_AJAN_ARACI = _f(
         "dosyalar": {"type": "array", "items": {"type": "string"}},
         "max_adim": {"type": "integer"},
         "profil": {"type": "string"},
+        "ad": {"type": "string", "description": "Takim adi (or. Arastirmaci), mesajlarda"},
     },
     ["gorev", "araclar"],
 )
@@ -476,6 +478,7 @@ class AgentRunner:
         # D (Chimera): async (run) -> inceleme dict | None; api baglar (ayar + git diff + model)
         self.inceleyici: Callable[[Run], Any] | None = None
         self._incelemeler: set[asyncio.Task] = set()
+        self._gorseller: dict[str, list[dict]] = {}  # run -> bekleyen gorsel_oku sonuclari
         # kalici ajan araclari (api baglar): run -> (semalar, isleyiciler)
         self.ajan_araclari: Callable[[Any], tuple[list, dict]] | None = None
         self.takim: Any = None  # TakimPanosu (api baglar)
@@ -728,6 +731,9 @@ class AgentRunner:
         return en_iyi if en_iyi >= 2 else 0
 
     def _arac_mesaji(self, run: Run, a: Adim, sonuc: Any) -> None:
+        if isinstance(sonuc, dict) and "_gorsel" in sonuc:  # gorsel_oku: model cagrisindan once
+            sonuc = dict(sonuc)
+            self._gorseller.setdefault(run.id, []).append(sonuc.pop("_gorsel"))
         if isinstance(sonuc, dict) and isinstance(sonuc.get("cikis_kodu"), int):
             a.cikis_kodu = sonuc["cikis_kodu"]  # kanit kontrolu kirpilmis metne guvenmez
         if isinstance(sonuc, dict) and (h := sonuc.get("yeni_hash") or sonuc.get("hash")):
@@ -788,7 +794,8 @@ class AgentRunner:
             if self.takim is not None:  # A8.2: lider + alt ajanlar ortak panoyu paylasir
                 kok = run.parent or run.id
                 semalar = [*semalar, *TAKIM_SEMALARI]
-                isleyiciler = {**isleyiciler, **self.takim.isleyiciler(kok, run.id)}
+                ad = run.ad or ("lider" if not run.parent else "")
+                isleyiciler = {**isleyiciler, **self.takim.isleyiciler(kok, run.id, ad)}
             if run.parent:  # alt ajan: yalniz verilen araclar; alt ajan acamaz (derinlik 1)
                 izinli = (
                     set(run.izinli_araclar) | META | {t["function"]["name"] for t in TAKIM_SEMALARI}
@@ -849,10 +856,20 @@ class AgentRunner:
                         {"role": "user", "content": f"[Kullanici yonlendirmesi] {m}"}
                     )
                     run.guncellemeler.append(f"Kullanici: {m[:200]}")
+                if self.takim is not None:  # takim mesajlari itmeli: alici okumadan gelir
+                    kimlik = {run.id, run.ad, "" if run.parent else "lider"}
+                    for m in self.takim.teslim_al(run.parent or run.id, kimlik):
+                        run.mesajlar.append({"role": "user", "content": (
+                            f"[Takim mesaji - {m['kimden']}] {m['metin']}")})  # fmt: skip
+                        run.guncellemeler.append(f"Mesaj ({m['kimden']}): {m['metin'][:200]}")
                 self.depo.kaydet(run)
                 if yon := self._izleyici(run):  # 4: hata yogunlugu / dolasma -> yon notu
                     run.mesajlar.append({"role": "user", "content": yon})
                     run.guncellemeler.append(yon.split(".")[0])
+                if gorseller := self._gorseller.pop(run_id, None):  # tur sonu: tool'lardan sonra
+                    from app.services.sohbet import gorsel_mesaji
+
+                    run.mesajlar.append(gorsel_mesaji(gorseller))
                 # 3) model
                 mesaj = await self._model(run, sistem, semalar)
                 if mesaj is None:
@@ -1333,11 +1350,13 @@ class AgentRunner:
             self.depo.kaydet(run)
             return
         # model cok dusuk butce isteyebiliyor (canli: 5); alt sinir 8, ust sinir ebeveynin kalani
-        istenen = max(int(g.get("max_adim") or 25), ALT_AJAN_MIN_ADIM)
+        # 25 arastirma alt ajanlarina yetmiyordu (karsilastirma: 2/4 alt ajan butcede durdu)
+        istenen = max(int(g.get("max_adim") or 50), ALT_AJAN_MIN_ADIM)
         cocuk = Run(
             hedef=gorev,
             model=run.model,
             parent=run.id,
+            ad=re.sub(r"[^\w -]", "", str(g.get("ad") or ""))[:40].strip(),
             izinli_araclar=araclar,
             sahip_dosyalar=dosyalar,
             # butce KESILIR: cocuk ebeveynin kalanindan fazlasini alamaz, toplam cogalmaz
@@ -1353,7 +1372,10 @@ class AgentRunner:
         cocuk.mesajlar = [{"role": "user", "content": (
             f"GOREV (alt ajan, ebeveyn {run.id}): {gorev}\n\nKULLANABILECEGIN ARACLAR: "
             f"{', '.join(araclar)}\nYAZABILECEGIN DOSYALAR: {sahiplik}\n"
-            "Bitince gorevi_bitir'i kanit adimlariyla cagir; sonucun ebeveyne doner."
+            "Bitince gorevi_bitir'i kanit adimlariyla cagir; sonucun ebeveyne doner.\n"
+            f"TAKIM: adin '{cocuk.ad or cocuk.id}'. Lidere ya da baska uyeye "
+            "takim_mesaj_gonder ile yaz (alici: 'lider', uye adi ya da 'hepsi'); sana gelen "
+            "mesajlar kendiliginden gelir."
         )}]  # fmt: skip
         self.depo.kaydet(cocuk)
         run.cocuklar.append(cocuk.id)

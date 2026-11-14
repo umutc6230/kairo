@@ -364,6 +364,24 @@ Python 3.12 + FastAPI + pywebview; arayuz vanilla JS. Paketleme: PORTABLE (kulla
   ozyineleme (alt cizgili ad); adres /v1 cift ekleniyordu; "İ".lower() hatasi; durdur kilitte asiliydi.
 
 ## Siradaki adim
+- AI AYARLARI YENIDEN TASARIM (2026-11-14, Cursor/Open WebUI/Jan ornekleri): ustte 'Kullanilan model' ozet karti (baglam,
+  fiyat, yetenekler, uyari; Degistir + Dene, test sonucu kartta), saglayici iki hap, API anahtari tek satir (Degistir/Sil,
+  anahtar yoksa giris acik), 'Model sec' katlanir secici: arama + cipler (Ucretsiz, Arac, Gorsel, Dusunur), tek satirlik
+  liste, secili model hep en ustte. Element id'leri korundu. Onizlemede gercek test: basarili 0.9 sn.
+- AJANLAR ARASI MESAJ (Claude ekipleri gibi): alt_ajan 'ad' parametresi (Run.ad); takim_mesaj_gonder alici = uye adi /
+  'lider' / 'hepsi'; TakimPanosu.teslim_al ile mesajlar her model cagrisindan once aliciya ITMELI eklenir
+  ('[Takim mesaji - Yazar] ...'), okuma araci gerekmez. tests/test_a8_takim.py +2.
+- ZOR KARSILASTIRMA (2026-11-14, ../karsilastirma-zor: hazirla.py girdiler+gizli beklenen, kos.py, degerlendir.py, sonuc.json):
+  7 gorev (OCR fatura, kirli CSV, hata ayiklama + gizli test, kaynakli arastirma, CLI uygulama, alt ajan takimi, 3 kisilik ekip).
+  IKISI DE tum olculen kontrolleri gecti. Claude Code: 45m46s, ~$15 (ekip tek basina $8.4, SendMessage 7 + Agent 3).
+  Kairo (deepseek-v4.1-flash): 17m54s; alt_ajan 3 (takim), ekipte alt_ajan + takim panosu, 2/4 alt ajan adim butcesinde durdu.
+  Bulunan Kairo eksikleri -> DUZELTILDI: (1) gorsel dosyayi modele verecek arac yoktu (OCR icin Tesseract'i winget ile kurdu,
+  29 adim) -> sohbet.gorsel_oku + GORSEL_ARACI (yalniz model goruntu destekliyorsa VE istek gorselle ilgiliyse; tur sonunda
+  ayri user mesaji, runner._gorseller), tests/test_gorsel_oku.py (2) alt ajan varsayilan butcesi 25 -> 50.
+- ARAYUZ (kullanici istegi, Claude benzeri): mesajda 'Duzenliyor >' etkinlik basligi (tikla: adimlari katla), cerceveli plan karti
+  (tik / donen / kesik daire), canli alt satir '••• 1m 54s · N tokens'; sag panel Arka plan isleri: calisan + sure + durdur,
+  'N bitti', tiklayinca ust katman: kartlar (komut: $ komut + cikti + [exited with code N]; gorev: adim adim akis).
+  Onizlemede gercek OpenRouter istegiyle goruldu (.claude/launch.json 'kairo-openrouter' 8802).
 - 2026-11-14 HATA DUZELTME: Kairo sohbetinde 'Gecersiz arguman JSON'u' (GitHub raporu yazarken). Kok neden: sohbet cevap siniri ayardaki max_tokens (1024) idi; uzun rapor tek proje_dosya_yaz argumaninda kesiliyordu (ajan gorevleri cevap_tokeni ile cozulmustu, sohbet degil). Duzeltme sohbet.py: araclar varken max(max_tokens, cevap_tokeni(baglam)) (32K -> 8192) + kesik argumanda 'parcala' yonlendirmesi. Probe: DeepSeek akissiz cagrida tek tirnakli JSON gecerli (tirnak neden degil). test_api +2.
 - EKSIKLERI TAMAMLA (2026-11-14) BITTI: tam paket 764 gecti + CLI regresyonu (uzanti_yaz semasi 16K baglami tasiriyordu -> yalniz uzanti/mod isteginde) giderildi, teslim 13:03, commit+push. Kararlar: GitHub hitabi /kairo; thread onayi tercih yok -> otomatik kalir;
   agent-desktop EKLE (sabit surum + SHA256); sosyal medya ajani ERTELENMIS kalir. RAM 3.4 GB -> model olcumleri yapilamaz.

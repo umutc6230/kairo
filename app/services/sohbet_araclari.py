@@ -500,6 +500,20 @@ def _kisa(o: dict) -> dict:
     return {k: o.get(k, "") for k in ("id", "baslik", "asama", "ozet", "olusturma", "guncelleme")}
 
 
+GORSEL_ARACI = {
+    "type": "function",
+    "function": {
+        "name": "gorsel_oku",
+        "description": "Projedeki bir gorsel dosyasini (png, jpg, taranmis belge, ekran goruntusu) "
+        "sana GORUNTU olarak verir; metnini/tablosunu kendin okursun (OCR icin program kurma).",
+        "parameters": {
+            "type": "object",
+            "properties": {"yol": {"type": "string"}},
+            "required": ["yol"],
+        },
+    },
+}  # fmt: skip
+
 UZANTI_YAZ_ARACI = {
     "type": "function",
     "function": {
