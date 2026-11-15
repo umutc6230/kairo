@@ -3,7 +3,7 @@ import { ikonlariYerlestir } from "./ikonlar.js";
 import { kacir } from "./md.js";
 import { $, $$, api, bildir, durum, el, modal, onayla, sayi } from "./ortak.js";
 
-const KAYNAK_AD = { claude: "Claude Code", brain: "Brain", uygulama: "Uygulama" };
+const KAYNAK_AD = { claude: "Claude Code", brain: "Brain", uygulama: "Uygulama", yerlesik: "Yerleşik" };
 let skiller = [];
 let filtre = "hepsi";
 let ayarYenile = async () => {};
@@ -185,7 +185,7 @@ function skillKarti(s) {
   const secilebilir = ["temiz", "sartli"].includes(s.son);
   // neden secilemiyor: kutuyu kapatmak yetmez, kullaniciya yazilir
   const engel = { denetlenmedi: "Önce Claude Code ile denetle", reddet: "Denetim reddetti; kurulamaz" }[s.son] || "";
-  const KAYNAK = { claude: "Claude Code'da", brain: "Brain'de", uygulama: "Kairo'da" };
+  const KAYNAK = { claude: "Claude Code'da", brain: "Brain'de", uygulama: "Kairo'da", yerlesik: "Kairo ile geliyor" };
   return `<div class="ske-skill ${secilebilir ? "" : "pasif"}" data-ad="${kacir(s.ad)}">
     <div class="ske-ust"><label class="ske-sec" title="${kacir(engel)}"><input type="checkbox" data-sec ${secilebilir && !s.var ? "checked" : ""} ${secilebilir ? "" : "disabled"}> <b>${kacir(s.ad)}</b></label>
       <span class="rozet ${sinif}">${kacir(etiket)}</span>

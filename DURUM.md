@@ -1,6 +1,12 @@
 # DURUM - kairo
 guncel: 2026-11-15 | son arac: Claude Code | dal: feature/ajan-katmani
 
+- 2026-11-15 (24) [x] YERLESIK BELGE SKILL'LERI: anthropics/skills docx + pdf (Apache-2.0, commit 1780c5e) app/skills'te;
+  tarama TEMIZ (ag/sir/eval/gizli unicode yok; alt surec yalniz soffice, Linux'ta gcc shim). SKILL.md sonuna isaretli
+  'Kairo (Windows) notu' (npm docx yerelde kur, pandoc/LibreOffice yok, reportlab + Arial TTF Turkce; DOGRULANDI).
+  NOTICE.txt; skiller 'yerlesik' kaynagi en sonda (kullanicinin ayni adli skill'i onde); kairo.spec datas; ruff
+  extend-exclude app/skills (orijinal kalir); arayuz 'Yerlesik' filtresi. tests/test_yerlesik_skill.py 3. Tam paket
+  801 gecti. Teslim 09:41, /api/skiller'de docx+pdf yerlesik. Gercek modelle rapor uretimi DENENMEDI.
 - 2026-11-15 (23) [x] PROJE SECICI en cok kullanilan (sohbet sayisi, esitlikte son kullanilan; app.js bosDurumKartlari,
   oturumlar yuklenince yeniden cizilir) + PAYLAS ikonu standart 'kutudan yukari ok' (ikonlar.js paylas). Onizlemede goruldu.
 - 2026-11-15 (22) [x] ARTIFACT OZELLIGI KALDIRILIYOR (kullanici istegi: "gerek yok"). Kapsam: sol kenar 'Artifact'ler' +

@@ -52,6 +52,12 @@ def varsayilan_llm_dizini() -> Path:
     return next((d for d in adaylar if _motor_var(d)), adaylar[-1])
 
 
+def yerlesik_skill_dizini() -> Path:
+    """Uygulamayla gelen skill'ler (PyInstaller paketinde _MEIPASS altinda; salt okunur)."""
+    kok = Path(getattr(sys, "_MEIPASS", Path(__file__).resolve().parent.parent))
+    return kok / "app" / "skills"
+
+
 def web_dizini() -> Path:
     """Arayuz dosyalari (PyInstaller paketinde _MEIPASS altinda)."""
     kok = Path(getattr(sys, "_MEIPASS", Path(__file__).resolve().parent.parent))

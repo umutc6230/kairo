@@ -8,6 +8,7 @@ authors = [{ name = "Umut Çelik" }]
 [tool.ruff]
 line-length = 100
 target-version = "py312"
+extend-exclude = ["app/skills"]  # ucuncu taraf skill scriptleri orijinal kalir (Apache-2.0)
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "B", "UP", "SIM"]

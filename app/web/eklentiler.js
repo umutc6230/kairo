@@ -75,7 +75,7 @@ function yukluOgeler() {
     l.push({ anahtar: `plg:${p.ad}`, tur: "plugin", ad: p.ad, kaynak: p.kaynak || p.surum || "plugin", ...acikKapali(p.acik !== false), ham: p });
   }
   for (const s of veri.skiller) {
-    l.push({ anahtar: `skl:${s.ad}`, tur: "skill", ad: s.ad, kaynak: s.kaynak === "claude" ? "Claude Code" : s.kaynak === "brain" ? "Brain" : s.kaynak || "Kairo", ...acikKapali(s.acik), ham: s });
+    l.push({ anahtar: `skl:${s.ad}`, tur: "skill", ad: s.ad, kaynak: s.kaynak === "claude" ? "Claude Code" : s.kaynak === "brain" ? "Brain" : s.kaynak === "yerlesik" ? "Yerleşik" : s.kaynak || "Kairo", ...acikKapali(s.acik), ham: s });
   }
   return l;
 }

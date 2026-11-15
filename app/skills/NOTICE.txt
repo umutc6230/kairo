@@ -1,0 +1,8 @@
+# Yerlesik skill'ler - ucuncu taraf bildirimi
+
+`docx/` ve `pdf/` klasorleri https://github.com/anthropics/skills deposundan alinmistir
+(commit 1780c5e5a552fd4d1c9d6a7b0cab26b0c2bef064, 2026-11-14). Copyright Anthropic, PBC.
+Lisans: Apache License 2.0 (her klasordeki LICENSE.txt).
+
+Degisiklik: her iki `SKILL.md` dosyasinin sonuna isaretli "Kairo (Windows) notu" bolumu eklendi.
+Diger dosyalar degistirilmedi. Guvenlik taramasi 2026-11-15: ag, sir okuma, eval/exec, gizli Unicode yok.

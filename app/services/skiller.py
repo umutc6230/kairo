@@ -26,6 +26,7 @@ from pathlib import Path
 
 import yaml
 
+from app.config import yerlesik_skill_dizini
 from app.exceptions import Bulunamadi, UygulamaHatasi
 
 MAX_SKILL_KARAKTER = 8000
@@ -55,7 +56,13 @@ DURAK = {
 }
 
 
-GUVEN = {"claude": "kullanici", "brain": "kullanici", "uygulama": "kullanici", "proje": "proje"}
+GUVEN = {
+    "claude": "kullanici",
+    "brain": "kullanici",
+    "uygulama": "kullanici",
+    "yerlesik": "kullanici",
+    "proje": "proje",
+}
 
 
 @dataclass(frozen=True)
@@ -233,6 +240,9 @@ def varsayilan_kaynaklar(veri_dizini: Path) -> list[tuple[str, Path]]:
         ("claude", Path.home() / ".claude" / "skills"),
         ("brain", Path.home() / "Documents" / "brain" / "skills"),
         ("uygulama", veri_dizini / "skills"),
+        # Uygulamayla gelen (docx, pdf; app/skills/NOTICE.txt).
+        # En sonda: ayni adli kullanici skill'i onde gelir.
+        ("yerlesik", yerlesik_skill_dizini()),
     ]
 
 
