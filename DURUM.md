@@ -1,7 +1,7 @@
 # DURUM - kairo
 guncel: 2026-11-15 | son arac: Claude Code | dal: feature/ajan-katmani
 
-- 2026-11-15 (21) [~] ARACLARI IHTIYACA GORE YUKLE (A4.6, kullanici istegi). Olcum (calisan Kairo /baglam): her mesajda
+- 2026-11-15 (21) [x] ARACLARI IHTIYACA GORE YUKLE (A4.6, kullanici istegi). Olcum (calisan Kairo /baglam): her mesajda
   128 MCP araci 34.5K token + 52 yerlesik 5.2K + skill 5.5K + talimat 3.8K = ~51K. Plan (Claude Code deferred tools):
   [x] 1 app/agent/arac_bul.py: ertele(araclar, isleyiciler, onceki_adlar): MCP semalari ESIK_TOKEN (4000) asarsa
         listeden cikar, tek 'arac_bul' (sorgu, 'select:ad' destekli; aciklamada sunucu + arac sayisi) ekler;
@@ -13,8 +13,11 @@ guncel: 2026-11-15 | son arac: Claude Code | dal: feature/ajan-katmani
         -> 0 sema + arac_bul 245 token; toplam arac seti 5.5K. (Calisan Kairo eski kodla 128 arac 34.5K.)
         +1 runner testi (ajan gorevi 2. turda yuklu sema; duzeltmesiz DUSTUGU goruldu). Alt ajan yolu yalniz kodla.
         Gercek modelle arac_bul kullanimi GORULMEDI.
-  [x] 4 tam paket (a9_masaustu haric): 798 gecti, 3 atladi, 14.2 dk; ruff temiz. COMMIT YOK.
-  SIRADAKI: derle+teslim ve commit/push (kullanici onayi); gercek modelle arac_bul denemesi.
+  [x] 4 tam paket (a9_masaustu haric): 798 gecti, 3 atladi, 14.2 dk; ruff temiz. COMMIT 51b115b pushlandi.
+  [x] 5 derle 08:48 + teslim 08:49 (eski Kairo /T kapatildi, data korundu + yedek %TEMP%\kairo-data-yedek-084855),
+        PowerShell Start-Process ile acildi, log temiz. TESLIM OLCUMU (/baglam, kullanicinin sohbeti): toplam
+        51280 -> 17393 token; MCP 128 arac 34547 -> 2 arac 405 (ikisi o sohbette kullanilmis, onceden yuklu).
+  SIRADAKI: gercek modelle arac_bul denemesi (telefondan/masaustunden bir MCP isi iste).
 
 - 2026-11-14 (20) [~] SOHBET GECMISI MODELE GITMIYOR (mobil + masaustu ayni yol). Olcum (gercek ayar, OpenRouter
   deepseek-v4.1-flash, baglam_token 32768): sistem 6382 + 102 arac 19055 + paylar -> gecmise ~11 token (MCP'ler
