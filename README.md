@@ -140,6 +140,9 @@ Yaklaşık 800 test; model çağrıları sahte sunucuyla, ağa çıkmadan çalı
   izin verir. Yalnız güvendiğiniz işlerde açın.
 - Sansürsüz modeller içerik filtresi uygulamaz; kullanım sorumluluğu kullanıcıdadır.
 
+## Lisans
+[MIT](LICENSE) (c) 2026 Umut Çelik. Yerleşik skill'ler ve üçüncü taraf bileşenler kendi lisanslarına tabidir.
+
 ## Üçüncü taraf
 Tasarım fikirleri ve yerleşik skill'ler için `NOTICE-openbot.md`, `NOTICE-dsh-superagent.md` ve
 `app/skills/NOTICE.txt` dosyalarına bakın.
