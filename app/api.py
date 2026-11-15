@@ -753,6 +753,7 @@ def uygulama_olustur(
 
     sohbet.is_emirleri = (_sohbet_is_ac, _sohbet_is_liste)
     sohbet.goruntu_var = lambda: model_yetenegi().goruntu
+    sohbet.model_baglami = lambda: model_yetenegi().baglam
     sohbet.openrouter = openrouter
 
     async def _is_baslat(is_: sa.IsEmri) -> None:

@@ -60,6 +60,7 @@ from app.services.yerel_llm import (
 # Baglam butcesi (llama-server -c 8192). Tahminler kasitli olarak comert: tasarsa sunucu hata verir.
 BAGLAM_TOKEN = 8192
 GUVENLIK_TOKEN = 400
+UZAK_BAGLAM_TAVAN = 131072  # uzak (OpenRouter) modelde sohbet baglaminin ust siniri
 KARAKTER_PER_TOKEN = 3.3  # Turkce olcum (skill bolum 4.7)
 RESIM_TOKEN = 1800  # 1600 px gorsel
 GECMIS_RESIM_TOKEN = 1100  # gecmiste 1024 px'e kucultulmus gorsel
@@ -415,6 +416,14 @@ async def gecmis_mesajlari(
         if maliyet > butce:  # bu ve daha eski mesajlar hic gitmez; ekleri de bildirilir
             eskiler = [e for eski_m in mesajlar[: i + 1] for e in eski_m.ekler]
             dusenler = [e.ad for e in eskiler if e.id not in gonderilen] + dusenler
+            gonder(  # sessiz kalinca model onceki mesajlari "yok" sanip bastan basliyordu
+                {
+                    "tur": "uyari",
+                    "kod": "gecmis_kirpildi",
+                    "metin": f"Bağlama sığmadığı için {i + 1} eski mesaj bu cevapta "
+                    "gönderilmedi; model onları görmüyor.",
+                }
+            )
             break
         butce -= maliyet
         rol = "user" if m.rol == "kullanici" else "assistant"
@@ -735,6 +744,7 @@ class SohbetServisi:
         self.ajan_olusturucu = None  # AjanDeposu.olustur (api baglar): sohbetten kalici ajan
         self._cli_oturumlari: dict[str, str] = {}  # "saglayici|klasor" -> CLI konusma id
         self.goruntu_var = None  # () -> bool (api baglar): secili model gorsel okuyabiliyor mu
+        self.model_baglami = None  # () -> int (api baglar): secili modelin baglam penceresi
         self.openrouter = None  # OpenRouterDeposu (api baglar): gorsel_uret icin
         self.is_emirleri = None  # (ac, listele) api baglar: sohbetten thread (is emri)
         self.tarayici = None  # Tarayici (api baglar)
@@ -779,6 +789,16 @@ class SohbetServisi:
             logger.debug("Model skill secimi basarisiz: {}", e)
             return None
         return s.ad if s else ""
+
+    def baglam(self, ayar) -> int:
+        """Sohbetin baglam butcesi. ayar.baglam_token yerel llama-server'in -c degeridir ve
+        OpenRouter seciliyken arayuzde gizlidir; uzak modelde modelin kendi penceresi kullanilir.
+        32K'da sistem + ~100 arac tanimi tum butceyi yiyor, gecmis hic gitmiyordu."""
+        if self.model_baglami is None:
+            return ayar.baglam_token
+        # shortcut: her turda tum gecmis yeniden gider; 1M'lik modelde istek basi maliyet
+        # sinirsiz buyumesin diye tavan var. Otomatik ozet (compact) gelirse tavan kalkabilir.
+        return max(ayar.baglam_token, min(self.model_baglami(), UZAK_BAGLAM_TAVAN))
 
     def baglam_hazirla(
         self, ayar, istek_metni: str, onceki: list[Mesaj], model_secimi: str | None = None
@@ -1307,8 +1327,19 @@ class SohbetServisi:
                 guncel += tahmini_token(sistem) - tahmini_token(ayar.sistem_istemi)
                 if araclar:  # arac tanimlari + bir arac sonucu icin pay
                     guncel += tahmini_token(json.dumps(araclar)) + 1800
-                butce = ayar.baglam_token - GUVENLIK_TOKEN - guncel
-                butce -= ayrilan_token(ayar.max_tokens, seviye)
+                from app.agent.runner import cevap_tokeni
+
+                baglam = await asyncio.to_thread(self.baglam, ayar)
+                # Araclar varken model uzun dosya/rapor icerigini TEK arac argumaninda yazar:
+                # ayardaki kisa cevap siniri (or. 1024) argumani yarida kesiyor, JSON bozuluyordu
+                # ("Gecersiz arguman JSON'u"). Ajan gorevleriyle ayni pay kullanilir.
+                cevap_payi = (
+                    max(ayar.max_tokens, cevap_tokeni(baglam)) if araclar else ayar.max_tokens
+                )
+                # Gecmis, baglami_darat'in ayirdigi AYNI cevap payiyla hesaplanir; max_tokens ile
+                # hesaplaninca sigan gecmis model cagrisindan once yeniden dusuyordu.
+                butce = baglam - GUVENLIK_TOKEN - guncel
+                butce -= ayrilan_token(cevap_payi, seviye)
                 if butce < 0:
                     gonder(
                         {
@@ -1324,23 +1355,13 @@ class SohbetServisi:
                     gonder(
                         {
                             "tur": "uyari",
-                            "metin": f"Bağlama ({ayar.baglam_token} token) sığmadığı için şu "
+                            "metin": f"Bağlama ({baglam} token) sığmadığı için şu "
                             f"eski ekler bu cevapta gönderilmedi: {', '.join(dusenler)}",
                         }
                     )
                 mesajlar = [{"role": "system", "content": sistem}] if sistem else []
                 mesajlar += onceki_mesajlar + [{"role": "user", "content": icerik}]
                 gonder({"tur": "durum", "metin": "Yanitlaniyor..."})
-                from app.agent.runner import cevap_tokeni
-
-                # Araclar varken model uzun dosya/rapor icerigini TEK arac argumaninda yazar:
-                # ayardaki kisa cevap siniri (or. 1024) argumani yarida kesiyor, JSON bozuluyordu
-                # ("Gecersiz arguman JSON'u"). Ajan gorevleriyle ayni pay kullanilir.
-                cevap_payi = (
-                    max(ayar.max_tokens, cevap_tokeni(ayar.baglam_token))
-                    if araclar
-                    else ayar.max_tokens
-                )
                 sonuc = await cevap_akit(
                     llm,
                     mesajlar,
@@ -1352,7 +1373,7 @@ class SohbetServisi:
                     isleyiciler=isleyiciler,
                     # ajan araclari varsa (yaz/komut) cok adimli is: 6 tur yetmiyordu (canli)
                     max_tur=0,  # sinirsiz; donguyu tekrar korumasi durdurur
-                    baglam_token=ayar.baglam_token,
+                    baglam_token=baglam,
                     rezerv=GUVENLIK_TOKEN + ayrilan_token(cevap_payi, seviye),
                 )
                 sonuc["istatistik"]["yukleme_sn"] = yukleme

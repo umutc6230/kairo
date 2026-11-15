@@ -477,3 +477,52 @@ async def test_silinmis_oturuma_gec_cevap_cokmez(sohbet_servisi) -> None:
     assert "uyari" in turler
     assert "bitti" not in turler  # silinmis sohbete "kaydedildi" denmez
     assert any(o.get("kod") == "oturum_silindi" for o in gorulen)
+
+
+# ------------------------------------- gecmis: buyuk arac seti + uzak model baglami
+
+
+def test_sohbet_baglami_uzak_modelin_penceresini_kullanir(sohbet_servisi) -> None:
+    from app.services.sohbet import UZAK_BAGLAM_TAVAN
+
+    servis, _ = sohbet_servisi
+    ayar = KullaniciAyarlari(baglam_token=32768)
+    assert servis.baglam(ayar) == 32768  # baglanmamis (CLI/test): ayar
+    servis.model_baglami = lambda: 1_048_576
+    assert servis.baglam(ayar) == UZAK_BAGLAM_TAVAN  # 1M'lik modelde tavan
+    servis.model_baglami = lambda: 8192  # listede olmayan uzak model temkinli 8K doner
+    assert servis.baglam(ayar) == 32768  # eski davranistan geri gitmez
+
+
+async def test_buyuk_arac_setinde_gecmis_modele_gider(servis_kur, sunucu, veri: Path) -> None:
+    """Canli hata: OpenRouter + 32K + ~100 arac tanimi gecmise ~11 token birakiyordu; model
+    onceki mesajlari hic gormeyip her mesaji yeni sohbet saniyordu."""
+    sunucu.dusunce = ""
+    servis, oturumlar = servis_kur()
+    AyarDeposu(veri).guncelle({"baglam_token": 32768})
+    araclar = [
+        {"type": "function", "function": {"name": f"a{i}", "description": "x" * 700}}
+        for i in range(100)
+    ]
+    asil = servis.baglam_hazirla
+    servis.baglam_hazirla = lambda *a, **k: (asil(*a, **k)[0], araclar, {}, None)
+    oturum = oturumlar.olustur()
+    oturum.mesajlar = [
+        Mesaj(rol="kullanici", metin="calisan uygulamalari numarali listele"),
+        Mesaj(rol="asistan", metin="| 4 | steamwebhelper.exe | 363 MB |\n" * 20),
+    ]
+    oturumlar.kaydet(oturum)
+
+    async def gonder() -> tuple[str, list[dict]]:
+        olaylar_ = [o async for o in servis.mesaj_gonder(oturum.id, MesajIstegi(metin="4"))]
+        return json.dumps(sunucu.istekler[-1]["messages"], ensure_ascii=False), olaylar_
+
+    # 32K'da gecmis sigmaz: artik sessiz degil, uyari verilir
+    giden, olaylar_ = await gonder()
+    assert "steamwebhelper" not in giden
+    assert any(o.get("kod") == "gecmis_kirpildi" for o in olaylar_)
+
+    servis.model_baglami = lambda: 1_048_576  # api.py: model_yetenegi().baglam
+    giden, olaylar_ = await gonder()
+    assert "steamwebhelper" in giden
+    assert not any(o.get("kod") == "gecmis_kirpildi" for o in olaylar_)
