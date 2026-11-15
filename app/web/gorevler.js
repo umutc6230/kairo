@@ -50,7 +50,16 @@ let kapOverride = null; // sohbet icinde gosterimde gorev o mesajin kutusuna ciz
 const detayKabi = () => kapOverride || $("#gr-detay");
 let sonCizilen = ""; // degismeyen gorevi yeniden cizme: tiklanan dugme DOM'dan kalkmasin
 let zamanlayici = null;
-const acikAdimlar = new Set();
+let acikAdimlar = new Set();
+// Ayni anda birden cok kutu (sohbet + sag panel karti) ayni ya da farkli gorevi canli izler;
+// her kutunun kendi yoklamasi ve acik/kapali durumu var. Tek global izleyici, panel karti
+// acilinca sohbetin yoklamasini olduruyordu (sohbet ilk adimda donuyordu).
+const izleyiciler = new Map(); // kap -> { kap, id, acik, imza, zamanlayici }
+function baglamla(v, fn) { // cizim senkron: global kap/acik durumu cizim suresince bu kutuya
+  const once = [kapOverride, acikAdimlar];
+  [kapOverride, acikAdimlar] = [v.kap, v.acik];
+  try { return fn(); } finally { [kapOverride, acikAdimlar] = once; }
+}
 
 function rozet(durum) {
   const [ad, renk] = DURUM_TR[durum] || [durum, ""];
@@ -130,7 +139,8 @@ function adimBasligi(a) {
 
 function ccAdim(a) {
   const g = a.argumanlar || {};
-  const acik = acikAdimlar.has(a.no);
+  // calisan adim acik baslar (ne yapildigi gorunsun); kullanici tiklarsa varsayilanin tersi
+  const acik = SURUYOR.has(a.durum) !== acikAdimlar.has(a.no);
   const komut = adimTuru(a) === "komut";
   const giris = komut ? `$ ${g.komut || g.command || g.metin || ""}` : argOzet(a);
   const durumRozet = a.durum === "tamam" ? "" : `<span class="rozet ${{ hata: "kirmizi", reddedildi: "kirmizi" }[a.durum] || "sari"}">${kacir(ADIM_TR[a.durum] || a.durum)}</span>`;
@@ -177,7 +187,8 @@ function ccAkis(adimlar, calisiyor) {
       kapat();
       parcalar.push(`<li class="ajan-aciklama">${md(a.aciklama)}</li>`);
     }
-    grup.push(a);
+    // plan/bitis adimi grupta gorunmez ama modelin cumlesi (ornegin ilk "once sunu yapayim") kalir
+    if (a.arac !== "plan_guncelle" && a.arac !== "gorevi_bitir") grup.push(a);
   }
   kapat(true);
   return parcalar.join("");
@@ -251,7 +262,7 @@ function sohbetCiz(r) {
     .filter((g) => !g.startsWith("Kullanici:") && !g.startsWith("Onay bekleniyor") && ![...aciklamalar].some((x) => x.startsWith(g.slice(0, 200))))
     .slice(-2);
   const calisiyor = !BITMIS.has(r.durum);
-  const akis = ccAkis(r.adimlar.filter((a) => a.arac !== "plan_guncelle" && a.arac !== "gorevi_bitir"), calisiyor);
+  const akis = ccAkis(r.adimlar, calisiyor);
   kap.innerHTML = `
     <ol class="adim-liste sade">${akis}</ol>
     ${notlar.map((g) => `<div class="ajan-not md">${md(g)}</div>`).join("")}
@@ -369,8 +380,11 @@ function detayCiz(r) {
 
 function baglantilar(r) {
   const kap = detayKabi();
+  const v = izleyiciler.get(kap); // sohbet/panel kutusu: yenileme ve cizim o kutuya
+  const yenile = () => (v ? izleyiciYenile(v) : gorevYenile());
+  const yenidenCiz = () => (v ? baglamla(v, () => detayCiz(r)) : detayCiz(r));
   const sarmala = (is) => async () => {
-    try { await is(); await gorevYenile(); } catch (e) { bildir(e.message, "hata"); }
+    try { await is(); await yenile(); } catch (e) { bildir(e.message, "hata"); }
   };
   $$("[data-islem]", kap).forEach((b) => {
     b.onclick = sarmala(async () => {
@@ -405,16 +419,18 @@ function baglantilar(r) {
   $$("[data-ac]", kap).forEach((b) => {
     b.onclick = () => {
       const no = Number(b.dataset.ac);
-      if (acikAdimlar.has(no)) acikAdimlar.delete(no); else acikAdimlar.add(no);
-      detayCiz(r);
+      const acik = v ? v.acik : acikAdimlar;
+      if (acik.has(no)) acik.delete(no); else acik.add(no);
+      yenidenCiz();
       $(`[data-ac="${no}"]`, kap)?.focus();
     };
   });
   $$("[data-grup]", kap).forEach((b) => {
     b.onclick = () => {
       const k = b.dataset.grup;
-      if (acikAdimlar.has(k)) acikAdimlar.delete(k); else acikAdimlar.add(k);
-      detayCiz(r);
+      const acik = v ? v.acik : acikAdimlar;
+      if (acik.has(k)) acik.delete(k); else acik.add(k);
+      yenidenCiz();
       $(`[data-grup="${k}"]`, kap)?.focus();
     };
   });
@@ -580,7 +596,6 @@ export async function gorevSayfasiYukle() {
   clearInterval(zamanlayici);
   zamanlayici = setInterval(() => {
     if (document.getElementById("g-gorevler")?.hidden) return; // sayfa gizliyken yoklama yok
-    if (kapOverride) return;
     gorevYenile(false);
   }, 1500);
 }
@@ -594,16 +609,34 @@ export function gorevlerKur() {
 
 /** Claude Code gibi: gorev SOHBETIN ICINDE canli cizilir (adimlar, onay, diff, kontroller). */
 export function sohbetteGorevGoster(kap, id) {
-  kapOverride = kap;
-  secili = id;
-  sonCizilen = "";
-  acikAdimlar.clear();
-  gorevYenile();
-  clearInterval(zamanlayici);
-  zamanlayici = setInterval(() => {
-    if (!kap.isConnected) { clearInterval(zamanlayici); kapOverride = null; return; }
-    gorevYenile(false);
+  clearInterval(izleyiciler.get(kap)?.zamanlayici); // ayni kutu yeniden baglanirsa eskisini birak
+  const v = { kap, id, acik: new Set(), imza: "", zamanlayici: null };
+  izleyiciler.set(kap, v);
+  izleyiciYenile(v);
+  v.zamanlayici = setInterval(() => {
+    if (!kap.isConnected) { clearInterval(v.zamanlayici); izleyiciler.delete(kap); return; }
+    izleyiciYenile(v, false);
   }, 1500);
+}
+
+async function izleyiciYenile(v, zorla = true) {
+  let r;
+  try {
+    r = await api(`/api/gorevler/${v.id}`);
+  } catch (e) {
+    v.kap.innerHTML = `<div class="uyari-kutu">${kacir(e.message)}</div>`;
+    return;
+  }
+  if (izleyiciler.get(v.kap) !== v) return; // beklerken kutu baska goreve baglandi
+  const imza = JSON.stringify(r) + [...v.acik].join(",");
+  if (!zorla && imza === v.imza) return;
+  v.imza = imza;
+  const cevapYazilan = $("#gr-cevap", v.kap)?.value; // kullanici yazarken girdi silinmesin
+  const odak = document.activeElement?.id;
+  baglamla(v, () => detayCiz(r));
+  if (cevapYazilan && $("#gr-cevap", v.kap)) $("#gr-cevap", v.kap).value = cevapYazilan;
+  if (odak) document.getElementById(odak)?.focus();
+  bildirimGerekirse(r);
 }
 // Gorev sonu otomatik inceleme (Chimera): model varsayimi, kanit degil
 const ONEM_SINIF = { kritik: "kirmizi", yuksek: "kirmizi", orta: "sari", dusuk: "" };

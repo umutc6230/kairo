@@ -1,6 +1,16 @@
 # DURUM - kairo
 guncel: 2026-11-15 | son arac: Claude Code | dal: feature/ajan-katmani
 
+- 2026-11-15 (26) [x] GOREV AKISI SOHBETTE DONUYORDU (kullanici ekran goruntusu): gorev 17 adim bitirmis, sohbet 1. adimda.
+  KOK NEDEN: gorevler.js tek global izleyici; sag panel 'Arka plan isleri' karti sohbetteGorevGoster cagirinca sohbetin
+  yoklamasini olduruyordu. DUZELTME (yalniz app/web/gorevler.js): izleyiciler Map (kutu basina id/acik/imza/zamanlayici),
+  baglamla() cizim suresince kutuyu baglar; calisan adim (SURUYOR) varsayilan acik; plan_guncelle adiminin aciklamasi
+  artik akista (ilk 'once sunu yapayim' cumlesi kayboluyordu). Onizlemede (kairo-test :47921) iki kutu birlikte yokluyor,
+  calisan adim acik '$ komut' gosteriyor. test_a5_onay + test_a8_akis 60 gecti. DERLEME/TESLIM YOK (kullaniciya soruldu).
+- 2026-11-15 (25) [x] AGENT-DESKTOP TESLIM KAIRO'YA KURULDU (kullanici istegi): Ayarlar > Baglayicilar > Arac paketleri
+  > Kur (arayuzden, 09:56). data/araclar/agent-desktop/agent-desktop.exe 1.3.1 + kurulum.json, mcp.json'da 'agent-desktop'
+  (komut exe, arg mcp, tembel). Elle MCP initialize + tools/list: 75 arac. Kairo ici gercek model kullanimi DENENMEDI.
+  NOT: UygulamaHatasi log'a yazilmiyor (yalniz toast) -> basarisiz kurulum sonradan teshis edilemiyor.
 - 2026-11-15 (24) [x] YERLESIK BELGE SKILL'LERI: anthropics/skills docx + pdf (Apache-2.0, commit 1780c5e) app/skills'te;
   tarama TEMIZ (ag/sir/eval/gizli unicode yok; alt surec yalniz soffice, Linux'ta gcc shim). SKILL.md sonuna isaretli
   'Kairo (Windows) notu' (npm docx yerelde kur, pandoc/LibreOffice yok, reportlab + Arial TTF Turkce; DOGRULANDI).
