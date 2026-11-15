@@ -1,6 +1,27 @@
 # DURUM - kairo
 guncel: 2026-11-14 | son arac: Claude Code | dal: feature/ajan-katmani
 
+- 2026-11-14 (20) [~] SOHBET GECMISI MODELE GITMIYOR (mobil + masaustu ayni yol). Olcum (gercek ayar, OpenRouter
+  deepseek-v4.1-flash, baglam_token 32768): sistem 6382 + 102 arac 19055 + paylar -> gecmise ~11 token (MCP'ler
+  baglaninca eksi). Model her mesaji yeni sanip DURUM.md'yi bastan okuyordu. "Baglam boyutu" ayari data-yerel,
+  OpenRouter'da gizli: kullanici degistiremiyordu. COMMIT YOK.
+  [x] 1 SohbetServisi.baglam(ayar): api.py model_baglami = model_yetenegi().baglam (goruntu_var kalibi);
+        max(ayar, min(model, UZAK_BAGLAM_TAVAN=131072)). Yerelde degisiklik yok.
+  [x] 2 gecmis butcesi cevap_payi ile (baglami_darat 8192 ayiriyor, gecmis 1024 ile hesaplaniyordu)
+  [x] 3 gecmis_mesajlari kirpinca uyari kod=gecmis_kirpildi (eskiden sessizdi)
+  [x] 4 test_a0_regresyon +2 (uzak pencere, 100 aracla gecmis gider). ruff temiz. Tam paket (a9_masaustu
+        haric): 794 gecti, 3 atladi, 12.9 dk.
+  [x] 5 (kullanici istegi) ARAC GRUPLARI Claude Code gibi: sohbet.js aracGrubu/ARAC_TURLERI ardisik ayni tur
+        araclari katlanir satirda toplar ("4 okuma yapildi ›", "2 arac kullanildi · 1 hata"), acinca her adim
+        yine ayri acilir; tek adimli grupta baslik gizli (CSS data-n=1); ayrintili modda acik. Onizlemede
+        (8801, kullanicinin oturum kopyasi) goruldu: 6 adim -> 2 satir, ic ice acilma calisiyor, konsol temiz
+        (tek 404 kopyalanan oturumun projesi). e2e+akis+api 35, webview2 e2e 1 gecti. Canli akista GORULMEDI.
+  [x] 6 derle + teslim (kullanici "Derle ve teslim et" dedi): dist 08:14, eski Kairo (PID 15096) /T ile
+        kapatildi, data korundu + yedek %TEMP%\kairo-data-yedek-081523 (json/md + oturumlar), _internal ve
+        exe/bat yenilendi, Baslat.bat ile acildi 08:16 (log temiz, /web/sohbet.js yeni kod). Not: Git Bash'te
+        `start "" /D` -> /D "D:/"ye cevrilip "surucu bulunamiyor" penceresi acti; PowerShell Start-Process kullan.
+  SIRADAKI: commit/push onayi, telefondan canli deneme (gecmis + arac gruplari).
+        Not: TermFlow mobil uyari olaylarini gostermiyor olabilir (kontrol edilmedi).
 - 2026-11-14 (19): GERCEK PENCERE E2E (A5 kalan) yazildi, gecti. Buldugu 2 hata duzeltildi: (1) pencere
   kapaninca surec kapanmiyordu: acilistaki Claude Code plugin esitlemesi (telegram 3622 dosya taramasi ~1 dk)
   executor thread'inde kapanisi bekletiyordu -> daemon thread + kapanista cc_dur ile durur (api.py omur).

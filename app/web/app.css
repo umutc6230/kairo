@@ -383,6 +383,17 @@ pre.duz { white-space: pre-wrap; font-family: var(--mono); font-size: 13px; marg
 .arac-adim.acik .arac-baslik .ok svg { transform: rotate(90deg); }
 .arac-sonuc { display: none; margin: 6px 0 4px; max-height: 280px; }
 .arac-adim.acik .arac-sonuc { display: block; }
+/* Ardisik ayni tur araclar: "6 okuma yapildi ›" katlanir grup; tek adimli grupta baslik yok */
+.arac-grup-baslik { display: inline-flex; align-items: center; gap: 4px; background: none; border: 0; padding: 3px 0; color: var(--soluk); font-size: 13.5px; cursor: pointer; }
+.arac-grup-baslik:hover { color: var(--metin); }
+.arac-grup-baslik .hata { color: var(--kirmizi); }
+.arac-grup-baslik .ok svg { width: 13px; height: 13px; transition: transform .15s; }
+.arac-grup.acik > .arac-grup-baslik .ok svg { transform: rotate(90deg); }
+.arac-grup-govde { display: none; flex-direction: column; gap: 4px; margin: 2px 0 4px 6px; padding-left: 10px; border-left: 1px solid var(--cizgi); }
+.arac-grup.acik > .arac-grup-govde { display: flex; }
+.arac-grup[data-n="1"] > .arac-grup-baslik { display: none; }
+.arac-grup[data-n="1"] > .arac-grup-govde { display: flex; margin: 0; padding: 0; border: 0; }
+:root[data-ayrinti="ayrintili"] .arac-grup-govde { display: flex; }
 
 /* skill'ler ve talimatlar */
 .kart { border: 1px solid var(--cizgi2); border-radius: var(--yaricap); background: var(--yuzey); padding: 14px 16px; display: flex; flex-direction: column; gap: 12px; }

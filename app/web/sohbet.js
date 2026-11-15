@@ -193,6 +193,48 @@ function kullaniciMesaji(m) {
   return d;
 }
 
+// Claude Code gibi: ardisik ayni tur araclar tek katlanir satirda ("6 dosya okundu ›"); acinca her
+// adim yine ayri acilir. Sira onemli: tarayici_* "ara" icerir, web once denenir.
+const ARAC_TURLERI = [
+  ["duzenle", /dosya_(yaz|yama|tasi|sil)|ajan_olustur|uzanti_yaz/, (n) => `${n} dosya düzenlendi`],
+  ["komut", /komut_|cli_ye_yaptir/, (n) => `${n} komut çalıştırıldı`],
+  ["web", /web_|tarayici_|fetch/, (n) => `${n} web işlemi`],
+  ["ara", /_ara$|glob|grep|search/, (n) => `${n} arama yapıldı`],
+  ["oku", /oku|listele|git_|kod_|read|list/, (n) => `${n} okuma yapıldı`],
+];
+
+function aracTuru(ad) {
+  return ARAC_TURLERI.find(([, r]) => r.test(ad)) || ["diger", null, (n) => `${n} araç kullanıldı`];
+}
+
+/** Adimin ekleneceği grup: son gorunur oge ayni turde grupsa o, degilse yeni grup.
+ *  Tek adimli grubun basligi CSS ile gizli; adim eskisi gibi duz gorunur. */
+function aracGrubu(kap, ad) {
+  const [tur, , etiket] = aracTuru(ad);
+  let son = kap.lastElementChild;
+  while (son && son.hidden) son = son.previousElementSibling; // gizli plan adimi grubu bolmesin
+  if (son?.classList.contains("arac-grup") && son.dataset.tur === tur) return son.api;
+  const g = el(`<div class="arac-grup" data-tur="${tur}" data-n="0">
+    <button class="arac-grup-baslik" aria-expanded="false"><span class="grup-metin"></span><span class="ok" data-ikon="sag"></span></button>
+    <div class="arac-grup-govde"></div></div>`);
+  const baslik = g.querySelector(".arac-grup-baslik");
+  baslik.onclick = () => baslik.setAttribute("aria-expanded", String(g.classList.toggle("acik")));
+  g.grupGuncelle = () => {
+    const adimlar = g.querySelectorAll(".arac-adim");
+    g.dataset.n = String(adimlar.length);
+    const calisan = g.querySelector(".ozet.parilti");
+    const hata = g.querySelectorAll(".ozet.hata").length;
+    const m = g.querySelector(".grup-metin");
+    m.textContent = etiket(adimlar.length) + (hata ? ` · ${hata} hata` : "");
+    m.classList.toggle("parilti", !!calisan);
+    m.classList.toggle("hata", hata > 0);
+  };
+  g.api = { ekle: (a) => { g.querySelector(".arac-grup-govde").append(a); g.grupGuncelle(); } };
+  kap.append(g);
+  ikonlariYerlestir(g);
+  return g.api;
+}
+
 /** Asistan mesaji: ustte dusunce blogu, altta cevap ve istatistik. Canli guncellenebilir. */
 function asistanMesaji() {
   const d = el(`<div class="mesaj asistan">
@@ -356,7 +398,7 @@ function asistanMesaji() {
         <span class="ozet parilti">çalışıyor…</span><span class="ok" data-ikon="sag"></span></button>
         <pre class="duz arac-sonuc"></pre></div>`);
       a.querySelector(".arac-baslik").onclick = () => a.classList.toggle("acik");
-      d.querySelector(".arac-adimlari").append(a);
+      aracGrubu(d.querySelector(".arac-adimlari"), o.ad).ekle(a);
       return a;
     },
     aracSonucu(o) {
@@ -382,6 +424,7 @@ function asistanMesaji() {
       ozet.classList.toggle("sonucsuz", sonucsuz);
       const isaret = hataVar ? "✗" : sonucsuz ? "⦸" : "✓"; // basari ikonu yalniz gercek sonucta
       ozet.textContent = `${isaret} ${o.ozet}${o.truncated ? " · kısaltıldı" : ""}`;
+      a.closest(".arac-grup")?.grupGuncelle?.();
       let goster = o.sonuc;
       try { goster = JSON.stringify(JSON.parse(o.sonuc), null, 1); } catch { /* kesik JSON: oldugu gibi */ }
       a.querySelector(".arac-sonuc").textContent = goster;
