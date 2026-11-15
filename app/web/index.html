@@ -15,7 +15,7 @@
         <button class="ikon-btn" id="btn-geri" title="Geri" data-ikon="sol"></button>
         <button class="ikon-btn" id="btn-ileri" title="İleri" data-ikon="sag"></button>
       </div>
-      <div class="baslik-orta pywebview-drag-region"><button id="baslik-menu" class="baslik-dugme"><span id="sayfa-basligi">Yeni sohbet</span><span data-ikon="asagi"></span></button><button id="btn-paylas" class="ikon-btn" title="Paylaş: kopyala ya da dosyaya kaydet" aria-label="Sohbeti paylaş" data-ikon="dis"></button></div>
+      <div class="baslik-orta pywebview-drag-region"><button id="baslik-menu" class="baslik-dugme"><span id="sayfa-basligi">Yeni sohbet</span><span data-ikon="asagi"></span></button><button id="btn-paylas" class="ikon-btn" title="Paylaş: kopyala ya da dosyaya kaydet" aria-label="Sohbeti paylaş" data-ikon="paylas"></button></div>
       <div class="baslik-sag">
         <div class="arac-cubugu">
           <button class="ikon-btn" id="btn-sag-panel" title="Oturum paneli" data-ikon="panelSag"></button>
@@ -40,7 +40,6 @@
           <button class="nav-oge" data-git="ara"><span data-ikon="ara"></span>Ara</button>
           <button class="nav-oge" data-git="ajanlar"><span data-ikon="logo"></span>Ajanlar</button>
           <button class="nav-oge" data-git="rutinler"><span data-ikon="saat"></span>Rutinler</button>
-          <button class="nav-oge" data-git="artifactler"><span data-ikon="dosya"></span>Artifact'ler</button>
           <button class="nav-oge" data-git="ozellestir"><span data-ikon="sihir"></span>Özelleştir</button>
         </nav>
         <div class="kenar-oturumlar" id="oturum-listesi"></div>
@@ -208,8 +207,6 @@
               <button class="btn" id="gr-review"><span data-ikon="ara"></span>Review yap</button>
               <span class="soluk kucuk">Sohbette de <code>/diff</code> ve <code>/review</code> yazabilirsiniz.</span>
             </div>
-            <details class="kart"><summary><b>Artifact'ler</b> <span class="soluk kucuk">(ajanın ürettiği rapor, HTML, SVG, tablo; izole önizleme)</span></summary>
-              <ul class="artifact-liste" id="gr-artifactler"></ul></details>
             <div class="gr-govde">
               <nav aria-label="Görev listesi"><ul class="gr-liste" id="gr-liste"></ul></nav>
               <div id="gr-detay" class="gr-detay" aria-live="polite"><div class="soluk">Bir görev seçin ya da yeni görev başlatın.</div></div>

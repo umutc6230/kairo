@@ -3,7 +3,7 @@
 Uygulama `python -m app` ile izole veri klasoruyle acilir; WebView2'ye uzaktan hata ayiklama
 portu verilir (WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS) ve Playwright o pencereye CDP ile baglanir.
 Kontroller: arayuz JS hatasiz acilir, pywebview koprusu ana sayfada var, sandbox iframe'lere
-(artifact/uzanti onizlemesi) SIZMAZ, menu tekrar tekrar acilir, kapat dugmesi sureci bitirir.
+(uzanti paneli onizlemesi) SIZMAZ, menu tekrar tekrar acilir, kapat dugmesi sureci bitirir.
 """
 
 from __future__ import annotations
@@ -117,7 +117,7 @@ def test_gercek_pencere_uctan_uca(pencere, tmp_path) -> None:
         assert {"buyut", "dosya_kaydet", "kapat", "klasor_sec", "kucult"} <= set(api), api
         assert not any(a.startswith("_") for a in api), api  # ozel alanlar disari acilmaz
 
-        # 2) kopru sandbox iframe'lere sizmaz (artifact: allow-scripts; tarayici paneli de
+        # 2) kopru sandbox iframe'lere sizmaz (uzanti paneli: allow-scripts; tarayici paneli de
         #    allow-same-origin'li oldugu icin ayrica)
         for sandbox in ("allow-scripts", "allow-scripts allow-forms allow-popups"):
             r = sayfa.evaluate(SIZINTI_BETIGI, sandbox)

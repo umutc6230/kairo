@@ -6,7 +6,7 @@ Guvenlik modeli:
   anahtarina, API'sine erisimi yoktur.
 - Manifest (uzanti.json) yetenek ILAN EDER; ilan izin degildir. Kullanilabilen yetenekler yalniz
   ilan edilenlerdir; arac cagrilari ayrica izin motorundan (YanEtki.dis = her zaman onay) gecer.
-- Panel HTML'i arayuzde sandbox iframe + kisitli CSP ile gosterilir (artifact ile ayni).
+- Panel HTML'i arayuzde sandbox iframe + kisitli CSP (ONIZLEME_CSP) ile gosterilir.
 - Her mesaj zaman asimli; coken/cevapsiz uzanti kapatilir, sonraki istekte yeniden baslatilir.
 - Kurulum: karantina + inceleme raporu (plugin ile ayni), kullanici onayi ile.
 Bu bir Claude Code Mods API'si klonu DEGILDIR; birebir uyumluluk test edilmedi.
@@ -32,6 +32,13 @@ from app.exceptions import Bulunamadi, UygulamaHatasi
 from app.services.depo import json_oku, json_yaz
 from app.services.pluginler import inceleme_raporu
 
+# Panel onizleme CSP'si (arayuz srcdoc'un EN BASINA koyar).
+# connect-src 'none': fetch/XHR/WebSocket yok.
+ONIZLEME_CSP = (
+    "default-src 'none'; img-src data: blob:; media-src data: blob:; style-src 'unsafe-inline'; "
+    "script-src 'unsafe-inline'; font-src data:; connect-src 'none'; form-action 'none'; "
+    "base-uri 'none'"
+)
 AD = r"^[a-z0-9][a-z0-9_-]{0,31}$"
 ZAMAN_ASIMI = 15
 MAX_CIKTI = 200_000

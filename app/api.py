@@ -68,7 +68,6 @@ from app.services import skiller as skl
 from app.services.agecidi import AgGecidi, agecidi_uygulamasi
 from app.services.arac_paketleri import AracPaketleri
 from app.services.araclar import ARACLAR, ORNEK_ISTEMLER
-from app.services.artifactler import ARTIFACT_ARACI, ONIZLEME_CSP, ArtifactDeposu
 from app.services.ayarlar import AyarDeposu
 from app.services.composio import Composio
 from app.services.ekler import EkDeposu
@@ -93,7 +92,7 @@ from app.services.testler import (
     ornek_belge,
 )
 from app.services.uyanik import Uyanik
-from app.services.uzantilar import UzantiYoneticisi
+from app.services.uzantilar import ONIZLEME_CSP, UzantiYoneticisi
 from app.services.yerel_llm import DUSUNME_SECENEKLERI, MODELLER, YerelLLM
 
 UPLOAD_PARCA_BAYT = 1024 * 1024  # upload akisinda tek seferde okunan parca
@@ -405,7 +404,6 @@ def uygulama_olustur(
         lambda: ayarlar.oku().masaustu_izinli, veri_dizini / "ekran-goruntuleri"
     )
     sohbet.mcp = mcp
-    artifactler = ArtifactDeposu(veri_dizini)
     sohbet.hafiza = hafiza
 
     def ajan_baglami(hedef: str) -> tuple[str, list, dict]:
@@ -439,13 +437,6 @@ def uygulama_olustur(
 
             isleyiciler = {**isleyiciler, "hafiza_yargila": hafiza_yargila}
 
-        def artifact_olustur(ad: str, tur: str, icerik: str) -> dict:
-            try:
-                a = artifactler.olustur(ad, tur, icerik, kaynak="ajan")
-            except UygulamaHatasi as e:
-                return {"hata": e.mesaj}
-            return {"artifact": a["id"], "ad": a["ad"], "tur": a["tur"], "boyut": a["boyut"]}
-
         def skill_kaydet(ad: str, aciklama: str, icerik: str, okunan_revizyon: int = 0) -> dict:
             # Skill sonraki islere talimat olur: yazma gibi izin motorundan gecer (onayli: sorar)
             try:
@@ -458,12 +449,8 @@ def uygulama_olustur(
             except (UygulamaHatasi, YetkiYok) as e:
                 return {"hata": getattr(e, "mesaj", str(e))}
 
-        araclar_ = [*araclar_, ARTIFACT_ARACI, SKILL_KAYDET_ARACI]
-        isleyiciler = {
-            **isleyiciler,
-            "artifact_olustur": artifact_olustur,
-            "skill_kaydet": skill_kaydet,
-        }
+        araclar_ = [*araclar_, SKILL_KAYDET_ARACI]
+        isleyiciler = {**isleyiciler, "skill_kaydet": skill_kaydet}
         return sistem, araclar_, isleyiciler
 
     def model_yetenegi() -> ModelYetenegi:
@@ -1571,20 +1558,6 @@ def uygulama_olustur(
         sonuc = rv.birlestir(gecisler, diff) if derin else rv.sonuclandir(gecisler["genel"], diff)
         sonuc["review_md"] = bool(kural)
         return sonuc
-
-    # ---- artifact'ler (A5.5): icerik yalniz oturumlu API ile; onizleme sandbox iframe ----
-    @app.get("/api/artifactler")
-    async def artifact_listesi() -> dict:
-        return {"artifactler": artifactler.liste()}
-
-    @app.get("/api/artifactler/{artifact_id}")
-    async def artifact_getir(artifact_id: str) -> dict:
-        meta, icerik = artifactler.getir(artifact_id)
-        return {**meta, "icerik": icerik, "csp": ONIZLEME_CSP}
-
-    @app.delete("/api/artifactler/{artifact_id}")
-    async def artifact_sil(artifact_id: str) -> dict:
-        return artifactler.sil(artifact_id)
 
     # ---- plugin'ler (A7.4): karantina -> inceleme -> kur; scriptler calistirilmaz ----
     @app.get("/api/pluginler")

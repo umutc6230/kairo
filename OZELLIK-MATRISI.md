@@ -57,14 +57,14 @@ servislerine erisim taklit edilmez; her satir Kairo'nun kendi calisan karsiligin
 | F12 | Web arastirmasi, tarayici, DOM/console | test edildi | Izole profil, a11y agaci, ekran goruntusu | A1, A9 | A9 | `test_a9_web.py`, `test_a9_tarayici.py` | `app/agent/tarayici.py` | GIF kaydi yok; Playwright istege bagli |
 | F13 | Windows computer use | test edildi | Izinli programlarda UI Automation | A9 | A9 | `test_a9_masaustu.py` | `app/agent/masaustu.py` | Gorsel fallback yok; UAC asilmaz |
 | F14 | LSP, VS Code, JetBrains | kismi | LSP tanim/referans/sembol/tani + metin yedegi | A2, A10 | A10 | `test_a10_lsp.py` | `app/agent/lsp.py` | IDE eklentileri ATLANDI (kullanici karari) |
-| F15 | Yerel/PR review, derin review, guvenlik incelemesi | test edildi | Kanitli bulgu, derin gecisler | A2, A5 | A5-A8 | `test_a5_review_artifact.py` | `app/agent/review.py` | PR yorumu yok (GitHub atlandi) |
+| F15 | Yerel/PR review, derin review, guvenlik incelemesi | test edildi | Kanitli bulgu, derin gecisler | A2, A5 | A5-A8 | `test_a5_review.py` | `app/agent/review.py` | PR yorumu yok (GitHub atlandi) |
 | F16 | CLI, headless, Python/TS SDK, API | kismi | Ayni motor: headless CLI + Python SDK, JSON olaylar, onayda kod 3 | A3 | A10 | `test_a10_cli_sdk.py` | `app/cli.py`, `app/sdk.py` | TS SDK yok |
 | F17 | Schedule, loop, channels, CI/webhook | test edildi | Kalici zamanlayici (DST/idempotent), HMAC webhook, GitHub Actions | A3, A11 | A11 | `test_a11_zamanlayici.py`, `test_a11_webhook.py` | `.github/workflows/` | Uygulama kapaliyken calismaz; CI hesap faturasi nedeniyle baslamadi |
 | F18 | Remote control, mobil, cloud | kismi | Tailscale uzerinden telefondan tam arayuz, eslesme/iptal/TLS | A1, A12 | A12 | `test_a12_uzak.py`, `test_a13_e2e.py` | `app/uzak.py` | Cloud worker dis bagimlilik bekliyor; canli telefon denemesi yok |
 | F19 | Model, effort, fallback, maliyet | test edildi | Yetenek profili, OpenRouter, dusunme seviyesi | A4 | A4 | `test_openrouter.py`, `test_yerel_llm.py` | `app/agent/yetenek.py` | Desteklenmeyen effort gizlenir |
 | F20 | Permissions, Auto mode, sandbox, politika | test edildi | Backend allow/ask/deny, modlar, yonetilen politika, istege bagli konteyner | A0, A1 | A1 | `test_a1_izinler.py`, `test_a1_8_izolasyon.py` | `app/agent/policy.py` | Konteyner yoksa OS sandbox YOK (acikca yazar) |
 | F21 | OTel, doctor, status, logs, butce | kismi | /doctor, /status, redakte log, butce | - | A0-A12 | `test_a10_cli_sdk.py::test_doctor_*` | `app/doktor.py` | OTel yok |
-| F22 | Voice, artifacts, preview, status line | test edildi | Yerel dikte, artifact onizleme | A5 | A5 | `test_a5_dikte_a11y.py`, `test_a5_review_artifact.py` | `app/services/artifactler.py` | - |
+| F22 | Voice, preview, status line | test edildi | Yerel dikte; artifact ozelligi 2026-11-15 kullanici istegiyle kaldirildi | A5 | A5 | `test_a5_dikte_a11y.py`, `test_a5_review.py` | - | - |
 | F23 | GitHub/GitLab, issue -> PR, Actions | kismi | CI is akislari var; issue/PR araclari ATLANDI | A2, A10 | A10-A11 | - | `.github/workflows/` | Kullanici karari: A10 kalani atlandi |
 | F24 | Dev containers, gateway auth, uzak saglayicilar | kismi | OpenRouter + konteyner izolasyonu; kurumsal gateway yok | A1, A12 | A1-A12 | `test_openrouter.py` | `app/services/openrouter.py` | Bedrock/Google/Microsoft dis bagimlilik bekliyor |
 

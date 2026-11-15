@@ -1,6 +1,12 @@
 # DURUM - kairo
 guncel: 2026-11-15 | son arac: Claude Code | dal: feature/ajan-katmani
 
+- 2026-11-15 (23) [x] PROJE SECICI en cok kullanilan (sohbet sayisi, esitlikte son kullanilan; app.js bosDurumKartlari,
+  oturumlar yuklenince yeniden cizilir) + PAYLAS ikonu standart 'kutudan yukari ok' (ikonlar.js paylas). Onizlemede goruldu.
+- 2026-11-15 (22) [x] ARTIFACT OZELLIGI KALDIRILIYOR (kullanici istegi: "gerek yok"). Kapsam: sol kenar 'Artifact'ler' +
+  modal, gorev ekrani karti, inceleme.js artifact bolumu, /api/artifactler*, app/services/artifactler.py, ajan araci
+  artifact_olustur, testler. KALIR: ONIZLEME_CSP + onizlemeSrcdoc (uzanti panelleri kullaniyor; CSP uzantilar.py'ye
+  tasinir), review (/diff /review). Kullanicinin data/artifacts klasorune DOKUNULMAZ.
 - 2026-11-15 (21) [x] ARACLARI IHTIYACA GORE YUKLE (A4.6, kullanici istegi). Olcum (calisan Kairo /baglam): her mesajda
   128 MCP araci 34.5K token + 52 yerlesik 5.2K + skill 5.5K + talimat 3.8K = ~51K. Plan (Claude Code deferred tools):
   [x] 1 app/agent/arac_bul.py: ertele(araclar, isleyiciler, onceki_adlar): MCP semalari ESIK_TOKEN (4000) asarsa

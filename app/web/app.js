@@ -4,7 +4,6 @@ import { ikon, ikonlariYerlestir } from "./ikonlar.js";
 import { kacir } from "./md.js";
 import { aramaAc, ayarKaydet, ayarlarAc, ayarlarKur, modelYukle, sunucuDurdur } from "./ayarlar.js";
 import { $, $$, api, bildir, durum, el, menuAc, modal, modelAdi, modelProfil, onayla, oturumBasligi, sayi, sor, turkcelestir } from "./ortak.js";
-import { artifactListesiCiz } from "./inceleme.js";
 import { sayfaModelleriniYenile, sayfalarKur } from "./sayfalar.js";
 import { modelSayfasiYukle, modellerKur } from "./modeller.js";
 import { projeAc, projeDurumu, projeKur, projeYenile } from "./proje.js";
@@ -191,6 +190,7 @@ async function oturumlariYenile() {
     durum.oturumlar = await api("/api/oturumlar");
   } catch { /* sessiz */ }
   oturumListesiCiz();
+  if (!$("#bos-durum")?.hidden) bosDurumKartlari(); // proje sirasi sohbet sayisina bagli
 }
 
 // Telefon (TermFlow koprusu) ayni API'ye yazar; pencere bunu ancak yoklayarak gorur.
@@ -202,6 +202,7 @@ async function disDegisiklikleriAl() {
   if (yeni.length === eski.size && yeni.every((o) => eski.get(o.id) === imza(o))) return;
   durum.oturumlar = yeni;
   oturumListesiCiz();
+  if (!$("#bos-durum")?.hidden) bosDurumKartlari();
   const acik = yeni.find((o) => o.id === durum.oturumId);
   // kendi akisimiz suruyorsa ekran zaten guncel; bitince bir kez yeniden cizilir
   if (acik && eski.get(acik.id) !== imza(acik) && !akisVar()) oturumAc(acik.id, true);
@@ -220,12 +221,6 @@ function ozellestirSekmeleri() {
     });
     ic.prepend(bar);
   }
-}
-
-function artifactPenceresi() {
-  const kap = el('<ul class="artifact-liste"></ul>');
-  modal({ baslik: "Artifact'ler", icerik: kap, genis: true, dugmeler: [{ metin: "Kapat" }] });
-  artifactListesiCiz(kap);
 }
 
 function oturumListesiCiz() {
@@ -414,15 +409,18 @@ function bantGuncelle() {
 }
 
 // Claude Code "New session" gibi: ortada PROJE secici (model/dusunme alttaki cubukta kalir).
-// Son kullanilan projeler, acik olan tikli; fazlasi "Daha fazla" menusunde; altta klasor sec.
+// En cok kullanilan projeler (sohbet sayisi; esitlikte en son kullanilan), acik olan tikli;
+// fazlasi "Daha fazla" menusunde; altta klasor sec.
 const ILK_PROJE = 4;
 const ONERI_TAZE_MS = 60_000;
 const oneriOnbellek = { zaman: 0, liste: [] };
 function bosDurumKartlari() {
   const kap = $("#model-kartlari");
   const etkin = projeDurumu.etkin?.id;
-  const projeler = [...(projeDurumu.liste || [])]
-    .sort((x, y) => String(y.guncelleme).localeCompare(String(x.guncelleme)));
+  const kullanim = {};
+  for (const o of durum.oturumlar || []) if (o.alan) kullanim[o.alan] = (kullanim[o.alan] || 0) + 1;
+  const projeler = [...(projeDurumu.liste || [])].sort((x, y) =>
+    (kullanim[y.id] || 0) - (kullanim[x.id] || 0) || String(y.guncelleme).localeCompare(String(x.guncelleme)));
   const satir = (p) => {
     const b = el(`<button class="kart-satir ${p.id === etkin ? "secili" : ""}" title="${kacir((p.kokler || []).join("\n"))}">
       <span data-ikon="klasor"></span><span class="kart-ad">${kacir(p.ad)}</span>
@@ -600,7 +598,6 @@ async function baslat() {
     n.onclick = () => {
       const h = n.dataset.git;
       if (h === "ara") aramaAc(oturumAc);
-      else if (h === "artifactler") artifactPenceresi();
       else git({ tur: h === "ozellestir" ? "eklentiler" : h });
     };
   });

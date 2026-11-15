@@ -2,7 +2,7 @@
 // GUVENLIK: model metni, dosya icerigi ve komut ciktisi DAIMA kacir() ile basilir; ham HTML yok.
 import { ikon, ikonlariYerlestir } from "./ikonlar.js";
 import { kacir, md } from "./md.js";
-import { artifactListesiCiz, diffGoster, reviewYap } from "./inceleme.js";
+import { diffGoster, reviewYap } from "./inceleme.js";
 import { $, $$, api, bildir, durum, el, modal, onayla, sayi } from "./ortak.js";
 import { masaustuBildirimi } from "./ayarlar2.js";
 
@@ -575,7 +575,6 @@ async function baslat() {
 
 export async function gorevSayfasiYukle() {
   ustBilgi();
-  artifactListesiCiz($("#gr-artifactler"));
   await listeCiz();
   if (secili) gorevYenile();
   clearInterval(zamanlayici);

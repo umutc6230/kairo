@@ -1,4 +1,4 @@
-"""A5.4 review + A5.5 artifact."""
+"""A5.4 review + uzanti paneli sandbox onizlemesi."""
 
 from __future__ import annotations
 
@@ -10,8 +10,7 @@ from pathlib import Path
 import pytest
 
 from app.agent import review as rv
-from app.exceptions import UygulamaHatasi
-from app.services.artifactler import ONIZLEME_CSP, ArtifactDeposu
+from app.services.uzantilar import ONIZLEME_CSP
 
 DIFF = """diff --git a/src/a.py b/src/a.py
 --- a/src/a.py
@@ -111,24 +110,7 @@ async def test_review_api_uctan_uca(istemci, app, git_proje) -> None:
     assert s["review_md"] and "SQL enjeksiyonuna" in gorulen[0][0]["content"]
 
 
-# ------------------------------------------------------------ artifact
-
-
-def test_artifact_depo_tur_boyut_kimlik(tmp_path) -> None:
-    d = ArtifactDeposu(tmp_path)
-    a = d.olustur("rapor/../../x<>:", "html", "<h1>Merhaba</h1>")
-    assert "/" not in a["ad"] and "<" not in a["ad"]
-    meta, icerik = d.getir(a["id"])
-    assert icerik == "<h1>Merhaba</h1>" and meta["tur"] == "html"
-    with pytest.raises(UygulamaHatasi, match="Desteklenmeyen"):
-        d.olustur("x", "exe", "MZ")
-    with pytest.raises(UygulamaHatasi, match="buyuk"):
-        d.olustur("x", "txt", "a" * (2 * 1024 * 1024 + 1))
-    for kotu in ("../kayit", "", "ABC", "a" * 12 + "/x"):
-        with pytest.raises(Exception, match="bulunamadi"):
-            d.getir(kotu)
-    assert d.sil(a["id"]) == {"silindi": a["id"]}
-    assert d.liste() == []
+# ------------------------------------------------- sandbox onizleme (uzanti paneli)
 
 
 def test_onizleme_csp_ag_ve_ust_pencereyi_kapatir() -> None:
@@ -136,18 +118,14 @@ def test_onizleme_csp_ag_ve_ust_pencereyi_kapatir() -> None:
     assert "form-action 'none'" in ONIZLEME_CSP and "base-uri 'none'" in ONIZLEME_CSP
 
 
-async def test_artifact_api_ve_oturumsuz_erisim_yok(istemci, yetkisiz_istemci, veri) -> None:
-    a = ArtifactDeposu(veri).olustur("rapor", "md", "# Baslik")  # ajan araci ile ayni depo
-    r = (await istemci.get(f"/api/artifactler/{a['id']}")).json()
-    assert r["icerik"] == "# Baslik" and r["csp"] == ONIZLEME_CSP
-    assert (await istemci.get("/api/artifactler/" + "0" * 12)).status_code == 404
-    # icerik oturum anahtari olmadan okunamaz (acik/oturumsuz artifact ucu yok)
-    assert (await yetkisiz_istemci.get(f"/api/artifactler/{a['id']}")).status_code in (401, 403)
-    assert (await istemci.delete(f"/api/artifactler/{a['id']}")).status_code == 200
+async def test_artifact_ozelligi_kaldirildi(istemci) -> None:
+    """Kullanici istegiyle (2026-11-15) kaldirildi: menu, API ve ajan araci yok."""
+    assert (await istemci.get("/api/artifactler")).status_code == 404
+    assert 'data-git="artifactler"' not in (await istemci.get("/")).text
 
 
 async def test_arayuz_sandbox_allow_same_origin_icermez(istemci) -> None:
-    js = (await istemci.get("/web/inceleme.js")).text
+    js = (await istemci.get("/web/uzantilar.js")).text
     assert 'setAttribute("sandbox", "allow-scripts")' in js
     assert 'allow-same-origin")' not in js and "allow-same-origin'" not in js
 

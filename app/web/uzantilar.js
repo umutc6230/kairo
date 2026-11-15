@@ -43,7 +43,7 @@ export async function uzantiPaneli(ad) {
     f.setAttribute("sandbox", "allow-scripts"); // allow-same-origin YOK: opak origin
     f.setAttribute("referrerpolicy", "no-referrer");
     f.setAttribute("title", `Uzantı paneli: ${ad}`);
-    f.className = "artifact-cerceve";
+    f.className = "onizleme-cerceve";
     f.srcdoc = onizlemeSrcdoc(p.html, p.csp, "html");
     const g = el("<div></div>");
     g.append(f);
