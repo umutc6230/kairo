@@ -1,5 +1,20 @@
 # DURUM - kairo
-guncel: 2026-11-14 | son arac: Claude Code | dal: feature/ajan-katmani
+guncel: 2026-11-15 | son arac: Claude Code | dal: feature/ajan-katmani
+
+- 2026-11-15 (21) [~] ARACLARI IHTIYACA GORE YUKLE (A4.6, kullanici istegi). Olcum (calisan Kairo /baglam): her mesajda
+  128 MCP araci 34.5K token + 52 yerlesik 5.2K + skill 5.5K + talimat 3.8K = ~51K. Plan (Claude Code deferred tools):
+  [x] 1 app/agent/arac_bul.py: ertele(araclar, isleyiciler, onceki_adlar): MCP semalari ESIK_TOKEN (4000) asarsa
+        listeden cikar, tek 'arac_bul' (sorgu, 'select:ad' destekli; aciklamada sunucu + arac sayisi) ekler;
+        bulunan semalar AYNI listeye eklenir (cevap_akit her turda ayni listeyi yollar). Isleyiciler/izin degismez.
+  [x] 2 sohbet.baglam_hazirla sonunda ertele (onceki mesajlarin arac adlari yuklu gelir); runner: bul.yuklenen her
+        turda semalara eklenir, run.mesajlar tool_calls select ile yuklenir, alt ajan izinli MCP'yi bekleyenden alir.
+  [x] 3 arayuz: arac_bul "arama yapildi" grubunda. tests/test_arac_bul.py 4 (esik alti, erteleme+bulma+select,
+        gecmis, cevap_akit 2. turda yuklu sema). OLCUM (kullanicinin mcp.json'u, yeni kod): MCP 91 arac 21.6K token
+        -> 0 sema + arac_bul 245 token; toplam arac seti 5.5K. (Calisan Kairo eski kodla 128 arac 34.5K.)
+        +1 runner testi (ajan gorevi 2. turda yuklu sema; duzeltmesiz DUSTUGU goruldu). Alt ajan yolu yalniz kodla.
+        Gercek modelle arac_bul kullanimi GORULMEDI.
+  [x] 4 tam paket (a9_masaustu haric): 798 gecti, 3 atladi, 14.2 dk; ruff temiz. COMMIT YOK.
+  SIRADAKI: derle+teslim ve commit/push (kullanici onayi); gercek modelle arac_bul denemesi.
 
 - 2026-11-14 (20) [~] SOHBET GECMISI MODELE GITMIYOR (mobil + masaustu ayni yol). Olcum (gercek ayar, OpenRouter
   deepseek-v4.1-flash, baglam_token 32768): sistem 6382 + 102 arac 19055 + paylar -> gecmise ~11 token (MCP'ler

@@ -29,6 +29,7 @@ from typing import Any
 from loguru import logger
 from pydantic import BaseModel, Field
 
+from app.agent.arac_bul import ARAC_BUL
 from app.agent.hooks import HookSonucu
 from app.agent.ozet import mesaj_token, ozetle_gerekirse
 from app.agent.takim import SEMALAR as TAKIM_SEMALARI
@@ -783,6 +784,15 @@ class AgentRunner:
                 )
             else:
                 sistem, semalar, isleyiciler = await asyncio.to_thread(self.araclar, run.hedef)
+            # Ertelenen MCP araclari (arac_bul): bulunanlar her turda semalara eklenir; devam eden
+            # gorevde gecmiste cagrilanlar yuklu gelir (semasiz cagri saglayicida reddedilir)
+            bul = isleyiciler.get(ARAC_BUL)
+            yuklenen: list[dict] = getattr(bul, "yuklenen", [])
+            onceki = {
+                c["function"]["name"] for m in run.mesajlar for c in m.get("tool_calls") or []
+            }
+            if bul is not None and onceki:
+                bul(f"select:{','.join(sorted(onceki))}")
             if hafiza := self.hafiza():
                 sistem = f"{sistem}\n\n{hafiza}".strip()
             if run.ek_sistem:  # kalici ajan kimligi + talimati + notlari
@@ -800,7 +810,9 @@ class AgentRunner:
                 izinli = (
                     set(run.izinli_araclar) | META | {t["function"]["name"] for t in TAKIM_SEMALARI}
                 )
-                semalar = [s for s in semalar if s["function"]["name"] in izinli]
+                adaylar = [*semalar, *getattr(bul, "bekleyen", []), *yuklenen]
+                semalar = [s for s in adaylar if s["function"]["name"] in izinli]
+                yuklenen = []  # alt ajan aramaz; izinli MCP araclari dogrudan verildi
                 isleyiciler = {
                     k: self._sahiplik_sarmali(run, k, f)
                     for k, f in isleyiciler.items()
@@ -871,7 +883,7 @@ class AgentRunner:
 
                     run.mesajlar.append(gorsel_mesaji(gorseller))
                 # 3) model
-                mesaj = await self._model(run, sistem, semalar)
+                mesaj = await self._model(run, sistem, [*semalar, *yuklenen])
                 if mesaj is None:
                     break
                 cagrilar = mesaj.get("tool_calls") or []

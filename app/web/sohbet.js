@@ -199,7 +199,7 @@ const ARAC_TURLERI = [
   ["duzenle", /dosya_(yaz|yama|tasi|sil)|ajan_olustur|uzanti_yaz/, (n) => `${n} dosya düzenlendi`],
   ["komut", /komut_|cli_ye_yaptir/, (n) => `${n} komut çalıştırıldı`],
   ["web", /web_|tarayici_|fetch/, (n) => `${n} web işlemi`],
-  ["ara", /_ara$|glob|grep|search/, (n) => `${n} arama yapıldı`],
+  ["ara", /_ara$|arac_bul|glob|grep|search/, (n) => `${n} arama yapıldı`],
   ["oku", /oku|listele|git_|kod_|read|list/, (n) => `${n} okuma yapıldı`],
 ];
 

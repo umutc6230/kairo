@@ -16,6 +16,7 @@ from typing import Any
 from loguru import logger
 from pydantic import BaseModel, Field
 
+from app.agent.arac_bul import ertele
 from app.agent.araclar import AjanAracKaydi
 from app.agent.checkpoints import CheckpointDeposu
 from app.agent.policy import Istek, PolitikaMotoru, YanEtki
@@ -1050,6 +1051,8 @@ class SohbetServisi:
             isleyiciler = uzanti_kancali(self.uzantilar, isleyiciler)
         if not ayar.sohbet_araclari and alan.id == VARSAYILAN_ALAN_ID:
             return sistem, [], {}, otomatik  # kullanici sohbette araclari kapatti
+        # MCP semalari baglami dolduruyordu (128 arac ~34K token): ihtiyaca gore yuklenir
+        ertele(araclar, isleyiciler, {a.get("ad", "") for m in onceki for a in m.araclar})
         return sistem, araclar, isleyiciler, otomatik
 
     def _cli_isleyici(self, alan: CalismaAlani, ayar):
