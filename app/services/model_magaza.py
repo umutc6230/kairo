@@ -107,7 +107,7 @@ class Magaza:
         self._istemci = istemci or httpx.AsyncClient(timeout=httpx.Timeout(30, connect=10))
         self._onbellek: dict[str, tuple[float, list[dict]]] = {}
 
-    async def ara(self, sorgu: str, limit: int = 40) -> list[dict]:
+    async def ara(self, sorgu: str, limit: int = 100) -> list[dict]:
         anahtar = f"{sorgu.strip().lower()}|{limit}"
         if (k := self._onbellek.get(anahtar)) and time.time() - k[0] < ONBELLEK_SN:
             return k[1]

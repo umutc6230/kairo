@@ -198,6 +198,20 @@ async def test_kanitsiz_bitis_dogrulanmadi(tmp_path, proje) -> None:
     assert run.durum is RunDurum.dogrulanmadi and not run.sonuc.dogrulandi
 
 
+def test_is_emri_degisikliksiz_bitis_dogrulanmadi(tmp_path, proje) -> None:
+    from app.agent.runner import Adim, Run
+
+    runner, *_ = kur(tmp_path, proje, SahteModel([]))
+    oku = Adim(no=1, arac="proje_dosya_oku", durum=AdimDurum.tamam)
+    bitis = Adim(no=2, arac="gorevi_bitir", argumanlar={"ozet": "tamam", "kanit_adimlari": [1]})
+    run = Run(hedef="x", dal="is/abc", adimlar=[oku, bitis])
+    runner._bitir(run, bitis)
+    assert run.durum is RunDurum.dogrulanmadi and "degistirmeden" in run.hata
+    run2 = Run(hedef="x", adimlar=[oku, bitis])  # normal gorevde okuma kaniti gecerli
+    runner._bitir(run2, bitis)
+    assert run2.durum is RunDurum.basarili
+
+
 # --------------------------------------------------- izin reddi ve onay
 
 

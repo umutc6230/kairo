@@ -46,7 +46,9 @@ async function yukluYukle() {
   sistemCiz(v.sistem);
   const kap = $("#m-yuklu");
   kap.innerHTML = "";
-  for (const m of v.modeller) {
+  const liste = v.modeller.filter((m) => m.dosya_var);  // silinen hazir modeller listede kalmasin
+  if (!liste.length) kap.innerHTML = `<div class="bos-not soluk">Yüklü model yok. Aşağıdan indir.</div>`;
+  for (const m of liste) {
     const secili = durum.ayarlar.model === m.anahtar;
     const r = el(`<div class="skill-satir ${m.dosya_var ? "" : "kapali"}">
       <div class="skill-bilgi"><div class="ust"><b>${kacir(m.ad)}</b>

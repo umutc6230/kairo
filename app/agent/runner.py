@@ -1506,9 +1506,13 @@ class AgentRunner:
             )  # fmt: skip
             self.depo.kaydet(run)
             return
+        if run.dal.startswith("is/") and not son_degisiklik:  # is emri degisiklik yapmadan bitti
+            gecerli = []
         run.sonuc = Sonuc(ozet=ozet, kanit=gecerli, dogrulandi=bool(gecerli))
         run.durum = RunDurum.basarili if gecerli else RunDurum.dogrulanmadi
-        if not gecerli:
+        if not gecerli and run.dal.startswith("is/") and not son_degisiklik:
+            run.hata = "Is emri hic dosya degistirmeden bitirildi; sonuc dogrulanmadi."
+        elif not gecerli:
             run.hata = (
                 "Gecerli arac kaniti gosterilmedi (son degisiklikten sonra basarili bir adim "
                 "gerekir); sonuc dogrulanmadi."

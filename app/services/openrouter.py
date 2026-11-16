@@ -15,6 +15,7 @@ from typing import Any
 import httpx
 from loguru import logger
 
+from app.services import dpapi
 from app.services.depo import json_oku, json_yaz
 from app.services.yerel_llm import ModelCevapHatasi, YerelLLM
 
@@ -179,7 +180,16 @@ class OpenRouterDeposu:
     def anahtar(self) -> str:
         # CI (A11.4): kisa omurlu sir ortamdan okunur, diske YAZILMAZ; alt sureclere gecmez
         # (ortam_allowlist). Kayitli anahtar varsa o oncelikli.
-        kayitli = (json_oku(self.anahtar_yolu, {}) or {}).get("anahtar", "")
+        d = json_oku(self.anahtar_yolu, {}) or {}
+        kayitli = ""
+        if d.get("sifreli"):
+            try:
+                kayitli = dpapi.coz(d["sifreli"])
+            except (OSError, ValueError):  # baska kullanici/makine: anahtar yeniden girilmeli
+                logger.warning("OpenRouter anahtari cozulemedi")
+        elif d.get("anahtar"):  # eski duz metin kayit: sifreliye tasi
+            kayitli = d["anahtar"]
+            json_yaz(self.anahtar_yolu, {"sifreli": dpapi.sifrele(kayitli)})
         # Windows setx/.env ile tirnakli kaydedilmis olabilir: "sk-or-..."
         return kayitli or os.environ.get("YAS_OPENROUTER_ANAHTARI", "").strip().strip("\"'")
 
@@ -191,7 +201,7 @@ class OpenRouterDeposu:
             or any(c.isspace() for c in anahtar)
         ):
             raise OpenRouterHatasi("Gecersiz anahtar bicimi (sk-or-... ile baslamali).")
-        json_yaz(self.anahtar_yolu, {"anahtar": anahtar})
+        json_yaz(self.anahtar_yolu, {"sifreli": dpapi.sifrele(anahtar)})
         return self.anahtar_durumu()
 
     def anahtar_sil(self) -> dict:

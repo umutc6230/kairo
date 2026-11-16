@@ -129,7 +129,13 @@ class WorkspaceDeposu:
         except Bulunamadi:
             return None
 
-    def ac(self, yol: str, ad: str = "", guven: Guven = Guven.sinirli) -> CalismaAlani:
+    def ac(
+        self,
+        yol: str,
+        ad: str = "",
+        guven: Guven = Guven.sinirli,
+        modeller: tuple[str, str] = ("", ""),
+    ) -> CalismaAlani:
         """Klasoru proje olarak acar (ayni kok varsa onu gunceller) ve aktif yapar."""
         kok = kanonik(ham_dogrula(yol))
         if not kok.is_dir():
@@ -145,7 +151,10 @@ class WorkspaceDeposu:
                 alan.guven = guven
                 alan.guncelleme = simdi()
                 return self.kaydet(alan, aktif=True)
-        alan = CalismaAlani(ad=ad or kok.name, kokler=[str(kok)], guven=guven)
+        alan = CalismaAlani(
+            ad=ad or kok.name, kokler=[str(kok)], guven=guven,
+            koordinator_model=modeller[0], uygulayici_model=modeller[1],
+        )  # fmt: skip
         return self.kaydet(alan, aktif=True)
 
     def kaydet(self, alan: CalismaAlani, *, aktif: bool = False) -> CalismaAlani:

@@ -82,6 +82,9 @@ class KullaniciAyarlari(BaseModel):
     max_tokens: int = Field(default=1024, ge=16, le=8192)
     saglayici: Literal["yerel", "openrouter"] = "yerel"
     or_model: str = Field(default="", max_length=200)  # OpenRouter model id (or. x/y:free)
+    # yeni projelerin varsayilan koordinator/uygulayici modeli (bos = aktif model)
+    varsayilan_koordinator: str = Field(default="", max_length=200)
+    varsayilan_uygulayici: str = Field(default="", max_length=200)
     # gorsel_uret araci (OpenRouter /images); bos = arac kapali
     gorsel_model: str = Field(default="recraft/recraft-v4.1-flash-v2:free", max_length=200)
     # otomatik: Codex CLI kuruluysa ChatGPT aboneligiyle Codex, degilse OpenRouter

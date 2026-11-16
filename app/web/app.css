@@ -469,8 +469,10 @@ pre.duz { white-space: pre-wrap; font-family: var(--mono); font-size: 13px; marg
 .diff-modal { display: flex; flex-direction: column; gap: 12px; }
 .hunk { display: flex; gap: 8px; align-items: flex-start; cursor: pointer; }
 .diff { font-family: var(--mono, monospace); font-size: 12px; white-space: pre-wrap; word-break: break-word; }
-.diff-eksi { background: rgba(220, 60, 60, .14); }
-.diff-arti { background: rgba(60, 170, 100, .16); }
+.diff-eksi { background: rgba(235, 70, 70, .30); color: #ffb3b3; box-shadow: inset 3px 0 #f05252; }
+.diff-arti { background: rgba(50, 190, 100, .28); color: #b6f5c8; box-shadow: inset 3px 0 #2fbf6a; }
+:root[data-tema="acik"] .diff-eksi { color: #8a1010; }
+:root[data-tema="acik"] .diff-arti { color: #0b5a2a; }
 @media (max-width: 900px) { .gr-govde, .gr-izgara { grid-template-columns: 1fr; } }
 
 /* ---- review (A5.4) + sandbox onizleme ---- */

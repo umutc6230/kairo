@@ -2071,6 +2071,8 @@ def uygulama_olustur(
             a = {**a, "uyumluluk": uyumluluk(a["tahmini_gb"], bellek, s["disk_bos_gb"])}
             a["yuklu"] = a["model_dosyasi"] in yuklu
             sonuclar.append(a)
+        # calisanlar once, sonra kucukten buyuge (kucukler populer buyuklerin altinda kalmasin)
+        sonuclar.sort(key=lambda a: (a["uyumluluk"]["durum"] == "calismaz", a["tahmini_gb"] or 999))
         return {"sistem": s, "sonuclar": sonuclar}
 
     @app.get("/api/magaza/yuklu")
@@ -2265,7 +2267,9 @@ def uygulama_olustur(
 
     @app.post("/api/projeler")
     async def proje_ac(istek: ProjeIstegi) -> dict:
-        return projeler.ac(istek.yol, istek.ad, istek.guven).model_dump(mode="json")
+        a = ayarlar.oku()
+        varsayilan = (a.varsayilan_koordinator, a.varsayilan_uygulayici)
+        return projeler.ac(istek.yol, istek.ad, istek.guven, varsayilan).model_dump(mode="json")
 
     @app.post("/api/projeler/{alan_id}/etkin")
     async def proje_etkin(alan_id: str) -> dict:

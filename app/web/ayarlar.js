@@ -21,11 +21,11 @@ async function kaydet(degisiklik, sessiz = false) {
 }
 export { kaydet as ayarKaydet };
 
-function modelKartlari(arama, yalnizIndirilen) {
+function modelKartlari(arama) {
   const a = durum.ayarlar;
   const kucuk = arama.toLowerCase();
   return (durum.sunucu?.modeller || [])
-    .filter((m) => (!kucuk || `${m.ad} ${m.anahtar}`.toLowerCase().includes(kucuk)) && (!yalnizIndirilen || m.dosya_var))
+    .filter((m) => (m.dosya_var || m.anahtar === a.model) && (!kucuk || `${m.ad} ${m.anahtar}`.toLowerCase().includes(kucuk)))
     .map((m) => `<label class="secenek-kart ${m.anahtar === a.model ? "secili" : ""} ${m.dosya_var ? "" : "pasif"}">
       <input type="radio" name="ayar-model" value="${m.anahtar}" ${m.anahtar === a.model ? "checked" : ""} ${m.dosya_var ? "" : "disabled"}>
       <div><div class="ust">${kacir(m.ad)}
@@ -77,7 +77,7 @@ export function ayarlarAc(sekme = "ai") {
         </details>
         <span id="ay-or-test-sonuc" hidden></span><button id="ay-or-test" hidden></button></div>
       <div class="ayar-grup" data-yerel><label>Yerel model</label>
-        <div class="satir"><input class="alan" id="ay-ara" placeholder="Model ara..."><label class="onay"><input type="checkbox" id="ay-indirilen"> Yalnız indirilenler</label>
+        <div class="satir"><input class="alan" id="ay-ara" placeholder="Model ara...">
         <label class="onay" title="Yerel modellerin hepsi ücretsizdir"><input type="checkbox" checked disabled> Yalnız ücretsiz</label>
         <button class="btn kucuk" id="ay-magaza" title="Hugging Face'te GGUF ara, bu PC'ye uygunluğunu gör, indir">Hugging Face'ten indir</button></div>
         <div id="ay-modeller" class="ayar-grup"></div></div>
@@ -98,6 +98,10 @@ export function ayarlarAc(sekme = "ai") {
         <div class="ayar-not" id="ay-video-not">Sohbette "video üret", "kısa klip" gibi isteklerde ajan bu modelle mp4 üretir. Her video OpenRouter bakiyenden ücret düşer; her seferinde onay sorulur.</div></div>
       <div class="ayar-grup" data-yerel><label>Test</label>
         <div class="satir"><button class="btn" id="ay-test"><span data-ikon="oynat"></span>Seçili modeli test et</button><span id="ay-test-sonuc" class="ayar-not">Uygulamanın kullandığı biçimde (JSON şema) kısa bir istek atar.</span></div></div>
+      <div class="ayar-grup"><label>Yeni projeler için varsayılan modeller</label>
+        <div class="satir"><input class="alan" id="ay-v-koord" list="ay-v-liste" value="${kacir(a.varsayilan_koordinator || "")}" placeholder="Koordinatör (boş: aktif model)" spellcheck="false"><input class="alan" id="ay-v-uyg" list="ay-v-liste" value="${kacir(a.varsayilan_uygulayici || "")}" placeholder="Uygulayıcı / thread (boş: aktif model)" spellcheck="false"></div>
+        <datalist id="ay-v-liste"></datalist>
+        <div class="ayar-not">Yeni açılan projeye bu modeller atanır: koordinatör planlar ve iş dağıtır, uygulayıcı thread'lerde kodu yazar. Proje ayrıntısından projeye özel değiştirilebilir.</div></div>
       <h3 class="ay-bolum" id="ay-b-dusunme">Düşünme (effort)</h3>
       <div id="ay-dusunme-not" class="ayar-not"></div>
       <div id="ay-dusunme" class="ayar-grup secenek-sira"></div>
@@ -596,7 +600,7 @@ export function ayarlarAc(sekme = "ai") {
   uzantiSekmesiKur(govde);
 
   const modelleriCiz = () => {
-    $("#ay-modeller", govde).innerHTML = modelKartlari($("#ay-ara", govde).value, $("#ay-indirilen", govde).checked);
+    $("#ay-modeller", govde).innerHTML = modelKartlari($("#ay-ara", govde).value);
     $$("input[name=ay-model]", govde).forEach((r) => {
       r.onchange = async () => { await kaydet({ model: r.value }); modelleriCiz(); aktifCiz(); };
     });
@@ -609,8 +613,14 @@ export function ayarlarAc(sekme = "ai") {
     });
   };
   $("#ay-magaza", govde).onclick = () => { m.kapat(); modellerSayfasi(); };
+  for (const [id, alan] of [["#ay-v-koord", "varsayilan_koordinator"], ["#ay-v-uyg", "varsayilan_uygulayici"]]) {
+    $(id, govde).onchange = (e) => kaydet({ [alan]: e.target.value.trim() });
+  }
+  (a.saglayici === "openrouter"
+    ? api("/api/openrouter/modeller").then((v) => v.modeller.map((x) => x.id)).catch(() => [])
+    : Promise.resolve((durum.sunucu?.modeller || []).map((x) => x.anahtar))
+  ).then((idler) => { $("#ay-v-liste", govde).innerHTML = idler.map((id) => `<option value="${kacir(id)}"></option>`).join(""); });
   $("#ay-ara", govde).oninput = modelleriCiz;
-  $("#ay-indirilen", govde).onchange = modelleriCiz;
   modelleriCiz();
 
   // ---- OpenRouter ----
