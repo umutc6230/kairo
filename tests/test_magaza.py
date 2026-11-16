@@ -143,13 +143,14 @@ def test_uyumluluk_kademeleri():
 
 async def test_arama_ve_onbellek(ortam, hf):
     magaza, *_ = ortam
-    s = await magaza.ara("heretic")
+    s, sonraki = await magaza.ara("heretic")
+    assert sonraki == ""
     assert [a["repo"] for a in s] == ["org/Ornek-9B-heretic-GGUF", "org/Ornek-9B-heretic-i1-GGUF"]
     a = s[0]
     assert a["model_dosyasi"] == "Ornek-9B-heretic.Q4_K_M.gguf" and a["arac"] and a["gorsel"]
     assert a["parametre_milyar"] == 9.0 and a["tahmini_gb"] == 6.3
     hf.dosyalar.clear()  # onbellekten gelmeli
-    assert await magaza.ara("Heretic ") == s
+    assert (await magaza.ara("Heretic "))[0] == s
 
 
 async def test_arama_ag_hatasi():
@@ -289,3 +290,19 @@ async def test_magaza_api(istemci, monkeypatch):
         for m in (await istemci.get("/api/magaza/yuklu")).json()["modeller"]
         if m["anahtar"] == "gemma4-e4b-heretic"
     )["dosya_var"]
+
+
+async def test_bos_sorgu_tumu_ve_sayfalama():
+    gorulen = []
+
+    def hf(r):
+        gorulen.append(dict(r.url.params))
+        ilk = "cursor" not in r.url.params
+        basliklar = {"Link": '<https://huggingface.co/api/models?cursor=ABC&limit=100>; rel="next"'}
+        return httpx.Response(200, json=[], headers=basliklar if ilk else {})
+
+    magaza = mm.Magaza(httpx.AsyncClient(transport=httpx.MockTransport(hf)))
+    assert await magaza.ara("") == ([], "ABC")
+    assert "search" not in gorulen[0]  # bos sorgu: tum GGUF
+    assert await magaza.ara("", imlec="ABC") == ([], "")
+    assert gorulen[1]["cursor"] == "ABC"

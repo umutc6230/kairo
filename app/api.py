@@ -2060,20 +2060,20 @@ def uygulama_olustur(
         }
 
     @app.get("/api/magaza/ara")
-    async def magaza_ara(q: str = "heretic", gorsel: bool = True) -> dict:
+    async def magaza_ara(q: str = "", imlec: str = "") -> dict:
+        """Bos q = tum GGUF modelleri; filtre/siralama arayuzde (yuklenen sayfalar uzerinde)."""
         s = _sistem_bilgisi()
         bellek = {"toplam_gb": s["toplam_ram_gb"], "bos_gb": s["bos_ram_gb"]}
         yuklu = {p.dosya for p in MODELLER.values()}
-        sonuclar = []
-        for a in await magaza.ara(q or "heretic"):
-            if gorsel and not a["gorsel"]:
-                continue
-            a = {**a, "uyumluluk": uyumluluk(a["tahmini_gb"], bellek, s["disk_bos_gb"])}
-            a["yuklu"] = a["model_dosyasi"] in yuklu
-            sonuclar.append(a)
-        # calisanlar once, sonra kucukten buyuge (kucukler populer buyuklerin altinda kalmasin)
-        sonuclar.sort(key=lambda a: (a["uyumluluk"]["durum"] == "calismaz", a["tahmini_gb"] or 999))
-        return {"sistem": s, "sonuclar": sonuclar}
+        adaylar, sonraki = await magaza.ara(q, imlec=imlec[:500])
+        sonuclar = [
+            a | {
+                "uyumluluk": uyumluluk(a["tahmini_gb"], bellek, s["disk_bos_gb"]),
+                "yuklu": a["model_dosyasi"] in yuklu,
+            }
+            for a in adaylar
+        ]  # fmt: skip
+        return {"sistem": s, "sonuclar": sonuclar, "sonraki": sonraki}
 
     @app.get("/api/magaza/yuklu")
     async def magaza_yuklu() -> dict:

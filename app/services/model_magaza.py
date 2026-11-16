@@ -107,12 +107,14 @@ class Magaza:
         self._istemci = istemci or httpx.AsyncClient(timeout=httpx.Timeout(30, connect=10))
         self._onbellek: dict[str, tuple[float, list[dict]]] = {}
 
-    async def ara(self, sorgu: str, limit: int = 100) -> list[dict]:
-        anahtar = f"{sorgu.strip().lower()}|{limit}"
+    async def ara(self, sorgu: str, limit: int = 100, imlec: str = "") -> tuple[list[dict], str]:
+        """Bos sorgu = tum GGUF modelleri. Doner: (sonuclar, sonraki sayfa imleci; bos = son)."""
+        anahtar = f"{sorgu.strip().lower()}|{limit}|{imlec}"
         if (k := self._onbellek.get(anahtar)) and time.time() - k[0] < ONBELLEK_SN:
             return k[1]
         parametreler = [
-            ("search", sorgu.strip()),
+            *([("search", sorgu.strip())] if sorgu.strip() else []),
+            *([("cursor", imlec)] if imlec else []),
             ("filter", "gguf"),
             ("sort", "downloads"),
             ("direction", "-1"),
@@ -127,8 +129,11 @@ class Magaza:
         except httpx.HTTPError as e:
             raise UygulamaHatasi(f"Hugging Face'e ulasilamadi: {e}") from e
         sonuc = [a for m in r.json() if (a := aday_olustur(m))]
-        self._onbellek[anahtar] = (time.time(), sonuc)
-        return sonuc
+        # HF sayfalama: Link: <...?cursor=X>; rel="next"
+        sonraki_url = (r.links.get("next") or {}).get("url", "")
+        sonraki = httpx.URL(sonraki_url).params.get("cursor", "") if sonraki_url else ""
+        self._onbellek[anahtar] = (time.time(), (sonuc, sonraki))
+        return sonuc, sonraki
 
     async def dosya_bilgileri(self, repo: str) -> dict[str, dict]:
         """{dosya: {boyut, sha256}} (LFS kaydi)."""

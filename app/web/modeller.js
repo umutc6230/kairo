@@ -16,7 +16,8 @@ export function modellerKur(cb) {
   yenile = cb;
   $("#m-ara-btn").onclick = () => ara($("#m-ara").value);
   $("#m-ara").onkeydown = (e) => { if (e.key === "Enter") ara($("#m-ara").value); };
-  $("#m-gorsel").onchange = () => ara($("#m-ara").value);
+  for (const id of ["#m-f-gorsel", "#m-f-arac", "#m-f-calisir", "#m-f-param", "#m-f-sira"]) $(id).onchange = ciz;
+  $("#m-daha").onclick = () => ara(arama.sorgu, true);
   document.querySelectorAll("#m-hazir .ornek").forEach((b) => {
     b.onclick = () => { $("#m-ara").value = b.dataset.q; ara(b.dataset.q); };
   });
@@ -25,7 +26,7 @@ export function modellerKur(cb) {
 export async function modelSayfasiYukle() {
   await yukluYukle();
   indirmeleriIzle();
-  if (!$("#m-sonuclar").children.length) ara($("#m-ara").value || "heretic");
+  if (!arama.liste.length) ara($("#m-ara").value);
 }
 
 function sistemCiz(s) {
@@ -84,19 +85,51 @@ export async function modelSil(m) {
   return true;
 }
 
-async function ara(sorgu) {
+const arama = { sorgu: "", liste: [], sonraki: "" };
+const SIRA = {
+  indirme: (x, y) => y.indirme - x.indirme,
+  begeni: (x, y) => y.begeni - x.begeni,
+  yeni: (x, y) => (y.guncelleme || "").localeCompare(x.guncelleme || ""),
+  "param-artan": (x, y) => (x.parametre_milyar ?? 1e9) - (y.parametre_milyar ?? 1e9),
+  "param-azalan": (x, y) => (y.parametre_milyar ?? -1) - (x.parametre_milyar ?? -1),
+};
+
+// sayfa sayfa yukler (bos sorgu = tum GGUF); filtre + siralama yuklenen liste uzerinde
+async function ara(sorgu, devam = false) {
   const kap = $("#m-sonuclar");
-  kap.innerHTML = `<div class="bos-not"><span class="parilti">Hugging Face'te aranıyor…</span></div>`;
+  if (!devam) { arama.sorgu = sorgu.trim(); arama.liste = []; arama.sonraki = ""; kap.innerHTML = ""; }
+  $("#m-daha").hidden = true;
+  const bekle = el(`<div class="bos-not"><span class="parilti">Hugging Face'ten yükleniyor…</span></div>`);
+  kap.after(bekle);
   let v;
   try {
-    v = await api(`/api/magaza/ara?q=${encodeURIComponent(sorgu || "heretic")}&gorsel=${$("#m-gorsel").checked}`);
+    v = await api(`/api/magaza/ara?q=${encodeURIComponent(arama.sorgu)}&imlec=${encodeURIComponent(devam ? arama.sonraki : "")}`);
   } catch (e) {
+    bekle.remove();
     kap.innerHTML = `<div class="hata-kutu">${kacir(e.message)}</div>`;
     return;
   }
+  bekle.remove();
   sistemCiz(v.sistem);
-  kap.innerHTML = v.sonuclar.length ? "" : `<div class="bos-not soluk">Sonuç yok.</div>`;
-  for (const a of v.sonuclar) {
+  const gorulen = new Set(arama.liste.map((x) => x.repo));
+  arama.liste.push(...v.sonuclar.filter((x) => !gorulen.has(x.repo)));
+  arama.sonraki = v.sonraki || "";
+  ciz();
+}
+
+function ciz() {
+  const kap = $("#m-sonuclar");
+  const [alt, ust] = $("#m-f-param").value.split("-").map(Number);
+  const tumu = $("#m-f-param").value === "0-999";
+  const liste = arama.liste.filter((a) =>
+    (!$("#m-f-gorsel").checked || a.gorsel) && (!$("#m-f-arac").checked || a.arac)
+    && (!$("#m-f-calisir").checked || a.uyumluluk.durum === "calisir")
+    && (tumu || (a.parametre_milyar != null && a.parametre_milyar > alt && a.parametre_milyar <= ust)))
+    .sort(SIRA[$("#m-f-sira").value]);
+  $("#m-sayac").textContent = `${liste.length} / ${arama.liste.length} model gösteriliyor`;
+  $("#m-daha").hidden = !arama.sonraki;
+  kap.innerHTML = liste.length ? "" : `<div class="bos-not soluk">${arama.liste.length ? "Filtreye uyan model yok; filtreyi gevşet ya da daha fazla yükle." : "Sonuç yok."}</div>`;
+  for (const a of liste) {
     const [renk, etiket] = UYUM[a.uyumluluk.durum] || UYUM.bilinmiyor;
     const engel = a.uyumluluk.durum === "calismaz" || a.uyumluluk.disk_yetmez;
     const r = el(`<div class="skill-satir">

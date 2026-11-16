@@ -158,7 +158,7 @@ svg { display: block; }
 .yazma:focus-within { border-color: var(--cok-soluk); }
 .yazma.surukle { border-color: var(--mavi); border-style: dashed; }
 .yazma-satir { display: flex; align-items: flex-end; gap: 6px; }
-#girdi { flex: 1; resize: none; border: 0; outline: 0; background: none; padding: 9px 4px; max-height: 260px; overflow-y: hidden; font-size: 15.5px; line-height: 1.5; }
+#girdi { flex: 1; align-self: center; resize: none; border: 0; outline: 0; background: none; padding: 9px 4px; max-height: 260px; overflow-y: hidden; font-size: 15.5px; line-height: 1.5; }
 #girdi::placeholder { color: var(--cok-soluk); }
 .gonder { width: 34px; height: 34px; border-radius: 10px; display: grid; place-items: center; background: var(--metin); color: var(--ana-metin); margin: 2px; }
 .gonder svg { width: 18px; height: 18px; }
