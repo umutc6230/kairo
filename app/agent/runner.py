@@ -1034,10 +1034,19 @@ class AgentRunner:
         Hala sigmiyorsa istegi KORLEMESINE gondermez: gorev basarisiz olur (A0.6, A4.1)."""
         baglam = self.yetenek().baglam if self.yetenek else VARSAYILAN_BAGLAM
         sabit = tahmini_token(sistem) + tahmini_token(json.dumps(semalar, ensure_ascii=False))
-        mesaj_siniri = baglam - sabit - cevap_tokeni(baglam)
+        # talimat + araclar buyukse cevap payi kuculur (min 1K): mesajlara en az 4K kalsin
+        cevap = cevap_tokeni(baglam)
+        if baglam - sabit - cevap < 4096:
+            cevap = max(1024, baglam - sabit - 4096)
+        mesaj_siniri = baglam - sabit - cevap
         if mesaj_siniri <= 0:
             run.durum = RunDurum.basarisiz
-            run.hata = f"Baglam ({baglam}) talimat ve arac tanimlarina bile yetmiyor; buyutun."
+            arac_tok = tahmini_token(json.dumps(semalar, ensure_ascii=False))
+            run.hata = (
+                f"Baglam ({baglam}) talimat ({sabit - arac_tok}) ve arac tanimlarina "
+                f"({arac_tok}, {len(semalar)} arac) yetmiyor; Ayarlar'dan baglami buyutun ya da "
+                "kullanmadiginiz MCP/skill'leri kapatin."
+            )
             return False
         if ozetle_gerekirse(run, mesaj_siniri, self.depo.dizin / f"{run.id}.arsiv.jsonl"):
             run.ozet_sayisi += 1
@@ -1052,7 +1061,7 @@ class AgentRunner:
                     {"truncated": True, "not": "Eski arac sonucu baglama sigmadi; gerekirse "
                      "araci tekrar cagir."}, ensure_ascii=False,
                 )  # fmt: skip
-        run.baglam = butce_dokumu(sistem, semalar, run.mesajlar, cevap_tokeni(baglam), baglam)
+        run.baglam = butce_dokumu(sistem, semalar, run.mesajlar, cevap, baglam)
         if run.baglam["toplam"] > baglam:
             run.durum = RunDurum.basarisiz
             run.hata = f"Baglam yetersiz ({run.baglam['toplam']}/{baglam} token); buyutun."
@@ -1076,7 +1085,9 @@ class AgentRunner:
                 baglanti = self.llm(run.model) if ozel else self.llm()
                 async with kilit, baglanti as llm:
                     secim = await llm.sohbet(
-                        gonderilen, tools=semalar, max_tokens=cevap_tokeni(self._baglam())
+                        gonderilen,
+                        tools=semalar,
+                        max_tokens=run.baglam.get("cevap") or cevap_tokeni(self._baglam()),
                     )
                 break
             except (SunucuKapali, ModelCevapHatasi) as e:

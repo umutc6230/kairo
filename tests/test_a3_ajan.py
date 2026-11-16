@@ -531,3 +531,16 @@ async def test_model_adim_numarasini_gorur_ve_uzun_basarisiz_cikti_kanit_olamaz(
     assert json.loads(tool["content"])["adim"] == 1
     assert run.adimlar[0].cikis_kodu == 1
     assert run.adimlar[1].durum is AdimDurum.hata  # kirpilmis cikti "basarili" sayilmadi
+
+
+def test_buyuk_talimatta_cevap_payi_kuculur_gorev_dusmez(tmp_path, proje) -> None:
+    from app.agent.runner import Run
+
+    runner, *_ = kur(tmp_path, proje, SahteModel([]))
+    runner.yetenek = lambda: type("Y", (), {"baglam": 32768})()
+    run = Run(hedef="x", mesajlar=[{"role": "user", "content": "selam"}])
+    sistem = "kelime " * 9700  # ~26K token: sabit 8K cevap payiyla sigmazdi
+    assert runner._baglami_hazirla(run, sistem, [])
+    assert 1024 <= run.baglam["cevap"] < 8192
+    assert not runner._baglami_hazirla(run, "kelime " * 12000, [])
+    assert "talimat" in run.hata and "MCP" in run.hata
