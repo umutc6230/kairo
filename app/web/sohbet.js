@@ -551,7 +551,11 @@ export async function gonder() {
   const oturumId = durum.oturumId;
   // Claude Code gibi: proje aciksa (ve mod sohbet degilse) mesaj AJAN olarak calisir; adimlar,
   // onaylar ve diff bu sohbetin icinde gorunur. Ekli mesajlar normal sohbet yolundan gider.
-  if (ajanModu() && !ekler.length) { await ajanaGonder(oturumId, metin); return; }
+  if (ajanModu() && !ekler.length) {
+    ajanGonderiliyor = true;
+    try { await ajanaGonder(oturumId, metin); } finally { ajanGonderiliyor = false; }
+    return;
+  }
   const s = sutun();
   const yanit = asistanMesaji();
   yanit.canliBaslat(durum.ayarlar?.model);
@@ -681,8 +685,9 @@ async function hafizaNotu(not) {
   }
 }
 
+let ajanGonderiliyor = false; // gorev baslarken liste yoklamasi ekrani bos sunucu kaydiyla ezmesin
 export function akisVar() {
-  return !!akisKontrol;
+  return !!akisKontrol || ajanGonderiliyor;
 }
 
 // ---- yardimci ----

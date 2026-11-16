@@ -132,6 +132,9 @@ export function ayarlarAc(sekme = "ai") {
       <div class="ayar-grup" data-yerel><label>Bağlam boyutu</label>
         <select class="secim" id="ay-baglam"><option value="8192">8K token (en az RAM; yalnız kısa sohbet)</option><option value="16384">16K token (sohbet; ajan görevinde geçmiş kısa kalır)</option><option value="32768">32K token (ajan görevleri için önerilen; daha çok RAM)</option></select>
         <div class="ayar-not">Değişince model bir sonraki mesajda yeni bağlamla yeniden açılır. Talimat ve skill ayarları: Skill'ler ve talimatlar sayfası.</div></div>
+      <div class="ayar-grup"><label>Bağlam profili</label>
+        <select class="secim" id="ay-profil"><option value="otomatik">Otomatik (küçük yerel modelde hafif)</option><option value="tam">Tam: tüm araçlar, skill'ler, MCP</option><option value="hafif">Hafif: temel dosya/komut araçları, kısa talimat</option></select>
+        <div class="ayar-not">Hafif profil düşük parametreli modeller içindir: skill listesi, MCP ve ek araçlar gönderilmez, Claude talimatları atlanır, proje talimatı kısaltılır. Otomatik: ~5 GB RAM ve altı yerel modelde hafif.</div></div>
       <div class="ayar-grup" data-yerel><label>Sunucu adresi</label><input class="alan" id="ay-adres" value="${kacir(a.adres)}"></div>
       <div class="anahtar-satir" data-yerel><div><div>Otomatik başlat</div><div class="ayar-not">Model kapalıysa ilk mesajda arka planda açılır; uygulama kapanınca kapanır.</div></div>
         <label class="anahtar"><input type="checkbox" id="ay-oto" ${a.otomatik_baslat ? "checked" : ""}><span></span></label></div>
@@ -831,6 +834,8 @@ export function ayarlarAc(sekme = "ai") {
   sunucuDurumuCiz(govde);
   $("#ay-baglam", govde).value = String(a.baglam_token);
   alanKaydet("#ay-baglam", "baglam_token", Number);
+  $("#ay-profil", govde).value = a.baglam_profili || "otomatik";
+  alanKaydet("#ay-profil", "baglam_profili");
   alanKaydet("#ay-sistem", "sistem_istemi");
   alanKaydet("#ay-gorsel-model", "gorsel_model", (v) => v.trim());
   const gorselSaglayiciCiz = () => { $("#ay-gorsel-or", govde).hidden = $("#ay-gorsel-saglayici", govde).value === "codex"; };

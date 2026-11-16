@@ -73,6 +73,13 @@ EK_METIN_KARAKTER = 12000
 ARAC_SONUC_KARAKTER = 6000  # tek arac sonucu (~1800 token)
 GECMIS_EK_METIN_KARAKTER = 4000
 PROJE_TALIMAT_KARAKTER = 8000
+# Hafif baglam profili: kucuk yerel modelde (<= HAFIF_RAM_GB) skill/MCP/ek araclar gonderilmez
+HAFIF_RAM_GB = 5.0
+HAFIF_PROJE_SINIRI = 1500
+HAFIF_ARACLAR = frozenset({
+    "klasor_listele", "dosya_oku", "dosya_ara", "proje_dosya_oku", "proje_listele", "proje_ara",
+    "proje_glob", "proje_dosya_yaz", "proje_dosya_yama", "komut_calistir", "plan_guncelle",
+})  # fmt: skip
 VARSAYILAN_ALAN_ID = "0" * 12  # proje acilmadiginda kullanilan kisisel kapsam
 
 
@@ -1040,6 +1047,13 @@ class SohbetServisi:
         else:
             not_ = f"{SISTEM_NOTU}\n{kapsam_notu(alan)}" if ayar.sohbet_araclari else ""
         proje_talimati = self.proje_talimat_metni(alan)
+        if self.hafif_mi(ayar, alan):  # kucuk model: temel araclar + kisa talimat
+            araclar = [a for a in araclar if a["function"]["name"] in HAFIF_ARACLAR]
+            isleyiciler = {k: v for k, v in isleyiciler.items() if k in HAFIF_ARACLAR}
+            skill_listesi = skill_metni = ""
+            otomatik = None
+            talimat = self.talimatlar.sistem_metni(claude=False, uygulama=ayar.uygulama_talimati)
+            proje_talimati = proje_talimati[:HAFIF_PROJE_SINIRI]
         hafiza = (
             self.hafiza.sistem_metni(alan.id, istek_metni or "")
             if self.hafiza is not None and getattr(ayar, "hafiza_acik", False)
@@ -1232,6 +1246,15 @@ class SohbetServisi:
         if self.politika is None or self.checkpointler is None:
             return None
         return AjanAracKaydi(alan, self.politika, self.checkpointler, self.komutlar)
+
+    def hafif_mi(self, ayar, alan: CalismaAlani) -> bool:
+        """Baglam profili: 'tam' | 'hafif' | 'otomatik' (kucuk yerel model = hafif)."""
+        profil = getattr(ayar, "baglam_profili", "otomatik")
+        if profil != "otomatik":
+            return profil == "hafif"
+        model = alan.koordinator_model or (ayar.model if ayar.saglayici != "openrouter" else "")
+        m = MODELLER.get(model)
+        return m is not None and m.ram_gb <= HAFIF_RAM_GB
 
     def proje_talimat_metni(self, alan: CalismaAlani) -> str:
         """Proje icindeki AGENTS.md/CLAUDE.md. YALNIZ guvenilir projede okunur (A1.2).

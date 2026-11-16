@@ -85,6 +85,8 @@ class KullaniciAyarlari(BaseModel):
     # yeni projelerin varsayilan koordinator/uygulayici modeli (bos = aktif model)
     varsayilan_koordinator: str = Field(default="", max_length=200)
     varsayilan_uygulayici: str = Field(default="", max_length=200)
+    # hafif: kucuk modelde skill/MCP/ek araclar gonderilmez; otomatik = kucuk yerel modelde hafif
+    baglam_profili: Literal["otomatik", "tam", "hafif"] = "otomatik"
     # gorsel_uret araci (OpenRouter /images); bos = arac kapali
     gorsel_model: str = Field(default="recraft/recraft-v4.1-flash-v2:free", max_length=200)
     # otomatik: Codex CLI kuruluysa ChatGPT aboneligiyle Codex, degilse OpenRouter
