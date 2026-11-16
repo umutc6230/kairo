@@ -416,7 +416,7 @@ def uygulama_olustur(
         if sohbet.ajan_araclari(alan) is None:
             raise UygulamaHatasi("Ajan araclari hazir degil.")
         a = ayarlar.oku()
-        sistem, araclar_, isleyiciler, _ = sohbet.baglam_hazirla(a, hedef, [])
+        sistem, araclar_, isleyiciler, _ = sohbet.baglam_hazirla(a, hedef, [], ajan_gorevi=True)
         if a.otomatik_ogrenme:  # kullanici actiysa ajan kalici not ekleyebilir (dusuk guven)
             araclar_ = [*araclar_, HAFIZA_ARACI]
 

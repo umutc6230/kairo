@@ -189,6 +189,21 @@ class Sonuc(BaseModel):
     dogrulandi: bool = False
 
 
+def _tekil(semalar: list[dict]) -> list[dict]:
+    """Ayni adli arac iki kez gitmesin: Gemini 400 'Duplicate function declaration' veriyor
+    (canli: thread runner + MCP/takim birlesiminde). Ilk tanim kalir."""
+    gorulen: set[str] = set()
+    tekil = []
+    for s in semalar:
+        ad = s["function"]["name"]
+        if ad in gorulen:
+            logger.warning("Arac iki kez tanimli, ikincisi atlandi: {}", ad)
+            continue
+        gorulen.add(ad)
+        tekil.append(s)
+    return tekil
+
+
 class Run(BaseModel):
     id: str = Field(default_factory=lambda: uuid.uuid4().hex[:12])
     hedef: str
@@ -805,6 +820,9 @@ class AgentRunner:
             if run.ajan_id and self.ajan_araclari is not None:  # ajana_mesaj, ajan_notu
                 ek_sema, ek_isl = self.ajan_araclari(run)
                 semalar, isleyiciler = [*semalar, *ek_sema], {**isleyiciler, **ek_isl}
+            # sohbet arac setinde de plan_guncelle var; runner'in kendi tanimi gecerli
+            runner_adlari = {t["function"]["name"] for t in RUNNER_ARACLARI}
+            semalar = [t for t in semalar if t["function"]["name"] not in runner_adlari]
             semalar = [*semalar, *RUNNER_ARACLARI]
             if self.takim is not None:  # A8.2: lider + alt ajanlar ortak panoyu paylasir
                 kok = run.parent or run.id
@@ -888,7 +906,7 @@ class AgentRunner:
 
                     run.mesajlar.append(gorsel_mesaji(gorseller))
                 # 3) model
-                mesaj = await self._model(run, sistem, [*semalar, *yuklenen])
+                mesaj = await self._model(run, sistem, _tekil([*semalar, *yuklenen]))
                 if mesaj is None:
                     break
                 cagrilar = mesaj.get("tool_calls") or []

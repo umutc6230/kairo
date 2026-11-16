@@ -452,7 +452,7 @@ async def test_proje_koordinator_ve_uygulayici_modeli(istemci, sunucu, tmp_path)
     """Proje modelleri (Claude 'Coordinator / Threads'): sohbet koordinator modeliyle gider,
     uygulayici secilince koordinatore 'isi thread'e ver' notu eklenir."""
     p = tmp_path / "p"
-    p.mkdir()
+    (p / ".git").mkdir(parents=True)  # koordinator kurali yalniz git deposunda
     alan = (await istemci.post("/api/projeler", json={"yol": str(p), "guven": "guvenilir"})).json()
     await istemci.put(f"/api/projeler/{alan['id']}/mod", json={"mod": "onayli"})
     r = await istemci.put(
@@ -466,6 +466,15 @@ async def test_proje_koordinator_ve_uygulayici_modeli(istemci, sunucu, tmp_path)
     r = await istemci.post(f"/api/oturumlar/{o}/mesaj", json={"metin": "Merhaba"})
     assert olaylar(r.text)[-1]["mesaj"]["model"] == "gemma4-e4b-heretic"
     assert "KOORDINATORSUN" in sunucu.istekler[-1]["messages"][0]["content"]
+    adlar = {t["function"]["name"] for t in sunucu.istekler[-1].get("tools", [])}
+    assert "is_emri_baslat" in adlar  # uygulama isi thread'e gider
+    assert not adlar & {"proje_dosya_yaz", "proje_dosya_yama", "komut_calistir"}
+    # thread (uygulayici) ise yazar ve is emri ACMAZ (canli: zincirleme thread, dosya yok)
+    sh = istemci._transport.app.state.sohbet
+    ayar = sh.yonetici.ayarlar.oku()
+    _, araclar, _, _ = sh.baglam_hazirla(ayar, "is", [], ajan_gorevi=True)
+    t_adlar = {t["function"]["name"] for t in araclar}
+    assert "proje_dosya_yaz" in t_adlar and "is_emri_baslat" not in t_adlar
 
     await istemci.put("/api/ayarlar", json={"saglayici": "openrouter"})
     r = await istemci.put(

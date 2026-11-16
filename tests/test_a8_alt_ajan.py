@@ -209,3 +209,15 @@ def test_proje_modeli_lider_koordinator_alt_ajan_uygulayici(tmp_path) -> None:
     cocuk = depo.getir(run.cocuklar[0])
     assert (cocuk.model, cocuk.model_sabit) == ("kucuk/model", True)
     assert istenen[0] == "buyuk/model" and "kucuk/model" in istenen and None not in istenen
+
+
+def test_ayni_adli_arac_modele_bir_kez_gider() -> None:
+    """Gemini ayni adli iki arac tanimini 400 ile reddediyor (canli bulgu)."""
+    from app.agent.runner import _tekil
+
+    def s(ad: str, d: str = "") -> dict:
+        return {"type": "function", "function": {"name": ad, "description": d}}
+
+    sonuc = _tekil([s("a", "ilk"), s("b"), s("a", "ikinci")])
+    assert [x["function"]["name"] for x in sonuc] == ["a", "b"]
+    assert sonuc[0]["function"]["description"] == "ilk"

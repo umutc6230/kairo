@@ -429,8 +429,9 @@ def alt_oturum_isleyici(baslik: str = "", gorev: str = "") -> dict:
 KOORDINATOR_NOTU = (
     "\nBu projede KOORDINATORSUN: planla, arastir, karar ver, sonucu dogrula. Kod yazma ve "
     "uygulama islerini is_emri_baslat ile thread'e ver (uygulayici model {model} yapar; is "
-    "tanimina dosya yollarini ve kabul olcutunu yaz), is_emirleri_durum ile izle. Tek satirlik "
-    "duzeltmeyi ya da git deposu olmayan projedeki isi kendin yap."
+    "tanimina dosya yollarini ve kabul olcutunu yaz), is_emirleri_durum ile izle. Dosya yazma ve "
+    "komut aracin YOK; okuyup arastirabilirsin. Thread bitince sonucu okuyup dogrula, "
+    "kullaniciya ozetle."
 )
 
 # Thread'ler (Claude "proje sohbeti" gibi): her is ayri is emri, kendi dalinda arka planda calisir

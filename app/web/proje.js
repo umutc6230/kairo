@@ -50,6 +50,7 @@ function satir(etiket, deger) {
 }
 
 export function projeAc() {
+  let modelOnerileri = [];
   const govde = el('<div class="proje-modal"></div>');
 
   const ciz = () => {
@@ -106,7 +107,7 @@ export function projeAc() {
         <label class="proje-alan">Uygulayıcı modeli (thread'ler ve alt ajanlar: koordinatörün verdiği işleri yapar; boş: aktif model)
           <input class="alan" id="proje-uygulayici" list="proje-model-liste" value="${kacir(aktif.uygulayici_model || "")}" placeholder="Aktif model" spellcheck="false">
         </label>
-        <datalist id="proje-model-liste"></datalist>
+        <datalist id="proje-model-liste">${modelOnerileri.map((id) => `<option value="${kacir(id)}"></option>`).join("")}</datalist>
         <label class="proje-alan">Ek klasör yetkilendir (kök dışı)
           <span class="klasor-sec-sira">
             <input class="alan" id="proje-ek" type="text" placeholder="Klasör seçin" spellcheck="false">
@@ -181,7 +182,8 @@ export function projeAc() {
     const oneriler = durum.ayarlar?.saglayici === "openrouter"
       ? api("/api/openrouter/modeller").then((v) => v.modeller.map((m) => m.id)).catch(() => [])
       : Promise.resolve((durum.sunucu?.modeller || []).map((m) => m.anahtar));
-    oneriler.then((idler) => {
+    if (!modelOnerileri.length) oneriler.then((idler) => { // ciz() modali yeniden kurar: listeyi sakla
+      modelOnerileri = idler;
       const dl = $("#proje-model-liste", govde);
       if (dl) dl.innerHTML = idler.map((id) => `<option value="${kacir(id)}"></option>`).join("");
     });

@@ -3,6 +3,7 @@ import { sohbetteGorevGoster } from "./gorevler.js";
 import { threadKarti } from "./superajan.js";
 import { masaustuBildirimi } from "./ayarlar2.js";
 import { girdiYardimKur, oneriTusu } from "./girdi.js";
+import { anahtarCoz, anahtarYapistir, maskele } from "./gizli.js";
 import { komutListesi, komutMu } from "./komutlar.js";
 import { projeDurumu } from "./proje.js";
 import { ikon, ikonlariYerlestir } from "./ikonlar.js";
@@ -85,7 +86,8 @@ export function sohbetKur(cb) {
   girdiYardimKur(komutListesi);
   girdi.addEventListener("paste", (e) => {
     const dosyalar = [...(e.clipboardData?.files || [])];
-    if (dosyalar.length) { e.preventDefault(); dosyalar.forEach(ekYukle); }
+    if (dosyalar.length) { e.preventDefault(); dosyalar.forEach(ekYukle); return; }
+    anahtarYapistir(e, girdi); // API anahtari kutuda maskeli gorunur
   });
   $("#btn-gonder").onclick = () => (akisKontrol ? durdur() : gonder());
   $("#btn-ek").onclick = () => $("#dosya-sec").click();
@@ -184,7 +186,7 @@ function kullaniciMesaji(m) {
     : `<span class="ek-cip"><span class="tur">${ikon(TUR_IKON[e.tur] || "dosya")}</span><span class="ad">${kacir(e.ad)}</span></span>`).join("");
   const d = el(`<div class="mesaj kullanici">
     ${ekler ? `<div class="mesaj-ekleri">${ekler}</div>` : ""}
-    ${m.metin ? `<div class="balon">${kacir(m.metin)}</div>` : ""}
+    ${m.metin ? `<div class="balon">${kacir(maskele(m.metin))}</div>` : ""}
     <div class="mesaj-alt"><button class="ikon-btn" title="Kopyala" data-ikon="kopyala"></button></div></div>`);
   d.querySelector(".mesaj-alt .ikon-btn").onclick = () => kopyala(m.metin);
   d.querySelectorAll("[data-buyut]").forEach((img) => {
@@ -521,7 +523,7 @@ export function yeniSohbetEkrani({ girdiyiKoru = false } = {}) {
 // ---- gonderme / akis ----
 export async function gonder() {
   const girdi = $("#girdi");
-  const metin = girdi.value.trim();
+  const metin = anahtarCoz(girdi.value.trim()); // maskeli yer tutucu -> gercek anahtar
   if (komutMu(metin, (istem) => { $("#girdi").value = istem; gonder(); })) { // yerel slash komut: modele mesaj olarak gitmez
     girdi.value = "";
     boyutla();

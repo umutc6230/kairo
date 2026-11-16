@@ -31,7 +31,7 @@ function modelKartlari(arama) {
       <div><div class="ust">${kacir(m.ad)}
         <span class="rozet">~${m.ram_gb} GB RAM</span>
         <span class="rozet yesil">ücretsiz (yerel)</span>
-        <span class="rozet">context 8192</span>
+        <span class="rozet" title="Ayarlar > Yerel motor > Bağlam">context ${a.baglam_token}</span>
         <span class="rozet ${m.ses ? "yesil" : ""}">${m.ses ? "metin · resim · araç · ses" : "metin · resim · araç"}</span>
         ${m.dosya_var ? "" : '<span class="rozet kirmizi">dosya yok</span>'}
         ${m.dosya_var && !m.mmproj_var ? '<span class="rozet sari">görüntü modülü yok</span>' : ""}</div>
@@ -130,7 +130,7 @@ export function ayarlarAc(sekme = "ai") {
       <div class="ayar-grup" data-yerel><label>Model klasörü</label><input class="alan" id="ay-dizin" value="${kacir(a.llm_dizin)}">
         <div class="ayar-not">llama.cpp\\llama-server.exe ve models\\*.gguf bu klasörde olmalı. ${s.motor_var ? "✓ llama.cpp bulundu" : "✗ llama.cpp bulunamadı"}</div></div>
       <div class="ayar-grup" data-yerel><label>Bağlam boyutu</label>
-        <select class="secim" id="ay-baglam"><option value="8192">8K token (en az RAM)</option><option value="16384">16K token (önerilen; talimatlar ~3K yer)</option><option value="32768">32K token (daha çok RAM)</option></select>
+        <select class="secim" id="ay-baglam"><option value="8192">8K token (en az RAM; yalnız kısa sohbet)</option><option value="16384">16K token (sohbet; ajan görevinde geçmiş kısa kalır)</option><option value="32768">32K token (ajan görevleri için önerilen; daha çok RAM)</option></select>
         <div class="ayar-not">Değişince model bir sonraki mesajda yeni bağlamla yeniden açılır. Talimat ve skill ayarları: Skill'ler ve talimatlar sayfası.</div></div>
       <div class="ayar-grup" data-yerel><label>Sunucu adresi</label><input class="alan" id="ay-adres" value="${kacir(a.adres)}"></div>
       <div class="anahtar-satir" data-yerel><div><div>Otomatik başlat</div><div class="ayar-not">Model kapalıysa ilk mesajda arka planda açılır; uygulama kapanınca kapanır.</div></div>
@@ -169,7 +169,7 @@ export function ayarlarAc(sekme = "ai") {
           <input class="alan" id="mc-arg" placeholder="Argümanlar (boşlukla)" style="flex:1"></div>
         <div class="satir"><input class="alan" id="mc-url" placeholder="ya da uzak sunucu adresi: https://..." style="flex:1">
           <input class="alan" id="mc-baslik" type="password" placeholder="Authorization (ör. Bearer ...)" style="max-width:220px" autocomplete="off"></div>
-        <div class="satir"><input class="alan" id="mc-ortam" placeholder="Ortam: ANAHTAR=deger, ANAHTAR2=deger" style="flex:1" autocomplete="off">
+        <div class="satir"><input class="alan" id="mc-ortam" type="password" placeholder="Ortam: ANAHTAR=deger, ANAHTAR2=deger" style="flex:1" autocomplete="off">
           <button class="btn ana" id="mc-ekle">Ekle</button></div></details>
       <div id="mc-ice"></div>
       <div id="mc-paket"></div>

@@ -11,13 +11,14 @@ import json
 import re
 import time
 from collections.abc import AsyncIterator, Awaitable, Callable
+from pathlib import Path
 from typing import Any
 
 from loguru import logger
 from pydantic import BaseModel, Field
 
 from app.agent.arac_bul import ertele
-from app.agent.araclar import AjanAracKaydi
+from app.agent.araclar import KOMUT_SEMALARI, YAZMA_SEMALARI, AjanAracKaydi
 from app.agent.checkpoints import CheckpointDeposu
 from app.agent.policy import Istek, PolitikaMotoru, YanEtki
 from app.agent.terminal import KomutServisi
@@ -803,7 +804,12 @@ class SohbetServisi:
         return max(ayar.baglam_token, min(self.model_baglami(), UZAK_BAGLAM_TAVAN))
 
     def baglam_hazirla(
-        self, ayar, istek_metni: str, onceki: list[Mesaj], model_secimi: str | None = None
+        self,
+        ayar,
+        istek_metni: str,
+        onceki: list[Mesaj],
+        model_secimi: str | None = None,
+        ajan_gorevi: bool = False,
     ) -> tuple[str, list, dict, str | None]:
         """(sistem metni, araclar, isleyiciler, otomatik yuklenen skill adi).
         Sira onbellek icin: SABIT kisim once (arac notu, talimatlar, sistem istemi), mesaja gore
@@ -1017,10 +1023,18 @@ class SohbetServisi:
                     }
 
                 isleyiciler["uzanti_yaz"] = uzanti_yaz
-            if self.is_emirleri is not None:
+            # thread/ajan gorevi is emri acmaz (canli: uygulayici zincirleme 6 thread acti)
+            if self.is_emirleri is not None and not ajan_gorevi:
                 araclar += [IS_EMRI_ARACI, IS_DURUM_ARACI]
                 isleyiciler |= is_emri_isleyicileri(*self.is_emirleri)
-                if alan.uygulayici_model:
+                kok = next(iter(alan.kokler), "")
+                if alan.uygulayici_model and kok and (Path(kok) / ".git").exists():
+                    # Claude 'Coordinator': not yetmiyordu (canli: deepseek dosyalari kendi yazdi);
+                    # yazma/komut araci yok -> uygulama isi zorunlu olarak thread'e gider
+                    kapali = {s["function"]["name"] for s in YAZMA_SEMALARI + KOMUT_SEMALARI}
+                    kapali.add("cli_ye_yaptir")
+                    araclar = [a for a in araclar if a["function"]["name"] not in kapali]
+                    isleyiciler = {k: v for k, v in isleyiciler.items() if k not in kapali}
                     not_ += KOORDINATOR_NOTU.format(model=alan.uygulayici_model)
             skill_metni = skill_metni.replace(skl.SINIR, skl.SINIR_AJAN)
         else:
