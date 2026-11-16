@@ -121,7 +121,7 @@ function paneliAyarla(acik) {
   p.hidden = !acik;
   $("#btn-sag-panel").setAttribute("aria-pressed", String(acik));
   localStorage.setItem(PANEL_ANAHTAR, acik ? "1" : "0");
-  if (acik) islerYenile();
+  if (acik) { islerYenile(); degisikliklerYenile(); }
 }
 
 // Dosyalar: oturum panelinden bagimsiz, kendi dugmesiyle acilip kapanan ayri yan panel
@@ -285,6 +285,22 @@ async function threadlerYenile() {
   } catch { /* sessiz */ }
 }
 
+// Claude Code'daki "Changes": dalin PR'i (varsa) + commit edilmemis degisiklik; tiklayinca diff dock'u
+let degisiklikAcGeri = null;
+const ARTI_EKSI = (e, s) => `<span class="yesil-metin">+${Number(e) || 0}</span> <span class="kirmizi-metin">-${Number(s) || 0}</span>`;
+async function degisikliklerYenile() {
+  const kap = $("#sp-degisiklik");
+  if (!kap || $("#sag-panel").hidden) return;
+  try {
+    const d = await api("/api/proje/degisiklikler");
+    if (!d.repo) { kap.innerHTML = '<span class="soluk kucuk">Yok</span>'; return; }
+    const pr = d.pr && /^https:\/\/github\.com\//.test(d.pr.url || "") ? d.pr : null;
+    kap.innerHTML = (pr ? `<a class="sp-satir sp-tik sp-is" href="${kacir(pr.url)}" target="_blank" rel="noopener" title="${kacir(pr.title)}">${ikon("dis")}<span class="sp-ad">${kacir(pr.title)}<span class="sp-alt soluk kucuk">#${Number(pr.number)} · ${kacir(String(pr.state || "").toLowerCase())} · ${ARTI_EKSI(pr.additions, pr.deletions)}</span></span></a>` : "")
+      + `<button class="sp-satir sp-tik sp-is" data-diff title="Commit edilmemiş değişiklikleri göster">${ikon("diff")}<span class="sp-ad">${kacir(d.dal || "dal yok")}<span class="sp-alt soluk kucuk">${d.dosya ? `${Number(d.dosya)} dosya · ${ARTI_EKSI(d.ekle, d.sil)}` : "temiz"}</span></span></button>`;
+    $("[data-diff]", kap).onclick = () => degisiklikAcGeri?.();
+  } catch { /* sessiz */ }
+}
+
 const DOLAR = (x) => `$${Number(x).toFixed(Math.abs(Number(x)) < 10 ? 2 : 0)}`;
 
 // Durum cubugu: OpenRouter kalan limiti/bakiyesi (anahtar sunucuda; buraya yalniz tutarlar gelir)
@@ -308,9 +324,12 @@ export async function orLimitYenile() {
   } catch { b.hidden = true; }
 }
 
-export function sagPanelKur({ baglayiciAc, ayarAc }) {
+export function sagPanelKur({ baglayiciAc, ayarAc, degisiklikAc }) {
   $("#sp-ayar").onclick = ayarAc;
   baglayiciAcGeri = baglayiciAc;
+  degisiklikAcGeri = degisiklikAc;
+  setInterval(degisikliklerYenile, 10000);
+  degisikliklerYenile();
   $("#sp-baglam-satir").onclick = (e) => {
     const acik = $("#sp-baglam-detay").hidden;
     detayAcKapa(e.currentTarget, $("#sp-baglam-detay"), acik);
@@ -343,5 +362,5 @@ export function sagPanelKur({ baglayiciAc, ayarAc }) {
   ikonlariYerlestir(document.getElementById("kok"));
   baglayicilariYenile();
   api("/api/bilgi").then((b) => { $("#dc-surum").textContent = `${b.urun} ${b.surum}`; }).catch(() => {});
-  document.addEventListener("oturumlar-degisti", () => { dosyaAgaciniYenile(); baglamYenile(); }); // proje/sohbet degisince
+  document.addEventListener("oturumlar-degisti", () => { dosyaAgaciniYenile(); baglamYenile(); degisikliklerYenile(); }); // proje/sohbet degisince
 }

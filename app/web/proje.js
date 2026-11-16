@@ -100,6 +100,13 @@ export function projeAc() {
         <label class="proje-alan">Güven
           <select class="alan" id="proje-guven-sec">${Object.entries(GUVEN_TR).map(([k, v]) => `<option value="${k}" ${aktif.guven === k ? "selected" : ""}>${kacir(v.ad)}</option>`).join("")}</select>
         </label>
+        <label class="proje-alan">Koordinatör modeli (proje sohbeti: plan, araştırma, karar; boş: aktif model)
+          <input class="alan" id="proje-koordinator" list="proje-model-liste" value="${kacir(aktif.koordinator_model || "")}" placeholder="Aktif model" spellcheck="false">
+        </label>
+        <label class="proje-alan">Uygulayıcı modeli (thread'ler ve alt ajanlar: koordinatörün verdiği işleri yapar; boş: aktif model)
+          <input class="alan" id="proje-uygulayici" list="proje-model-liste" value="${kacir(aktif.uygulayici_model || "")}" placeholder="Aktif model" spellcheck="false">
+        </label>
+        <datalist id="proje-model-liste"></datalist>
         <label class="proje-alan">Ek klasör yetkilendir (kök dışı)
           <span class="klasor-sec-sira">
             <input class="alan" id="proje-ek" type="text" placeholder="Klasör seçin" spellcheck="false">
@@ -170,6 +177,24 @@ export function projeAc() {
       sarmala(() => api(`/api/projeler/${aktif.id}/mod`, { method: "PUT", govde: { mod: e.target.value } }));
     $("#proje-guven-sec", govde).onchange = (e) =>
       sarmala(() => api(`/api/projeler/${aktif.id}/guven`, { method: "PUT", govde: { guven: e.target.value } }));
+    // model onerileri: uzakta OpenRouter listesi, yerelde kurulu modeller (elle id de yazilabilir)
+    const oneriler = durum.ayarlar?.saglayici === "openrouter"
+      ? api("/api/openrouter/modeller").then((v) => v.modeller.map((m) => m.id)).catch(() => [])
+      : Promise.resolve((durum.sunucu?.modeller || []).map((m) => m.anahtar));
+    oneriler.then((idler) => {
+      const dl = $("#proje-model-liste", govde);
+      if (dl) dl.innerHTML = idler.map((id) => `<option value="${kacir(id)}"></option>`).join("");
+    });
+    for (const id of ["#proje-koordinator", "#proje-uygulayici"]) {
+      $(id, govde).onchange = () =>
+        sarmala(async () => {
+          await api(`/api/projeler/${aktif.id}/modeller`, { method: "PUT", govde: {
+            koordinator_model: $("#proje-koordinator", govde).value.trim(),
+            uygulayici_model: $("#proje-uygulayici", govde).value.trim(),
+          } });
+          bildir("Proje modelleri kaydedildi.", "basari", 2000);
+        });
+    }
     $("#btn-ek-ekle", govde).onclick = () =>
       sarmala(async () => {
         const yol = $("#proje-ek", govde).value.trim();

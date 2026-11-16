@@ -446,3 +446,29 @@ async def test_kesik_arac_argumani_parcalama_yonlendirmesi():
     )
     assert "kesildi" in mesaj["content"] and "proje_dosya_yama" in mesaj["content"]
     assert kayit["durum"] == "hata"
+
+
+async def test_proje_koordinator_ve_uygulayici_modeli(istemci, sunucu, tmp_path):
+    """Proje modelleri (Claude 'Coordinator / Threads'): sohbet koordinator modeliyle gider,
+    uygulayici secilince koordinatore 'isi thread'e ver' notu eklenir."""
+    p = tmp_path / "p"
+    p.mkdir()
+    alan = (await istemci.post("/api/projeler", json={"yol": str(p), "guven": "guvenilir"})).json()
+    await istemci.put(f"/api/projeler/{alan['id']}/mod", json={"mod": "onayli"})
+    r = await istemci.put(
+        f"/api/projeler/{alan['id']}/modeller",
+        json={"koordinator_model": "gemma4-e4b-heretic", "uygulayici_model": "gemma4-12b-heretic"},
+    )
+    assert r.json()["uygulayici_model"] == "gemma4-12b-heretic"
+    assert (await istemci.get("/api/projeler")).json()["aktif"]["koordinator_model"]
+
+    o = await yeni_oturum(istemci)
+    r = await istemci.post(f"/api/oturumlar/{o}/mesaj", json={"metin": "Merhaba"})
+    assert olaylar(r.text)[-1]["mesaj"]["model"] == "gemma4-e4b-heretic"
+    assert "KOORDINATORSUN" in sunucu.istekler[-1]["messages"][0]["content"]
+
+    await istemci.put("/api/ayarlar", json={"saglayici": "openrouter"})
+    r = await istemci.put(
+        f"/api/projeler/{alan['id']}/modeller", json={"koordinator_model": "deepseek-heretic"}
+    )
+    assert r.status_code >= 400 and "yerel model" in r.json()["hata"]

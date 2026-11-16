@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+from contextlib import asynccontextmanager
 
 from test_a3_ajan import SahteModel, YavasModel, bitir, cagri, kur
 
@@ -176,3 +177,35 @@ def test_ayni_mesajdaki_alt_ajanlar_uzak_modelde_paralel_calisir(tmp_path) -> No
     # sirali: yalniz uykular 2 cocuk x 2 cagri x 0.3 = 1.2 sn + ebeveyn 0.6 = en az 1.8 sn;
     # paralel: ~0.6 + 0.6 + sabit ek yuk (yavas makinede ~0.45 sn). 1.8 alti = cakisma kaniti.
     assert sure < 1.8, f"alt ajanlar paralel kosmadi ({sure:.2f} sn)"
+
+
+def test_proje_modeli_lider_koordinator_alt_ajan_uygulayici(tmp_path) -> None:
+    """model_sabit: lider kendi (koordinator) modeliyle, alt ajan projenin uygulayici modeliyle."""
+    proje = tmp_path / "proje"
+    proje.mkdir()
+    model = SahteModel([
+        cagri("alt_ajan", gorev="listele", araclar=["proje_listele"], max_adim=8),
+        cagri("proje_listele"),
+        cagri("gorevi_bitir", ozet="ok", kanit_adimlari=[1]),
+        cagri("proje_listele"),
+        cagri("gorevi_bitir", ozet="tamam", kanit_adimlari=[2]),
+    ])  # fmt: skip
+    runner, depo, *_ = kur(tmp_path, proje, model)
+    istenen: list = []
+
+    @asynccontextmanager
+    async def llm(m=None):
+        istenen.append(m)
+        yield model
+
+    runner.llm = llm
+    runner.uygulayici_model = lambda: "kucuk/model"
+
+    async def calistir():
+        run = await runner.baslat("x", model="buyuk/model", model_sabit=True)
+        return await bitir(runner, run.id)
+
+    run = asyncio.run(calistir())
+    cocuk = depo.getir(run.cocuklar[0])
+    assert (cocuk.model, cocuk.model_sabit) == ("kucuk/model", True)
+    assert istenen[0] == "buyuk/model" and "kucuk/model" in istenen and None not in istenen

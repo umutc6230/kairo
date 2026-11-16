@@ -51,6 +51,9 @@ class CalismaAlani(BaseModel):
     ek_klasorler: list[str] = []  # kok disinda ACIKCA yetkilendirilen klasorler
     repo: str = ""
     dal: str = ""
+    # Claude "Coordinator / Threads" gibi iki model; bos: uygulamanin aktif modeli
+    koordinator_model: str = Field(default="", max_length=200)  # proje sohbeti: plan, arastirma
+    uygulayici_model: str = Field(default="", max_length=200)  # thread + alt ajan: uygulama
     olusturma: str = Field(default_factory=simdi)
     guncelleme: str = Field(default_factory=simdi)
 
@@ -204,6 +207,11 @@ class WorkspaceDeposu:
     def mod_ayarla(self, alan_id: str, mod: Mod) -> CalismaAlani:
         alan = self.getir(alan_id)
         alan.mod = mod
+        return self.kaydet(alan)
+
+    def modeller_ayarla(self, alan_id: str, koordinator: str, uygulayici: str) -> CalismaAlani:
+        alan = self.getir(alan_id)
+        alan.koordinator_model, alan.uygulayici_model = koordinator.strip(), uygulayici.strip()
         return self.kaydet(alan)
 
     def guven_ayarla(self, alan_id: str, guven: Guven) -> CalismaAlani:

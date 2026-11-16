@@ -425,6 +425,14 @@ def alt_oturum_isleyici(baslik: str = "", gorev: str = "") -> dict:
     }
 
 
+# Projede uygulayici model secilince koordinatorun (proje sohbeti) sistem notuna eklenir
+KOORDINATOR_NOTU = (
+    "\nBu projede KOORDINATORSUN: planla, arastir, karar ver, sonucu dogrula. Kod yazma ve "
+    "uygulama islerini is_emri_baslat ile thread'e ver (uygulayici model {model} yapar; is "
+    "tanimina dosya yollarini ve kabul olcutunu yaz), is_emirleri_durum ile izle. Tek satirlik "
+    "duzeltmeyi ya da git deposu olmayan projedeki isi kendin yap."
+)
+
 # Thread'ler (Claude "proje sohbeti" gibi): her is ayri is emri, kendi dalinda arka planda calisir
 IS_EMRI_ARACI = {
     "type": "function",

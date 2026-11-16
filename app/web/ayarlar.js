@@ -1,4 +1,5 @@
 // AI Ayarlari, Hakkinda ve Arama pencereleri.
+import { modelSil } from "./modeller.js";
 import { uzantiKomutlariniYukle, uzantiSekmesiKur } from "./uzantilar.js";
 import { aracPaketleriCiz, baglayiciIceAktarCiz, EK_PANELLER, EK_SEKMELER, ekSekmeKur, githubBaglan } from "./ayarlar2.js";
 import { ikon, ikonlariYerlestir } from "./ikonlar.js";
@@ -6,7 +7,8 @@ import { kacir } from "./md.js";
 import { $, $$, api, baglayiciDurumu, bildir, durum, ekAvatar, el, menuAc, modal, onayla, sayi, sor } from "./ortak.js";
 
 let yenile = async () => {};
-export function ayarlarKur(cb) { yenile = cb; }
+let modellerSayfasi = () => {};
+export function ayarlarKur(cb, magaza) { yenile = cb; if (magaza) modellerSayfasi = magaza; }
 
 async function kaydet(degisiklik, sessiz = false) {
   try {
@@ -33,7 +35,8 @@ function modelKartlari(arama, yalnizIndirilen) {
         <span class="rozet ${m.ses ? "yesil" : ""}">${m.ses ? "metin · resim · araç · ses" : "metin · resim · araç"}</span>
         ${m.dosya_var ? "" : '<span class="rozet kirmizi">dosya yok</span>'}
         ${m.dosya_var && !m.mmproj_var ? '<span class="rozet sari">görüntü modülü yok</span>' : ""}</div>
-        <div class="alt">${kacir(m.aciklama)} · <code>${kacir(m.anahtar)}</code></div></div></label>`)
+        <div class="alt">${kacir(m.aciklama)} · <code>${kacir(m.anahtar)}</code></div></div>
+      ${m.dosya_var ? `<button type="button" class="ikon-btn ay-model-sil" data-sil="${kacir(m.anahtar)}" title="Bu bilgisayardan sil" aria-label="${kacir(m.ad)} modelini sil">${ikon("cop")}</button>` : ""}</label>`)
     .join("") || `<div class="ayar-not">Eşleşen model yok.</div>`;
 }
 
@@ -75,7 +78,8 @@ export function ayarlarAc(sekme = "ai") {
         <span id="ay-or-test-sonuc" hidden></span><button id="ay-or-test" hidden></button></div>
       <div class="ayar-grup" data-yerel><label>Yerel model</label>
         <div class="satir"><input class="alan" id="ay-ara" placeholder="Model ara..."><label class="onay"><input type="checkbox" id="ay-indirilen"> Yalnız indirilenler</label>
-        <label class="onay" title="Yerel modellerin hepsi ücretsizdir"><input type="checkbox" checked disabled> Yalnız ücretsiz</label></div>
+        <label class="onay" title="Yerel modellerin hepsi ücretsizdir"><input type="checkbox" checked disabled> Yalnız ücretsiz</label>
+        <button class="btn kucuk" id="ay-magaza" title="Hugging Face'te GGUF ara, bu PC'ye uygunluğunu gör, indir">Hugging Face'ten indir</button></div>
         <div id="ay-modeller" class="ayar-grup"></div></div>
       <div class="ayar-grup"><label for="ay-gorsel-saglayici">Görsel üretim</label>
         <div class="satir"><select class="secim" id="ay-gorsel-saglayici">
@@ -596,7 +600,15 @@ export function ayarlarAc(sekme = "ai") {
     $$("input[name=ay-model]", govde).forEach((r) => {
       r.onchange = async () => { await kaydet({ model: r.value }); modelleriCiz(); aktifCiz(); };
     });
+    $$("[data-sil]", govde).forEach((b) => {
+      b.onclick = async (e) => {
+        e.preventDefault(); // label icinde: radyo secilmesin
+        const m = (durum.sunucu?.modeller || []).find((x) => x.anahtar === b.dataset.sil);
+        if (m && (await modelSil({ ...m, acik: durum.sunucu?.yuklenen_model === m.anahtar }))) { modelleriCiz(); aktifCiz(); }
+      };
+    });
   };
+  $("#ay-magaza", govde).onclick = () => { m.kapat(); modellerSayfasi(); };
   $("#ay-ara", govde).oninput = modelleriCiz;
   $("#ay-indirilen", govde).onchange = modelleriCiz;
   modelleriCiz();

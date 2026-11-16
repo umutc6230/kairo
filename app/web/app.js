@@ -347,8 +347,9 @@ async function durumYenile() {
     $("#sunucu-nokta").className = `nokta ${a.or_model ? "hazir" : "hata"}`;
     // model adi yalniz mesaj kutusunun altindaki secicide (tekrar etmesin); burada baglanti durumu
     $("#sunucu-metni").textContent = a.or_model ? "OpenRouter" : "OpenRouter · model seçilmedi";
-    $("#hap-model-metni").textContent = a.or_model ? a.or_model.split("/").pop() : "Model seç"; // Claude gibi kisa ad
-    $("#hap-model").title = a.or_model || "";
+    const km = projeDurumu.aktif?.koordinator_model; // proje sohbeti bu modelle calisir
+    $("#hap-model-metni").textContent = (km || a.or_model) ? (km || a.or_model).split("/").pop() : "Model seç"; // Claude gibi kisa ad
+    $("#hap-model").title = km ? `Proje koordinatör modeli: ${km}` : a.or_model || "";
     const dus0 = durum.bilgi.dusunme_secenekleri.find((d) => d.deger === a.dusunme);
     $("#hap-dusunme-metni").textContent = dus0 ? dus0.kisa : a.dusunme;
     bantGuncelle();
@@ -362,7 +363,7 @@ async function durumYenile() {
   $("#sunucu-metni").title = s.durum === "kapali" ? "" : modelAdi(aktif);
   const b = s.bellek || {};
   $("#ram-metni").textContent = b.bos_gb != null ? `RAM ${sayi(b.bos_gb)}/${sayi(b.toplam_gb, 0)} GB boş` : "";
-  $("#hap-model-metni").textContent = a.saglayici === "openrouter" && a.or_model ? a.or_model.split("/").pop() : modelAdi(a.model);
+  $("#hap-model-metni").textContent = a.saglayici === "openrouter" && a.or_model ? a.or_model.split("/").pop() : modelAdi(projeDurumu.aktif?.koordinator_model || a.model);
   const dus = durum.bilgi.dusunme_secenekleri.find((d) => d.deger === a.dusunme);
   $("#hap-dusunme-metni").textContent = dus ? dus.kisa : a.dusunme;
   $("#klasor-metni").textContent = `Model klasörü: ${a.llm_dizin}`;
@@ -562,14 +563,14 @@ async function baslat() {
   gorevBildirimIzle();
   await durumYenile();
   sohbetKur({ oturumlarYenile: oturumlariYenile, baslikAyarla, oturumAc });
-  ayarlarKur(hepsiniYenile);
+  ayarlarKur(hepsiniYenile, () => git({ tur: "modeller" }));
   sayfalarKur();
   projeKur();
   skillerKur(hepsiniYenile);
   gorevlerKur();
   ozellestirSekmeleri();
   $("#sp-proje").onclick = () => projeAc();
-  sagPanelKur({ baglayiciAc: () => ayarlarAc("mcp"), ayarAc: () => ayarlarAc() });
+  sagPanelKur({ baglayiciAc: () => ayarlarAc("mcp"), ayarAc: () => ayarlarAc(), degisiklikAc: () => dockAcKapa("degisiklik", true) });
   uzantiYuzeyleriKur();
   dockKur();
   rutinlerKur();

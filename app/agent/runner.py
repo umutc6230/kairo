@@ -194,6 +194,8 @@ class Run(BaseModel):
     hedef: str
     kabul: list[str] = []
     model: str = ""
+    # proje koordinator/uygulayici modeli: aktif model degisse de bu modelle calisir
+    model_sabit: bool = False
     durum: RunDurum = RunDurum.calisiyor
     butce: Butce = Field(default_factory=Butce)
     kullanim: Kullanim = Field(default_factory=Kullanim)
@@ -493,6 +495,8 @@ class AgentRunner:
         # Uzak saglayicida (OpenRouter) model cagrilari ve ayni mesajdaki alt ajanlar PARALEL
         # calisir; yerel tek modelde sira korunur (api baglar).
         self.paralel_model: Callable[[], bool] = lambda: False
+        # aktif projenin uygulayici modeli (api baglar): alt ajanlar bununla calisir; bos: ebeveynin
+        self.uygulayici_model: Callable[[], str] = lambda: ""
 
     # ---------------------------------------------------------------- kontrol
     def calisiyor_mu(self, run_id: str) -> bool:
@@ -511,6 +515,7 @@ class AgentRunner:
         ajan_id: str = "",
         ek_sistem: str = "",
         calisma_koku: str = "",
+        model_sabit: bool = False,
     ) -> Run:
         if self.yetenek is not None:  # aracsiz modelle gorev baslamaz (acik hata)
             dogrula(self.yetenek(), araclar_gerekli=True)
@@ -519,7 +524,7 @@ class AgentRunner:
         run = Run(
             hedef=hedef.strip(), kabul=kabul or [], butce=butce or Butce(), model=model,
             etkilesimli=etkilesimli, ajan_id=ajan_id, ek_sistem=ek_sistem,
-            calisma_koku=calisma_koku,
+            calisma_koku=calisma_koku, model_sabit=model_sabit,
         )  # fmt: skip
         kabul_metni = "\n".join(f"- {k}" for k in run.kabul) or "- (belirtilmedi: hedefi kanitla)"
         gorev_metni = f"GOREV: {run.hedef}\n\nKABUL KOSULLARI:\n{kabul_metni}"
@@ -1046,8 +1051,11 @@ class AgentRunner:
         for deneme in range(GECICI_HATA_DENEME + 1):
             try:
                 kilit = contextlib.nullcontext() if self.paralel_model() else self._kilit
-                # kalici ajanin kendi modeli olabilir; digerleri uygulamanin aktif modeli
-                baglanti = self.llm(run.model) if run.ajan_id and run.model else self.llm()
+                # kalici ajanin / projenin (model_sabit) kendi modeli olabilir; digeri aktif model
+                # shortcut: baglam butcesi ve yetenek hala aktif modele gore; modeller cok
+                # farkliysa self.yetenek(run.model) ile genislet
+                ozel = (run.ajan_id or run.model_sabit) and run.model
+                baglanti = self.llm(run.model) if ozel else self.llm()
                 async with kilit, baglanti as llm:
                     secim = await llm.sohbet(
                         gonderilen, tools=semalar, max_tokens=cevap_tokeni(self._baglam())
@@ -1364,9 +1372,11 @@ class AgentRunner:
         # model cok dusuk butce isteyebiliyor (canli: 5); alt sinir 8, ust sinir ebeveynin kalani
         # 25 arastirma alt ajanlarina yetmiyordu (karsilastirma: 2/4 alt ajan butcede durdu)
         istenen = max(int(g.get("max_adim") or 50), ALT_AJAN_MIN_ADIM)
+        uygulayici = "" if run.ajan_id else self.uygulayici_model()
         cocuk = Run(
             hedef=gorev,
-            model=run.model,
+            model=uygulayici or run.model,
+            model_sabit=bool(uygulayici) or run.model_sabit,
             parent=run.id,
             ad=re.sub(r"[^\w -]", "", str(g.get("ad") or ""))[:40].strip(),
             izinli_araclar=araclar,

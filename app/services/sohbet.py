@@ -36,6 +36,7 @@ from app.services.sohbet_araclari import (
     GORSEL_URET_ARACI,
     IS_DURUM_ARACI,
     IS_EMRI_ARACI,
+    KOORDINATOR_NOTU,
     PLAN_ARACI,
     SISTEM_NOTU,
     UZANTI_YAZ_ARACI,
@@ -1019,6 +1020,8 @@ class SohbetServisi:
             if self.is_emirleri is not None:
                 araclar += [IS_EMRI_ARACI, IS_DURUM_ARACI]
                 isleyiciler |= is_emri_isleyicileri(*self.is_emirleri)
+                if alan.uygulayici_model:
+                    not_ += KOORDINATOR_NOTU.format(model=alan.uygulayici_model)
             skill_metni = skill_metni.replace(skl.SINIR, skl.SINIR_AJAN)
         else:
             not_ = f"{SISTEM_NOTU}\n{kapsam_notu(alan)}" if ayar.sohbet_araclari else ""
@@ -1282,7 +1285,8 @@ class SohbetServisi:
         yield {"tur": "kullanici_mesaji", "mesaj": kullanici.model_dump(), "baslik": baslik}
 
         ayar = self.yonetici.ayarlar.oku()
-        asistan = Mesaj(rol="asistan", model=ayar.aktif_model)
+        model = self.aktif_alan().koordinator_model or ayar.aktif_model  # proje: koordinator
+        asistan = Mesaj(rol="asistan", model=model)
         yarim: list[str] = []
         yarim_dusunce: list[str] = []
         otomatik_kayit: list[dict] = []
@@ -1293,8 +1297,8 @@ class SohbetServisi:
             BAGLAM.set(f"oturum:{oturum_id}")  # "bu sohbet icin izin ver" kapsami
             if self.yonetici.mesgul:
                 gonder({"tur": "durum", "metin": "Onceki islemin bitmesi bekleniyor..."})
-            gonder({"tur": "durum", "metin": f"Model hazirlaniyor: {ayar.aktif_model}"})
-            async with self.yonetici.kullan(ayar.aktif_model) as llm:
+            gonder({"tur": "durum", "metin": f"Model hazirlaniyor: {model}"})
+            async with self.yonetici.kullan(model) as llm:
                 yukleme = self.yonetici.yukleme_sn
                 parcalar: list[dict] = []
                 guncel = tahmini_token(istek.metin) + tahmini_token(ayar.sistem_istemi)

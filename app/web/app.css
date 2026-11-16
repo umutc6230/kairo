@@ -759,6 +759,9 @@ body.uzak-saglayici [data-yalniz-yerel] { display: none !important; }
 .sp-ok svg { width: 13px; height: 13px; color: var(--soluk); }
 .sp-isler { display: flex; flex-direction: column; }
 .sp-is .sp-ad { display: block; }
+.sp-alt { display: block; overflow: hidden; text-overflow: ellipsis; }
+a.sp-satir { text-decoration: none; }
+.kirmizi-metin { color: var(--kirmizi); }
 .dosya-panel { width: 260px; }
 .sp-sag { display: flex; gap: 2px; }
 .ikon-btn[aria-pressed="true"] { background: var(--yuzey2); }

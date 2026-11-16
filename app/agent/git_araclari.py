@@ -96,6 +96,21 @@ class GitAraclari:
             "temiz": not degisen,
         }
 
+    def git_ozet(self, klasor: str = "") -> dict:
+        """Sag panel 'Degisiklikler' satiri: dal + commit edilmemis satir sayilari."""
+        d = self.git_durum(klasor)
+        if not d.get("repo"):
+            return {"repo": False}
+        # dock'taki diff ile ayni kapsam (git diff): satira tiklaninca ayni degisiklik gorunur
+        _, cikti = _calistir(["diff", "--numstat"], Path(d["klasor"]))
+        ekle = sil = 0
+        for satir in cikti.splitlines():
+            p = satir.split("\t")
+            if len(p) >= 3 and p[0].isdigit() and p[1].isdigit():  # ikili dosya: "-\t-"
+                ekle, sil = ekle + int(p[0]), sil + int(p[1])
+        return {"repo": True, "klasor": d["klasor"], "dal": d["dal"],
+                "dosya": d["degisen_sayisi"], "ekle": ekle, "sil": sil}  # fmt: skip
+
     def git_diff(self, klasor: str = "", staged: bool = False) -> dict:
         try:
             cwd = self._cwd(klasor)

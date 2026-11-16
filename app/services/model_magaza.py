@@ -377,10 +377,16 @@ class Indirici:
             raise Bulunamadi(f"Model bulunamadi: {anahtar}")
         silinen = []
         for ad in (profil.dosya, profil.mmproj):
-            yol = self.model_klasoru / "models" / ad
-            if ad and yol.exists():
-                yol.unlink()
-                silinen.append(ad)
+            if not ad:
+                continue
+            # komple: model dosyasi + yarim kalmis indirme parcasi
+            for yol in (
+                self.model_klasoru / "models" / ad,
+                self.model_klasoru / "_indirme" / f"{ad}.part",
+            ):
+                if yol.exists():
+                    yol.unlink()
+                    silinen.append(yol.name)
         self.kayit.cikar(anahtar)
         return {"silindi": silinen}
 

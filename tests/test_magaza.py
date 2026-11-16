@@ -193,7 +193,10 @@ async def test_indir_dogrula_kaydet_sil(ortam, hf):
     MODELLER.pop("ornek-9b-heretic")
     mm.ModelKaydi(kayit.yol.parent).yukle()
     assert "ornek-9b-heretic" in MODELLER
-    assert indirici.sil("ornek-9b-heretic")["silindi"] == [p.dosya, p.mmproj]
+    parca = klasor / "_indirme" / f"{p.dosya}.part"  # yarim kalmis eski indirme de gider
+    parca.write_bytes(b"x")
+    assert indirici.sil("ornek-9b-heretic")["silindi"] == [p.dosya, f"{p.dosya}.part", p.mmproj]
+    assert not parca.exists() and not (klasor / "models" / p.dosya).exists()
     assert "ornek-9b-heretic" not in MODELLER and kayit.oku() == []
     with pytest.raises(mm.Bulunamadi):
         indirici.sil("yok")

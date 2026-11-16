@@ -139,6 +139,30 @@ async def test_git_olmayan_projede_anlasilir_mesaj(istemci, tmp_path) -> None:
     assert r.status_code >= 400 and "git deposu degil" in r.json()["hata"]
 
 
+async def test_sag_panel_degisiklik_ozeti(istemci, git_proje, tmp_path, monkeypatch) -> None:
+    """Sag panel 'Degisiklikler': dal + satir sayilari + dalin PR'i (gh sahte, onbellekli)."""
+    from app.agent import superajan as sa
+
+    cagri: list = []
+
+    def sahte_gh(*arg, **_kw):
+        cagri.append(arg)
+        return 0, ('{"number": 9, "title": "PR", "url": "https://github.com/u/r/pull/9",'
+                   ' "additions": 5, "deletions": 2, "state": "OPEN"}')  # fmt: skip
+
+    monkeypatch.setattr(sa, "gh", sahte_gh)
+    await istemci.post("/api/projeler", json={"yol": str(git_proje), "guven": "guvenilir"})
+    d = (await istemci.get("/api/proje/degisiklikler")).json()
+    assert d["repo"] and d["dal"] and (d["dosya"], d["ekle"], d["sil"]) == (1, 1, 0)
+    assert d["pr"]["number"] == 9
+    await istemci.get("/api/proje/degisiklikler")
+    assert len(cagri) == 1  # PR ag cagrisi onbellekten
+
+    (tmp_path / "duz").mkdir()
+    await istemci.post("/api/projeler", json={"yol": str(tmp_path / "duz"), "guven": "guvenilir"})
+    assert (await istemci.get("/api/proje/degisiklikler")).json() == {"repo": False}
+
+
 def test_derin_review_birlestirme_bagimsiz_kanit_saymaz() -> None:
     def b(baslik, onem, satir, dosya="src/a.py"):
         return {"baslik": baslik, "onem": onem, "dosya": dosya, "satir": satir, "neden": "n",

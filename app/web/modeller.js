@@ -64,21 +64,22 @@ async function yukluYukle() {
       await yenile();
       yukluYukle();
     });
-    r.querySelector(".sil")?.addEventListener("click", () => sil(m));
+    r.querySelector(".sil")?.addEventListener("click", () => modelSil(m));
     kap.append(r);
   }
   ikonlariYerlestir(kap);
 }
 
-async function sil(m) {
-  const metin = `"${m.ad}" dosyaları (${sayi(m.boyut_gb)} GB) diskten silinecek.${m.acik ? " Model şu an açık; önce kapatılacak." : ""}${m.yerlesik ? " Yeniden kullanmak için tekrar indirmen gerekir." : ""}`;
-  if (!(await onayla("Modeli sil", metin, { evet: "Sil", tehlike: true }))) return;
+export async function modelSil(m) {
+  const metin = `"${m.ad}" dosyaları${m.boyut_gb ? ` (${sayi(m.boyut_gb)} GB)` : ""} bu bilgisayardan kalıcı olarak silinecek.${m.acik ? " Model şu an açık; önce kapatılacak." : ""}${m.yerlesik ? " Yeniden kullanmak için tekrar indirmen gerekir." : ""}`;
+  if (!(await onayla("Modeli sil", metin, { evet: "Sil", tehlike: true }))) return false;
   try {
     await api(`/api/magaza/yuklu/${encodeURIComponent(m.anahtar)}`, { method: "DELETE" });
     bildir("Model silindi", "basari");
   } catch (e) { bildir(e.message, "hata"); }
   await yenile();
-  yukluYukle();
+  if ($("#m-yuklu")) yukluYukle();
+  return true;
 }
 
 async function ara(sorgu) {

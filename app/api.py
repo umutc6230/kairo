@@ -118,6 +118,11 @@ class GuvenIstegi(BaseModel):
     guven: Guven
 
 
+class ModellerIstegi(BaseModel):
+    koordinator_model: str = Field(default="", max_length=200)
+    uygulayici_model: str = Field(default="", max_length=200)
+
+
 class OnayIstegi(BaseModel):
     onayla: bool
     kapsam: Literal["tek", "sohbet", "her_zaman"] = "tek"
@@ -453,8 +458,14 @@ def uygulama_olustur(
         isleyiciler = {**isleyiciler, "skill_kaydet": skill_kaydet}
         return sistem, araclar_, isleyiciler
 
-    def model_yetenegi() -> ModelYetenegi:
+    def model_yetenegi(model: str = "") -> ModelYetenegi:
+        """model: projenin koordinator modeli (bos: aktif model). MODELLER disi = uzak."""
         a = ayarlar.oku()
+        if model and model not in MODELLER:
+            openrouter.eksik_modeli_getir(model)
+            return uzak_yetenek(model, openrouter.liste_yolu)
+        if model:
+            return yerel_yetenek(model, a.baglam_token)
         if a.saglayici == "openrouter" and a.or_model:
             openrouter.eksik_modeli_getir(a.or_model)
             return uzak_yetenek(a.or_model, openrouter.liste_yolu)
@@ -489,6 +500,12 @@ def uygulama_olustur(
     ajan.araclar_kok = ajan_baglami_kok
     ajan.kok = lambda: next(iter(sohbet.aktif_alan().kokler), "")
     ajan.paralel_model = lambda: ayarlar.oku().saglayici == "openrouter"
+    ajan.uygulayici_model = lambda: sohbet.aktif_alan().uygulayici_model
+
+    def _proje_modeli(rol: str) -> dict:
+        """Aktif projenin 'koordinator' / 'uygulayici' modeli; secilmemisse aktif model."""
+        ozel = getattr(sohbet.aktif_alan(), f"{rol}_model")
+        return {"model": ozel or ayarlar.oku().aktif_model, "model_sabit": bool(ozel)}
 
     # ---- kalici ajanlar (openbot tasarimindan): kimlik + kuyruk + ajanlar arasi mesaj ----
     from app.agent.dersler import DersDefteri
@@ -739,8 +756,8 @@ def uygulama_olustur(
         return sorted(isler, key=lambda x: sira.get(x["asama"], 99))
 
     sohbet.is_emirleri = (_sohbet_is_ac, _sohbet_is_liste)
-    sohbet.goruntu_var = lambda: model_yetenegi().goruntu
-    sohbet.model_baglami = lambda: model_yetenegi().baglam
+    sohbet.goruntu_var = lambda: model_yetenegi(sohbet.aktif_alan().koordinator_model).goruntu
+    sohbet.model_baglami = lambda: model_yetenegi(sohbet.aktif_alan().koordinator_model).baglam
     sohbet.openrouter = openrouter
 
     async def _is_baslat(is_: sa.IsEmri) -> None:
@@ -754,7 +771,7 @@ def uygulama_olustur(
                 return str(yol), dal
 
         run = await ajan.baslat(
-            sa.gorev_metni(is_, is_.bekleyen_mesaj), [], model=ayarlar.oku().aktif_model,
+            sa.gorev_metni(is_, is_.bekleyen_mesaj), [], **_proje_modeli("uygulayici"),
             izole_kur=izole_kur, onceki=is_.runlar[-1] if is_.runlar else "",
             etkilesimli=True, calisma_koku=is_.calisma_koku,
         )  # fmt: skip
@@ -1532,6 +1549,34 @@ def uygulama_olustur(
         _, kayit = _proje_git()
         return await asyncio.to_thread(kayit.git.git_diff, "", staged)
 
+    pr_onbellek: dict[tuple[str, str], tuple[float, dict | None]] = {}
+
+    def _dal_pr(klasor: str, dal: str) -> dict | None:
+        """Dalin PR'i (gh). Ag cagrisi: 5 dk onbellek; gh yok / giris yok / PR yok -> None."""
+        kayit = pr_onbellek.get((klasor, dal))
+        if kayit and time.monotonic() - kayit[0] < 300:
+            return kayit[1]
+        pr = None
+        try:
+            kod, cikti = sa.gh("pr", "view", "--json", "number,title,url,additions,deletions,state",
+                               cwd=klasor, sure=15)  # fmt: skip
+            pr = json.loads(cikti) if kod == 0 else None
+        except (UygulamaHatasi, subprocess.TimeoutExpired, OSError, ValueError):
+            pass
+        pr_onbellek[(klasor, dal)] = (time.monotonic(), pr)
+        return pr
+
+    @app.get("/api/proje/degisiklikler")
+    async def proje_degisiklikler() -> dict:
+        """Sag panel 'Degisiklikler': dal, commit edilmemis +/- ve varsa dalin PR'i."""
+        kayit = sohbet.ajan_araclari(sohbet.aktif_alan())
+        if kayit is None:
+            return {"repo": False}
+        ozet = await asyncio.to_thread(kayit.git.git_ozet)
+        if ozet["repo"] and ayarlar.oku().ag_acik:
+            ozet["pr"] = await asyncio.to_thread(_dal_pr, ozet["klasor"], ozet["dal"])
+        return ozet
+
     @app.post("/api/review")
     async def review_yap(staged: bool = False, derin: bool = False) -> dict:
         alan, kayit = _proje_git()
@@ -2245,6 +2290,16 @@ def uygulama_olustur(
     async def proje_mod(alan_id: str, istek: ModIstegi) -> dict:
         return projeler.mod_ayarla(alan_id, istek.mod).model_dump(mode="json")
 
+    @app.put("/api/projeler/{alan_id}/modeller")
+    async def proje_modeller(alan_id: str, istek: ModellerIstegi) -> dict:
+        if ayarlar.oku().saglayici == "openrouter":
+            for m in (istek.koordinator_model, istek.uygulayici_model):
+                if m.strip() in MODELLER:  # kullan() bunu her mesajda reddederdi; burada soyle
+                    raise UygulamaHatasi(f"OpenRouter seçili; yerel model ({m}) kullanılamaz.")
+        return projeler.modeller_ayarla(
+            alan_id, istek.koordinator_model, istek.uygulayici_model
+        ).model_dump(mode="json")
+
     @app.put("/api/projeler/{alan_id}/guven")
     async def proje_guven(alan_id: str, istek: GuvenIstegi) -> dict:
         return projeler.guven_ayarla(alan_id, istek.guven).model_dump(mode="json")
@@ -2355,7 +2410,7 @@ def uygulama_olustur(
                 return str(yol), dal
 
         run = await ajan.baslat(
-            istek.hedef, istek.kabul, istek.butce, model=ayarlar.oku().aktif_model,
+            istek.hedef, istek.kabul, istek.butce, **_proje_modeli("koordinator"),
             izole_kur=izole_kur, onceki=istek.onceki, etkilesimli=istek.etkilesimli,
         )  # fmt: skip
         return run.ozet()
