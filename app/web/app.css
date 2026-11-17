@@ -84,6 +84,8 @@ svg { display: block; }
 .hap.duz { background: none; padding: 5px 8px; border-radius: 8px; }
 .hap.duz:hover { background: var(--yuzey2); }
 .hap svg { width: 16px; height: 16px; }
+.onay-hap { cursor: pointer; }
+.onay-hap input { accent-color: var(--vurgu); width: 15px; height: 15px; margin: 0; }
 .kucuk-ikon svg { width: 13px !important; height: 13px !important; }
 .nokta { width: 8px; height: 8px; border-radius: 50%; background: var(--cok-soluk); flex-shrink: 0; }
 .nokta.buyuk { width: 15px; height: 15px; border: 2px solid var(--cok-soluk); background: none; }

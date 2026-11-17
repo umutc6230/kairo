@@ -757,7 +757,7 @@ async function ajanaGonder(oturumId, metin) {
         return;
       }
     }
-    const izole = document.getElementById("hap-izole")?.getAttribute("aria-pressed") === "true";
+    const izole = !!document.getElementById("hap-izole")?.checked;
     // onceki: ayni sohbetin son gorevi -> ajan onceki turlarin ozetini gorur (konusma surekliligi)
     const r = await api("/api/gorevler", { method: "POST", govde: { hedef: metin, izole, onceki: son?.run || "", etkilesimli: true } });
     ajanKaydet(oturumId, { run: r.id, metin });

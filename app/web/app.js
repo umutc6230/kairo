@@ -367,7 +367,6 @@ async function durumYenile() {
   const dus = durum.bilgi.dusunme_secenekleri.find((d) => d.deger === a.dusunme);
   $("#hap-dusunme-metni").textContent = dus ? dus.kisa : a.dusunme;
   $("#klasor-metni").textContent = `Model klasörü: ${a.llm_dizin}`;
-  $("#hap-klasor-metni").textContent = a.llm_dizin.split(/[\\/]/).pop() || a.llm_dizin;
   bantGuncelle();
   bosDurumKartlari();
   agecidiGuncelle();

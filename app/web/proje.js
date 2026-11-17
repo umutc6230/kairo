@@ -238,10 +238,18 @@ function modHapiCiz() {
   if (!b) return;
   const aktif = projeDurumu.aktif;
   b.hidden = !aktif;
-  const iz = $("#hap-izole");
-  if (iz) {
-    iz.hidden = !aktif;
-    iz.onclick = () => { const a = iz.getAttribute("aria-pressed") !== "true"; iz.setAttribute("aria-pressed", String(a)); iz.classList.toggle("secili", a); };
+  const izKap = $("#hap-izole-kap");
+  if (izKap) izKap.hidden = !aktif;
+  // Claude Code'daki klasor secici: etkin proje adi; menude son projeler + yeni klasor
+  const k = $("#hap-klasor");
+  if (k) {
+    $("#hap-klasor-metni").textContent = projeDurumu.etkin?.ad || "Proje seç";
+    k.onclick = () => menuAc(k, [{ baslik: "Proje" }, ...(projeDurumu.liste || []).map((p) => ({
+      metin: p.ad, aciklama: p.kokler[0] || "", ikon: "klasor", secili: p.ad === projeDurumu.etkin?.ad,
+      eylem: async () => {
+        try { await api("/api/projeler", { method: "POST", govde: { yol: p.kokler[0] } }); await projeYenile(); } catch (e) { bildir(e.message, "hata"); }
+      },
+    })), { metin: "Klasör aç / yönet...", ikon: "arti", eylem: projeAc }], { yukari: true });
   }
   if (!aktif) return;
   const m = MOD_TR[projeDurumu.izin?.mod] || MOD_TR[aktif.mod];
