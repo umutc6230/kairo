@@ -10,7 +10,7 @@ orijinaline geri yuklenir. Ayni hedef metni, adim siniri ve 600 sn sure siniri.
 |---|---|---|
 | Model | `deepseek/deepseek-v4.1-flash-1017` (openrouter) | `claude-opus-5-5` |
 | Surum | `feature/ajan-katmani` | 2.1.327 (Claude Code) |
-| Kosu | 30 (30 olculen) | 90 (gorev basina 3) |
+| Kosu | 90 (90 olculen) | 90 (gorev basina 3) |
 | Izinler | otomatik mod; onaylar harness tarafindan verildi ve SAYILDI | acceptEdits + Bash/Read/Edit/Write/Glob/Grep on-izinli |
 | Istemci donanimi | AMD Ryzen 7 5700U with Radeon Graphics, 15.3 GB | ayni makine |
 
@@ -18,69 +18,69 @@ orijinaline geri yuklenir. Ayni hedef metni, adim siniri ve 600 sn sure siniri.
 
 | Olcut | Kairo | Claude Code |
 |---|---|---|
-| Basari (olculen kosular) | **%96.7** (30) | **%100.0** (90) |
+| Basari (olculen kosular) | **%98.9** (90) | **%100.0** (90) |
 | Yanlis basari beyani | 1 | 0 |
-| Kullanici mudahalesi (onay) | 54 | 0 (on-izinli) |
-| Ortalama sure / kosu | 28.7 sn | 24.5 sn |
-| Maliyet | 0.1529 $ | 10.0029 $ |
+| Kullanici mudahalesi (onay) | 194 | 0 (on-izinli) |
+| Ortalama sure / kosu | 28.4 sn | 24.5 sn |
+| Maliyet | 0.5066 $ | 10.0029 $ |
 | Olculemedi | 0 (kota/harness) | 0 |
 
 ## Kategori
 
 | Kategori | Kairo | Claude Code | Fark (puan) |
 |---|---|---|---|
-| Hata duzeltme | %100.0 (6) | %100.0 (18) | +0.0 |
-| Ozellik/refactor | %100.0 (5) | %100.0 (15) | +0.0 |
-| Test/build | %100.0 (4) | %100.0 (12) | +0.0 |
-| Kesif/review | %75.0 (4) | %100.0 (12) | -25.0 |
-| Uzun baglam/devam | %100.0 (4) | %100.0 (12) | +0.0 |
-| Toparlanma | %100.0 (4) | %100.0 (12) | +0.0 |
-| Web/entegrasyon | %100.0 (3) | %100.0 (9) | +0.0 |
+| Hata duzeltme | %100.0 (18) | %100.0 (18) | +0.0 |
+| Ozellik/refactor | %100.0 (15) | %100.0 (15) | +0.0 |
+| Test/build | %100.0 (12) | %100.0 (12) | +0.0 |
+| Kesif/review | %100.0 (12) | %100.0 (12) | +0.0 |
+| Uzun baglam/devam | %100.0 (12) | %100.0 (12) | +0.0 |
+| Toparlanma | %100.0 (12) | %100.0 (12) | +0.0 |
+| Web/entegrasyon | %88.9 (9) | %100.0 (9) | -11.1 |
 
 ## Gorev bazinda
 
 | Gorev | Yerel (gecen/olculen) | Claude Code | Yerel ort. sn | CC sn |
 |---|---|---|---|---|
-| hata-py-median | 1/1 | GECTI | 32.0 | 28.4 |
-| hata-py-isgunu | 1/1 | GECTI | 12.6 | 18.8 |
-| hata-py-indirim-cok-dosya | 1/1 | GECTI | 22.7 | 17.8 |
-| hata-ts-slug | 1/1 | GECTI | 20.9 | 20.8 |
-| hata-ts-sayfala | 1/1 | GECTI | 53.1 | 19.2 |
-| hata-cs-ortalama | 1/1 | GECTI | 16.7 | 16.9 |
-| ozellik-py-json-cikti | 1/1 | GECTI | 11.6 | 26.0 |
-| refactor-py-ortak-dogrulama | 1/1 | GECTI | 34.1 | 37.0 |
-| ozellik-ts-todo-filtre | 1/1 | GECTI | 42.2 | 34.7 |
-| refactor-ts-yeniden-adlandir | 1/1 | GECTI | 35.0 | 19.7 |
-| ozellik-cs-kdv | 1/1 | GECTI | 47.3 | 18.7 |
-| test-py-yaz-mutasyon | 1/1 | GECTI | 29.8 | 34.4 |
-| build-py-import | 1/1 | GECTI | 38.9 | 37.8 |
-| build-cs-derleme | 1/1 | GECTI | 26.9 | 30.3 |
-| build-ts-npm-test | 1/1 | GECTI | 33.9 | 23.5 |
-| kesif-parola-hash | 1/1 | GECTI | 19.6 | 20.2 |
-| kesif-ortam-degiskenleri | 1/1 | GECTI | 13.5 | 23.9 |
-| review-py-sql | 1/1 | GECTI | 18.7 | 26.2 |
-| review-ts-kullanilmayan | 0/1 | GECTI | 19.7 | 18.0 |
-| uzun-py-cok-modul | 1/1 | GECTI | 51.5 | 40.9 |
-| uzun-py-buyuk-dosya | 1/1 | GECTI | 24.1 | 23.8 |
-| devam-py-todo | 1/1 | GECTI | 16.8 | 21.9 |
-| uzun-ts-buyuk-dosya | 1/1 | GECTI | 61.6 | 40.3 |
-| toparlanma-yanlis-yol | 1/1 | GECTI | 15.7 | 17.7 |
-| toparlanma-hassas-dosya | 1/1 | GECTI | 9.7 | 14.2 |
-| toparlanma-olmayan-komut | 1/1 | GECTI | 70.0 | 19.3 |
-| toparlanma-bom-crlf | 1/1 | GECTI | 7.6 | 14.0 |
-| web-js-form | 1/1 | GECTI | 17.9 | 19.4 |
-| entegrasyon-py-sayfali-api | 1/1 | GECTI | 13.9 | 19.4 |
-| entegrasyon-ts-tekrar-dene | 1/1 | GECTI | 42.4 | 29.4 |
+| hata-py-median | 3/3 | GECTI | 23.8 | 28.4 |
+| hata-py-isgunu | 3/3 | GECTI | 16.3 | 18.8 |
+| hata-py-indirim-cok-dosya | 3/3 | GECTI | 20.3 | 17.8 |
+| hata-ts-slug | 3/3 | GECTI | 45.1 | 20.8 |
+| hata-ts-sayfala | 3/3 | GECTI | 34.3 | 19.2 |
+| hata-cs-ortalama | 3/3 | GECTI | 30.6 | 16.9 |
+| ozellik-py-json-cikti | 3/3 | GECTI | 14.1 | 26.0 |
+| refactor-py-ortak-dogrulama | 3/3 | GECTI | 34.5 | 37.0 |
+| ozellik-ts-todo-filtre | 3/3 | GECTI | 58.6 | 34.7 |
+| refactor-ts-yeniden-adlandir | 3/3 | GECTI | 59.4 | 19.7 |
+| ozellik-cs-kdv | 3/3 | GECTI | 51.4 | 18.7 |
+| test-py-yaz-mutasyon | 3/3 | GECTI | 24.8 | 34.4 |
+| build-py-import | 3/3 | GECTI | 31.3 | 37.8 |
+| build-cs-derleme | 3/3 | GECTI | 25.2 | 30.3 |
+| build-ts-npm-test | 3/3 | GECTI | 21.6 | 23.5 |
+| kesif-parola-hash | 3/3 | GECTI | 15.5 | 20.2 |
+| kesif-ortam-degiskenleri | 3/3 | GECTI | 18.9 | 23.9 |
+| review-py-sql | 3/3 | GECTI | 22.6 | 26.2 |
+| review-ts-kullanilmayan | 3/3 | GECTI | 11.2 | 18.0 |
+| uzun-py-cok-modul | 3/3 | GECTI | 32.5 | 40.9 |
+| uzun-py-buyuk-dosya | 3/3 | GECTI | 22.4 | 23.8 |
+| devam-py-todo | 3/3 | GECTI | 11.7 | 21.9 |
+| uzun-ts-buyuk-dosya | 3/3 | GECTI | 42.2 | 40.3 |
+| toparlanma-yanlis-yol | 3/3 | GECTI | 9.7 | 17.7 |
+| toparlanma-hassas-dosya | 3/3 | GECTI | 9.6 | 14.2 |
+| toparlanma-olmayan-komut | 3/3 | GECTI | 41.0 | 19.3 |
+| toparlanma-bom-crlf | 3/3 | GECTI | 10.5 | 14.0 |
+| web-js-form | 3/3 | GECTI | 27.0 | 19.4 |
+| entegrasyon-py-sayfali-api | 3/3 | GECTI | 32.4 | 19.4 |
+| entegrasyon-ts-tekrar-dene | 2/3 | GECTI | 52.0 | 29.4 |
 
 ## Degerlendirme
 
-- Genel fark **-3.3 puan**. Onceden belirlenen esdegerlik olcutu (fark <= 5 puan ve
-  kritik kategoride gerileme yok) **SAGLANMADI**. Gerileyen kategoriler: Kesif/review.
+- Genel fark **-1.1 puan**. Onceden belirlenen esdegerlik olcutu (fark <= 5 puan ve
+  kritik kategoride gerileme yok) **SAGLANMADI**. Gerileyen kategoriler: Web/entegrasyon.
 - Fark urun ile modelin TOPLAMIDIR (farkli modeller). Ayni guclu modelle Kairo
   olculmeden farkin urun payi AYRISTIRILAMAZ.
-- Yerel ilk surum kapisi (>= %80): GECTI (%96.7). Yanlis basari beyani 1 kosu.
+- Yerel ilk surum kapisi (>= %80): GECTI (%98.9). Yanlis basari beyani 1 kosu.
 - Belirsizlik: %100 tavan etkisi (set Claude Code icin kolay).
   Ayirt edici olcum icin daha zor gorevlerle set buyutulmeli.
-- Kararsiz yerel gorevler: yok.
+- Kararsiz yerel gorevler: entegrasyon-ts-tekrar-dene.
 
 Ham veri: `degerlendirme/raporlar/` (yerelde; git'e eklenmez).
