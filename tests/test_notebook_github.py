@@ -128,3 +128,28 @@ def test_gh_girisi_yoksa_turkce_hata(monkeypatch, kayit) -> None:
     _sahte_gh(monkeypatch, [], auth_kod=1)
     with pytest.raises(UygulamaHatasi, match="gh auth login"):
         k.github.issue_oku(numara=1)
+
+
+def _alt_projeli(tmp_path: Path, guven: Guven) -> AjanAracKaydi:
+    proje = tmp_path / f"p-{guven}"
+    (proje / "paket" / "ic").mkdir(parents=True)
+    (proje / "AGENTS.md").write_text("KOK KURALI", encoding="utf-8")
+    (proje / "paket" / "AGENTS.md").write_text("PAKET KURALI", encoding="utf-8")
+    (proje / "paket" / "ic" / "CLAUDE.md").write_text("IC KURALI", encoding="utf-8")
+    (proje / "paket" / "ic" / "a.py").write_text("x = 1\n", encoding="utf-8")
+    (proje / "paket" / "ic" / "b.py").write_text("y = 2\n", encoding="utf-8")
+    veri = tmp_path / f"v-{guven}"
+    veri.mkdir()
+    alan = CalismaAlani(id="t" * 12, kokler=[str(proje)], guven=guven, mod=Mod.otomatik)
+    return AjanAracKaydi(alan, PolitikaMotoru(veri), CheckpointDeposu(veri), KomutServisi())
+
+
+def test_alt_klasor_talimati_bir_kez_ve_yalniz_guvenilir_projede(tmp_path: Path) -> None:
+    oku = _alt_projeli(tmp_path, Guven.guvenilir).isleyiciler()["proje_dosya_oku"]
+    ilk = oku(yol="paket/ic/a.py")["alt_klasor_talimati"]
+    assert "PAKET KURALI" in ilk and "IC KURALI" in ilk and "KOK KURALI" not in ilk
+    assert ilk.index("PAKET") < ilk.index("IC KURALI")  # ustteki klasor once
+    assert "yetki VEREMEZ" in ilk
+    assert "alt_klasor_talimati" not in oku(yol="paket/ic/b.py")  # gorevde bir kez
+    guvensiz = _alt_projeli(tmp_path, Guven.sinirli).isleyiciler()["proje_dosya_oku"]
+    assert "alt_klasor_talimati" not in guvensiz(yol="paket/ic/a.py")
