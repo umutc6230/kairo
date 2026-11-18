@@ -240,6 +240,7 @@ class Run(BaseModel):
     butce_uyarildi: bool = False  # "butce bitiyor, raporla" uyarisi verildi mi
     sure_doldu: bool = False  # sure butcesi doldu, kullanicidan "devam" bekleniyor
     sure_dilimi: int = 0  # ilk sure butcesi; her "devam" bu kadar sure ekler
+    kopya_bildirim: dict[str, int] = {}  # kalip -> uyarildigindaki kopya sayisi (tekrar uyarma)
     parent: str = ""  # alt ajan ise ebeveyn run kimligi
     izinli_araclar: list[str] = []  # alt ajanin dar arac seti
     sahip_dosyalar: list[str] = []  # alt ajanin yazabilecegi dosyalar (goreli yol)
@@ -1336,7 +1337,13 @@ class AgentRunner:
                 ad = Path(yol.replace("\\", "/")).name
                 kaliplar.setdefault(re.sub(r"\d+", "#", ad), set()).add(ad)
         kalip, adlar = max(kaliplar.items(), key=lambda x: len(x[1]), default=("", set()))
-        if "#" in kalip and len(adlar) >= IZLE_KOPYA:
+        # yalniz YENI kopya varsa uyar: eski kopyalar kayitta kalir, ayni not her 6 adimda donmesin
+        if (
+            "#" in kalip
+            and len(adlar) >= IZLE_KOPYA
+            and len(adlar) > run.kopya_bildirim.get(kalip, 0)
+        ):
+            run.kopya_bildirim[kalip] = len(adlar)
             run.izleyici_son = len(adimlar)
             return YON_KOPYA.format(ad=kalip, n=len(adlar), ornek=", ".join(sorted(adlar)[:3]))
         son = adimlar[-IZLE_DOLASMA:]

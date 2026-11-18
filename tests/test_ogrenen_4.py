@@ -41,6 +41,9 @@ def test_numarali_dosya_kopyalarinda_yon():
     run.adimlar = adimlar
     yon = AgentRunner._izleyici(run)
     assert "_unpack#.py" in yon and "TEK dosyayi" in yon
+    # yeni kopya yoksa ayni not tekrar gelmez (canli: eski 51 kopya yuzunden her 6 adimda geldi)
+    run.adimlar += [_a(100 + i, "komut", komut=f"x{i}") for i in range(IZLE_ARALIK)]
+    assert "_unpack#" not in AgentRunner._izleyici(run)
     farkli = Run(hedef="x")  # farkli adli dosyalar kopya sayilmaz
     farkli.adimlar = [_a(i, "proje_dosya_yaz", yol=f"{ad}.py") for i, ad in enumerate("abcdef")]
     assert AgentRunner._izleyici(farkli) == ""
