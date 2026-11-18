@@ -374,6 +374,8 @@ class YerelLLM:
         self.son_dusunce = ""  # son cevabin reasoning_content'i ("Dusunceyi goster" icin)
         # son cevabin llama-server olcumleri (prompt_per_second, predicted_per_second...)
         self.son_zamanlama: dict[str, Any] = {}
+        # son cevabin `usage`'i: prompt/completion token, onbellek (cached_tokens), maliyet (cost)
+        self.son_kullanim: dict[str, Any] = {}
         self._istemci = httpx.AsyncClient(
             timeout=httpx.Timeout(300.0, connect=5.0), transport=transport
         )
@@ -578,6 +580,7 @@ class YerelLLM:
             self._hata_firlat(r.status_code, r.text)
         veri = r.json()
         self.son_zamanlama = veri.get("timings") or {}
+        self.son_kullanim = veri.get("usage") or {}
         secim = veri["choices"][0]
         self.son_dusunce = (
             (secim.get("message") or {}).get("reasoning_content")
@@ -800,6 +803,8 @@ class YerelLLM:
                     parca = json.loads(satir[6:])
                     if parca.get("timings"):
                         self.son_zamanlama = parca["timings"]
+                    if parca.get("usage"):
+                        self.son_kullanim = parca["usage"]
                     for c in parca.get("choices", []):
                         delta = c.get("delta") or {}
                         if dusunce := (delta.get("reasoning_content") or delta.get("reasoning")):
@@ -851,6 +856,8 @@ class YerelLLM:
                     parca = json.loads(satir[6:])
                     if parca.get("timings"):
                         self.son_zamanlama = parca["timings"]
+                    if parca.get("usage"):
+                        self.son_kullanim = parca["usage"]
                     for c in parca.get("choices", []):
                         delta = c.get("delta") or {}
                         if dusunce := (delta.get("reasoning_content") or delta.get("reasoning")):

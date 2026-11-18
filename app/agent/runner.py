@@ -48,8 +48,17 @@ YAN_ETKILI = {
     "komut_durdur",
     "git_dal",
     "git_commit",
+    "notebook_duzenle",
+    "github_pr_olustur",
+    "github_pr_yorum",
 }
-DEGISTIREN = {"proje_dosya_yaz", "proje_dosya_yama", "proje_dosya_tasi", "proje_dosya_sil"}
+DEGISTIREN = {
+    "proje_dosya_yaz",
+    "proje_dosya_yama",
+    "proje_dosya_tasi",
+    "proje_dosya_sil",
+    "notebook_duzenle",
+}
 VARSAYILAN_BAGLAM = 16384
 CEVAP_TOKEN = 2048  # kucuk baglamli yerel model icin taban
 DONGU_UYAR = 3  # ayni arac+arguman bu kadar ardisik tekrarlanirsa calistirilmaz, model uyarilir
@@ -169,6 +178,9 @@ class Kullanim(BaseModel):
     token: int = 0
     sure_sn: float = 0.0
     model_cagrisi: int = 0
+    # Claude Code /cost karsiligi: saglayicinin bildirdigi maliyet ve onbellekten okunan token
+    maliyet_usd: float = 0.0
+    onbellek_token: int = 0
 
 
 class PlanAdimi(BaseModel):
@@ -360,7 +372,7 @@ ALT_AJAN_ARACI = _f(
     ["gorev", "araclar"],
 )
 ALT_AJAN_MIN_ADIM = 15
-YAZAN_ARACLAR = {"proje_dosya_yaz", "proje_dosya_yama", "proje_dosya_tasi", "proje_dosya_sil"}
+YAZAN_ARACLAR = DEGISTIREN
 
 SISTEM = """Sen kullanicinin bilgisayarinda calisan asistan ajansin (Claude Code gibi): dosya,
 komut, kod, web, GitHub ve baglayicilarla istenen isi ARACLARLA kendin yaparsin.
@@ -1120,6 +1132,8 @@ class AgentRunner:
                         tools=semalar,
                         max_tokens=run.baglam.get("cevap") or cevap_tokeni(self._baglam()),
                     )
+                    kullanim = getattr(llm, "son_kullanim", None)
+                    kullanim = kullanim if isinstance(kullanim, dict) else {}
                 break
             except (SunucuKapali, ModelCevapHatasi) as e:
                 gecici = (
@@ -1138,8 +1152,19 @@ class AgentRunner:
         if secim.get("finish_reason") == "length" and not mesaj.get("tool_calls"):
             # Cevap sinirda kesildi (genelde cok uzun dosya icerigi): modele bolmesini soyle
             mesaj = {**mesaj, "_kesildi": True}
-        run.kullanim.token += tahmini_token(json.dumps(gonderilen, ensure_ascii=False)) + (
-            tahmini_token(json.dumps(mesaj, ensure_ascii=False))
+        if kullanim.get("prompt_tokens"):  # saglayicinin gercek sayimi tahminden iyidir
+            run.kullanim.token += int(kullanim["prompt_tokens"]) + int(
+                kullanim.get("completion_tokens") or 0
+            )
+        else:
+            run.kullanim.token += tahmini_token(json.dumps(gonderilen, ensure_ascii=False)) + (
+                tahmini_token(json.dumps(mesaj, ensure_ascii=False))
+            )
+        run.kullanim.maliyet_usd = round(
+            run.kullanim.maliyet_usd + float(kullanim.get("cost") or 0), 6
+        )
+        run.kullanim.onbellek_token += int(
+            (kullanim.get("prompt_tokens_details") or {}).get("cached_tokens") or 0
         )
         return mesaj
 
@@ -1494,6 +1519,8 @@ class AgentRunner:
             c = self.depo.getir(cocuk.id)
             run.kullanim.adim += c.kullanim.adim  # cocugun harcamasi ebeveynden duser
             run.kullanim.token += c.kullanim.token
+            run.kullanim.maliyet_usd = round(run.kullanim.maliyet_usd + c.kullanim.maliyet_usd, 6)
+            run.kullanim.onbellek_token += c.kullanim.onbellek_token
         sonuc = {
             "alt_ajan": c.id,
             "durum": str(c.durum),

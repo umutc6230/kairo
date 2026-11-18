@@ -73,6 +73,31 @@ class _DusunmeDuzelten(httpx.AsyncBaseTransport):
         await self.ic.aclose()
 
 
+# Anthropic ve Gemini onbellegi acik isaret ister (cache_control); OpenAI/DeepSeek/Grok
+# kendiliginden onbellekler. Ajan her turda ayni sistem + gecmisi yeniden gonderdigi icin
+# isaret olmadan cagri basina ~100K token tam fiyatla odenir.
+ONBELLEK_ISARETLI = ("anthropic/", "google/gemini")
+
+
+def onbellek_isaretle(mesajlar: list[dict]) -> list[dict]:
+    """Sistem mesaji ve son mesaj onbellek kirilma noktasi olur (en fazla 4 izinli)."""
+    sonuc = [dict(m) for m in mesajlar]
+    hedefler = [i for i, m in enumerate(sonuc) if m.get("role") == "system"][:1]
+    if sonuc and sonuc[-1].get("role") in ("user", "tool"):
+        hedefler.append(len(sonuc) - 1)
+    for i in hedefler:
+        icerik = sonuc[i].get("content")
+        if isinstance(icerik, str) and icerik:
+            sonuc[i]["content"] = [
+                {"type": "text", "text": icerik, "cache_control": {"type": "ephemeral"}}
+            ]
+        elif isinstance(icerik, list) and icerik and isinstance(icerik[-1], dict):
+            icerik = [dict(p) for p in icerik]
+            icerik[-1]["cache_control"] = {"type": "ephemeral"}
+            sonuc[i]["content"] = icerik
+    return sonuc
+
+
 class OpenRouterLLM(YerelLLM):
     """Sunucu sureci yok; hazirla/durdur bos, govdede llama.cpp'ye ozel alanlar yok."""
 
@@ -111,6 +136,8 @@ class OpenRouterLLM(YerelLLM):
         else:
             govde["reasoning"] = {"effort": EFOR.get(str(seviye), "medium")}
         govde["usage"] = {"include": True}  # cevapta maliyet (usage.cost)
+        if self.model.startswith(ONBELLEK_ISARETLI):
+            govde["messages"] = onbellek_isaretle(govde["messages"])
         return govde
 
     @staticmethod
