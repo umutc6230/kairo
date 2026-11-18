@@ -52,9 +52,15 @@ export function ayarlarAc(sekme = "ai") {
       <div class="ay-aktif" id="ay-aktif" aria-live="polite"></div>
       <!-- 2) Saglayici: iki secenekli kisa anahtar (buyuk kartlar yerine) -->
       <div class="ay-sag-sec" role="radiogroup" aria-label="Sağlayıcı">
-        <label class="ay-sag-hap"><input type="radio" name="ay-sag" value="yerel" ${a.saglayici !== "openrouter" ? "checked" : ""}><span>Bu bilgisayar</span><small>internetsiz · ücretsiz</small></label>
+        <label class="ay-sag-hap"><input type="radio" name="ay-sag" value="yerel" ${a.saglayici === "yerel" ? "checked" : ""}><span>Bu bilgisayar</span><small>internetsiz · ücretsiz</small></label>
         <label class="ay-sag-hap"><input type="radio" name="ay-sag" value="openrouter" ${a.saglayici === "openrouter" ? "checked" : ""}><span>OpenRouter</span><small>bulut · yüzlerce model</small></label>
+        <label class="ay-sag-hap"><input type="radio" name="ay-sag" value="ollama" ${a.saglayici === "ollama" ? "checked" : ""}><span>Ollama</span><small>yerel · ollama.com modelleri</small></label>
       </div>
+      <div class="ayar-grup" id="ay-ol" ${a.saglayici === "ollama" ? "" : "hidden"}>
+        <div class="ay-anahtar-satir"><span class="ay-etiket">Ollama</span><span id="ay-ol-durum" class="soluk kucuk">Denetleniyor…</span>
+          <span class="ay-sag-dugme"><button class="btn kucuk" id="ay-ol-magaza" title="ollama.com'da ara, indir, sil">Model mağazası</button></span></div>
+        <div id="ay-ol-modeller" class="ay-model-liste" role="listbox" aria-label="Ollama modelleri"></div>
+        <div class="ayar-not">Kairo, Ollama'yı kendi sunucusuyla çakışmasın diye ayrı portta başlatır (<code id="ay-ol-adres"></code>); modeller Ollama'nın kendi klasöründedir. Bağlam uzunluğu "Yerel motor" bölümündeki bağlam token değerinden alınır.</div></div>
       <div class="ayar-grup" id="ay-or" ${a.saglayici === "openrouter" ? "" : "hidden"}>
         <!-- 3) Anahtar: tek satir durum; degistirme alani yalniz istenince -->
         <div class="ay-anahtar-satir"><span class="ay-etiket">API anahtarı</span><span id="ay-or-anahtar"></span>
@@ -245,7 +251,7 @@ export function ayarlarAc(sekme = "ai") {
     $$("[data-panel]", govde).forEach((p) => {
       let var_ = false;
       p.querySelectorAll(SATIR).forEach((r) => {
-        if (r.matches("[data-yerel]") && durum.ayarlar.saglayici === "openrouter") return;
+        if (r.matches("[data-yerel]") && durum.ayarlar.saglayici !== "yerel") return;
         const uy = !q || r.textContent.toLocaleLowerCase("tr-TR").includes(q);
         r.classList.toggle("arama-gizli", !uy);
         if (uy && q && !r.classList.contains("ay-bolum")) var_ = true;
@@ -660,7 +666,7 @@ export function ayarlarAc(sekme = "ai") {
       <span class="ay-model-meta">${ctx(m.baglam)} · ${fiyat(m)}</span>${m.id === sec ? '<span class="ay-tik" aria-hidden="true">✓</span>' : ""}</button>`).join("")
       || '<div class="ayar-not">Eşleşen model yok; filtreleri gevşet.</div>';
     $("#ay-or-uyari", govde).textContent = `${liste.length} / ${orListe.length} model`;
-    $$(".ay-model-satir", govde).forEach((b) => {
+    $$(".ay-model-satir", $("#ay-or-modeller", govde)).forEach((b) => {
       b.onclick = async () => {
         await kaydet({ or_model: b.dataset.id }, true);
         $("#ay-or-secici", govde).open = false;
@@ -673,8 +679,14 @@ export function ayarlarAc(sekme = "ai") {
   function aktifCiz() {
     const k = $("#ay-aktif", govde);
     const or = durum.ayarlar.saglayici === "openrouter";
+    const ol = durum.ayarlar.saglayici === "ollama";
     let ad, alt = [];
-    if (or) {
+    if (ol) {
+      const m = olListe.find((x) => x.ad === durum.ayarlar.ollama_model);
+      ad = durum.ayarlar.ollama_model || "Model seçilmedi";
+      alt = m ? [m.parametre, m.niceleme, `${sayi(m.boyut_gb)} GB`, ...olYetenek(m.yetenek)] : ["Ollama"];
+      if (m?.yetenek && !m.yetenek.araclar) alt.push("⚠ araç kullanamaz: ajan işleri çalışmaz");
+    } else if (or) {
       const m = orListe.find((x) => x.id === durum.ayarlar.or_model);
       ad = m ? m.ad : durum.ayarlar.or_model || "Model seçilmedi";
       if (m) alt = [`${ctx(m.baglam)} bağlam`, fiyat(m), ...yetenekler(m)];
@@ -685,13 +697,13 @@ export function ayarlarAc(sekme = "ai") {
       ad = m ? m.ad || m.anahtar : durum.ayarlar.model;
       alt = ["bu bilgisayarda", m && !m.dosya_var ? "⚠ dosya indirilmemiş" : "internetsiz"];
     }
-    k.innerHTML = `<div class="ay-aktif-sol"><div class="soluk kucuk">Kullanılan model · ${or ? "OpenRouter" : "Bu bilgisayar"}</div>
+    k.innerHTML = `<div class="ay-aktif-sol"><div class="soluk kucuk">Kullanılan model · ${ol ? "Ollama" : or ? "OpenRouter" : "Bu bilgisayar"}</div>
       <div class="ay-aktif-ad">${kacir(ad)}</div><div class="ay-aktif-alt">${alt.filter(Boolean).map((x) => `<span class="${String(x).startsWith("⚠") ? "uyari-metin" : ""}">${kacir(x)}</span>`).join(" · ")}</div>
       <div id="ay-aktif-sonuc" class="ayar-not"></div></div>
       <div class="ay-aktif-sag"><button class="btn kucuk" id="ay-aktif-degistir">Değiştir</button><button class="btn kucuk ana" id="ay-aktif-dene"><span data-ikon="oynat"></span>Dene</button></div>`;
     ikonlariYerlestir(k);
     $("#ay-aktif-degistir", k).onclick = () => {
-      const hedef = or ? $("#ay-or-secici", govde) : $("#ay-modeller", govde);
+      const hedef = ol ? $("#ay-ol", govde) : or ? $("#ay-or-secici", govde) : $("#ay-modeller", govde);
       if (or) { hedef.open = true; setTimeout(() => $("#ay-or-ara", govde).focus(), 50); }
       hedef.scrollIntoView({ behavior: "smooth", block: "start" });
     };
@@ -714,8 +726,12 @@ export function ayarlarAc(sekme = "ai") {
   let orYuklendi = false;
   const orPanel = () => {
     const acik = durum.ayarlar.saglayici === "openrouter";
+    const ol = durum.ayarlar.saglayici === "ollama";
     $("#ay-or", govde).hidden = !acik;
-    $$("[data-yerel]", govde).forEach((x) => { x.hidden = acik; });
+    $("#ay-ol", govde).hidden = !ol;
+    $$("[data-yerel]", govde).forEach((x) => { x.hidden = acik || ol; });
+    $("#ay-test", govde).closest(".ayar-grup").hidden = acik; // Test: yerel + Ollama
+    if (ol) olPanelCiz();
     dusunmeCiz();
     aktifCiz();
     if (acik && !orYuklendi) { orYuklendi = true; orAnahtarCiz(); orListeYukle(); }
@@ -761,6 +777,45 @@ export function ayarlarAc(sekme = "ai") {
       sonuc.innerHTML = `<span class="rozet kirmizi">hata</span> ${kacir(err.message)}`;
     } finally { b.disabled = false; }
   };
+  // ---- Ollama ----
+  let olListe = [];
+  const olYetenek = (y) => (y ? [y.araclar && "araç", y.goruntu && "görsel", y.dusunme && "düşünür", y.baglam && `${ctx(y.baglam)} bağlam`].filter(Boolean) : []);
+  async function olPanelCiz() {
+    $("#ay-ol-magaza", govde).onclick = () => { m.kapat(); modellerSayfasi("ollama"); };
+    const d = await api("/api/ollama/durum").catch(() => ({}));
+    $("#ay-ol-adres", govde).textContent = d.adres || "";
+    const kutu = $("#ay-ol-modeller", govde);
+    if (!d.kurulu && !d.calisiyor) {
+      $("#ay-ol-durum", govde).innerHTML = '<span class="rozet kirmizi">kurulu değil</span> <a href="https://ollama.com/download" target="_blank" rel="noopener" class="kucuk">indir</a>';
+      kutu.innerHTML = "";
+      return;
+    }
+    $("#ay-ol-durum", govde).innerHTML = '<span class="parilti">Ollama başlatılıyor…</span>';
+    try {
+      olListe = (await api("/api/ollama/yuklu")).modeller;
+      const s = await api("/api/ollama/durum");
+      $("#ay-ol-durum", govde).innerHTML = `<span class="rozet yesil">çalışıyor</span> <span class="soluk kucuk">v${kacir(s.surum || "")} · ${olListe.length} model</span>`;
+    } catch (err) {
+      $("#ay-ol-durum", govde).innerHTML = `<span class="rozet kirmizi">hata</span> ${kacir(err.message)}`;
+      return;
+    }
+    // yetenekler (arac/gorsel/dusunme) /api/show'dan; secim karti ve uyarilar bunlara dayanir
+    await Promise.all(olListe.filter((x) => !x.yetenek).map(async (x) => {
+      try {
+        const dt = await api(`/api/ollama/detay?ad=${encodeURIComponent(x.ad)}`);
+        x.yetenek = { araclar: dt.yetenekler.includes("tools"), goruntu: dt.yetenekler.includes("vision"), dusunme: dt.yetenekler.includes("thinking"), baglam: dt.baglam };
+      } catch { /* detay alinamazsa rozet yok */ }
+    }));
+    kutu.innerHTML = olListe.length ? olListe.map((x) => `<button type="button" class="ay-model-satir ${x.ad === durum.ayarlar.ollama_model ? "secili" : ""}" role="option" data-ol="${kacir(x.ad)}" aria-selected="${x.ad === durum.ayarlar.ollama_model}">
+        <span class="ay-model-ad">${kacir(x.ad)}</span><span class="soluk kucuk">${kacir([x.parametre, x.niceleme, `${sayi(x.boyut_gb)} GB`, ...olYetenek(x.yetenek)].filter(Boolean).join(" · "))}</span>
+        ${x.acik ? '<span class="rozet yesil">açık</span>' : ""}</button>`).join("")
+      : '<div class="ayar-not">Ollama\'da model yok. "Model mağazası"ndan indir.</div>';
+    $$("[data-ol]", kutu).forEach((b) => {
+      b.onclick = async () => { await kaydet({ ollama_model: b.dataset.ol }); olPanelCiz(); bildir("Model seçildi", "basari", 1200); };
+    });
+    dusunmeCiz();
+    aktifCiz();
+  }
   orPanel();
 
   // Bolum kisayollari: adres cubugu (#) degismez, yalniz panel kayar
@@ -778,6 +833,10 @@ export function ayarlarAc(sekme = "ai") {
       if (!m) not = orListe.length ? "Seçili OpenRouter modeli listede yok; seviye yine gönderilir." : "Model listesi yükleniyor…";
       else if (!m.dusunme) { destek = false; not = `<b>${kacir(m.ad)}</b> düşünmeyi desteklemiyor; seviye kapalı ve değiştirilemez.`; }
       else not = `<b>${kacir(m.ad)}</b> düşünmeyi destekliyor. Dengeli = düşük efor, Derin = yüksek efor. Düşünmesi zorunlu modellerde "Kapalı" en düşük eforla çalışır.`;
+    } else if (durum.ayarlar.saglayici === "ollama") {
+      const y = olListe.find((x) => x.ad === durum.ayarlar.ollama_model)?.yetenek;
+      if (y && !y.dusunme) { destek = false; not = "Seçili Ollama modeli düşünmeyi desteklemiyor; seviye kapalı."; }
+      else not = "Ollama: Kapalı = düşünme yok, Dengeli = düşük efor, Derin = yüksek efor.";
     } else {
       not = "Yerel model: Dengeli en fazla 1024 düşünme token'ı, Derin sınırsız.";
     }

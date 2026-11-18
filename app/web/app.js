@@ -6,6 +6,7 @@ import { aramaAc, ayarKaydet, ayarlarAc, ayarlarKur, modelYukle, sunucuDurdur } 
 import { $, $$, api, bildir, durum, el, menuAc, modal, modelAdi, modelProfil, onayla, oturumBasligi, sayi, sor, turkcelestir } from "./ortak.js";
 import { sayfaModelleriniYenile, sayfalarKur } from "./sayfalar.js";
 import { modelSayfasiYukle, modellerKur } from "./modeller.js";
+import { ollamaKur, ollamaYukle } from "./ollama.js";
 import { projeAc, projeDurumu, projeKur, projeYenile } from "./proje.js";
 import { skillSayfasiYukle, skillerKur } from "./skiller.js";
 import { eklentilerKur, yukle as eklentileriYukle } from "./eklentiler.js";
@@ -46,7 +47,7 @@ function git(hedef, { kaydetme = false } = {}) {
     if (hedef.tur === "gorevler") gorevSayfasiYukle();
     if (hedef.tur === "rutinler") rutinleriYukle();
     if (hedef.tur === "ajanlar") ajanlarYukle();
-    if (hedef.tur === "modeller") modelSayfasiYukle();
+    if (hedef.tur === "modeller") { modelSayfasiYukle(); ollamaYukle(); }
   }
   $("#btn-geri").disabled = gecmisKonum <= 0;
   $("#btn-ileri").disabled = gecmisKonum >= gecmis.length - 1;
@@ -562,7 +563,10 @@ async function baslat() {
   gorevBildirimIzle();
   await durumYenile();
   sohbetKur({ oturumlarYenile: oturumlariYenile, baslikAyarla, oturumAc });
-  ayarlarKur(hepsiniYenile, () => git({ tur: "modeller" }));
+  ayarlarKur(hepsiniYenile, (sekme) => {
+    git({ tur: "modeller" });
+    if (sekme === "ollama") setTimeout(() => $("#ol-kart")?.scrollIntoView({ behavior: "smooth" }), 300);
+  });
   sayfalarKur();
   projeKur();
   skillerKur(hepsiniYenile);
@@ -593,6 +597,7 @@ async function baslat() {
   ], { sagaHizali: true });
   dikteKur();
   modellerKur(hepsiniYenile);
+  ollamaKur(hepsiniYenile);
 
   $$(".nav-oge").forEach((n) => {
     n.onclick = () => {

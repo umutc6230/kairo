@@ -758,6 +758,13 @@ body.uzak-saglayici [data-yalniz-yerel] { display: none !important; }
 .yan-panel { width: 280px; flex: none; border-left: 1px solid var(--cizgi2); padding: 14px 14px; overflow-y: auto; display: flex; flex-direction: column; gap: 2px; font-size: 13px; }
 .yan-panel[hidden] { display: none; }
 .sp-bolum { font-weight: 600; font-size: 13px; padding: 6px 6px 4px; }
+.sp-acilir { display: flex; align-items: center; gap: 4px; width: 100%; background: none; border: 0; color: inherit; cursor: pointer; text-align: left; border-radius: 6px; }
+.sp-acilir:hover { background: var(--yuzey2); }
+.sp-acilir .sp-ok svg { width: 13px; height: 13px; transition: transform .15s; }
+.sp-acilir.kapali .sp-ok svg { transform: rotate(-90deg); }
+.sp-acilir .sp-sag-metin { margin-left: auto; font-weight: 400; }
+.sp-gizli { display: none !important; }
+.sp-yol { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
 .sag-panel .sp-satir { padding: 6px; border-radius: 8px; min-height: 32px; }
 .sp-ad { flex: 1; min-width: 0; display: flex; align-items: center; gap: 4px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .sp-ok svg { width: 13px; height: 13px; color: var(--soluk); }
@@ -999,6 +1006,11 @@ a.sp-satir { text-decoration: none; }
 #hap-izole.secili { color: #d97757; }
 #hap-model .soluk { margin-left: 6px; }
 
+.sira-rozet { margin-top: 4px; text-align: right; }
 .sira-listesi { display: flex; flex-direction: column; gap: 4px; padding: 6px 8px 0; }
 .sira-oge { display: flex; align-items: center; gap: 8px; padding: 4px 8px; border-radius: 8px; background: var(--yuzey2); font-size: 13px; }
 .sira-oge .sira-metin { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ol-etiketler { display: flex; flex-direction: column; gap: 6px; margin-top: 8px; }
+.ol-etiket { gap: 8px; align-items: center; padding: 4px 0; border-top: 1px solid var(--cizgi, rgba(255,255,255,.06)); }
+.ol-etiket > span { display: flex; flex-wrap: wrap; gap: 4px; align-items: center; min-width: 0; }
+.ol-etiket > button { flex: none; }

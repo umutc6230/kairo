@@ -160,7 +160,7 @@ async def test_sag_panel_degisiklik_ozeti(istemci, git_proje, tmp_path, monkeypa
 
     (tmp_path / "duz").mkdir()
     await istemci.post("/api/projeler", json={"yol": str(tmp_path / "duz"), "guven": "guvenilir"})
-    assert (await istemci.get("/api/proje/degisiklikler")).json() == {"repo": False}
+    assert (await istemci.get("/api/proje/degisiklikler")).json()["repo"] is False
 
 
 def test_derin_review_birlestirme_bagimsiz_kanit_saymaz() -> None:

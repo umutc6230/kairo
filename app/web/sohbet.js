@@ -773,7 +773,8 @@ const BITMIS_RUN = new Set(["iptal", "basarili", "dogrulanmadi", "basarisiz"]);
 
 async function ajanaGonder(oturumId, metin) {
   const s = sutun();
-  s.append(kullaniciMesaji({ rol: "kullanici", metin, ekler: [] }));
+  const balon = kullaniciMesaji({ rol: "kullanici", metin, ekler: [] });
+  s.append(balon);
   bosDurum(false);
   const kayitlar = ajanKayitlari()[oturumId] || [];
   const son = kayitlar[kayitlar.length - 1];
@@ -782,7 +783,8 @@ async function ajanaGonder(oturumId, metin) {
       const r = await api(`/api/gorevler/${son.run}`);
       if (!BITMIS_RUN.has(r.durum)) {
         await api(`/api/gorevler/${son.run}/mesaj`, { method: "POST", govde: { metin } });
-        bildir("Ajana iletildi; sonraki adımdan önce işlenir.", "basari", 1500);
+        // Claude Code gibi: mesajin calisan goreve sira ile verildigi balonda gorunur
+        balon.append(el('<div class="sira-rozet soluk kucuk"><span class="rozet sari">sırada</span> Çalışan göreve iletildi; ajan sıradaki adımdan önce okuyup cevaplar.</div>'));
         sonaKaydir(true);
         return;
       }
@@ -813,7 +815,13 @@ export function ajanBloklariniCiz(oturumId) {
     const b = ajanBlogu(k);
     s.append(b.kap);
     if (i === kayitlar.length - 1) sohbetteGorevGoster(b.detay, k.run);
-    else api(`/api/gorevler/${k.run}`).then((r) => { b.detay.innerHTML = `<div class="soluk kucuk">Görev: ${kacir(r.durum)} · ${kacir(r.sonuc?.ozet || r.hata || "")}</div>`; }).catch(() => {});
+    // onceki turlar: sonuc markdown olarak (son tur gibi), hata duz metin
+    else api(`/api/gorevler/${k.run}`).then((r) => {
+      b.detay.innerHTML = r.sonuc?.ozet
+        ? `<div class="ajan-sonuc ajan-rapor"><div class="md">${md(r.sonuc.ozet)}</div></div>`
+        : `<div class="uyari-kutu">${kacir(r.hata || r.durum)}</div>`;
+      ikonlariYerlestir(b.detay);
+    }).catch(() => {});
   });
   ikonlariYerlestir(s);
   sonaKaydir(true);

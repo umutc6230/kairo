@@ -269,7 +269,12 @@ function sohbetCiz(r) {
     .slice(-2);
   const calisiyor = !BITMIS.has(r.durum);
   const akis = ccAkis(r.adimlar, calisiyor);
+  // Claude Code gibi: gorev listesi cevabin icinde, adimlar ilerledikce isaretlenir
+  const plan = r.plan || [];
+  const planHtml = plan.length ? `<div class="sohbet-plan"><div class="sohbet-plan-baslik soluk kucuk">Plan · ${plan.filter((p) => p.durum === "tamam").length}/${plan.length}</div>
+    <ul class="plan-liste">${plan.map((p) => `<li class="plan-${kacir(p.durum || "bekliyor")}">${kacir(p.baslik || "")}</li>`).join("")}</ul></div>` : "";
   kap.innerHTML = `
+    ${planHtml}
     <ol class="adim-liste sade">${akis}</ol>
     ${notlar.map((g) => `<div class="ajan-not md">${md(g)}</div>`).join("")}
     ${calisiyor ? `<div class="baykus-canli" data-mod="${r.durum === "calisiyor" ? "calisiyor" : "bekliyor"}" style="--bk-gecikme:-${(Date.now() / 1000 % 3600).toFixed(2)}s"><span class="baykus-kap">${ikon("logo")}</span><span class="baykus-etiket">${r.durum === "calisiyor" ? "Çalışıyor…" : "Onay bekliyor…"}</span></div>` : ""}

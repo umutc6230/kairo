@@ -20,7 +20,7 @@ GUVENLIK_PAYI = 1.15  # tahmini sayimda %15 emniyet payi
 
 class ModelYetenegi(BaseModel):
     model: str
-    saglayici: Literal["yerel", "openrouter"]
+    saglayici: Literal["yerel", "openrouter", "ollama"]
     araclar: bool
     json_cikti: bool
     goruntu: bool

@@ -6,6 +6,7 @@ import asyncio
 import contextlib
 import json
 import os
+import platform
 import secrets
 import shutil
 import subprocess
@@ -74,6 +75,7 @@ from app.services.ekler import EkDeposu
 from app.services.hafiza import HafizaDeposu
 from app.services.model_magaza import Indirici, Magaza, ModelKaydi, uyumluluk
 from app.services.model_yonetici import LLMFabrikasi, ModelYonetici
+from app.services.ollama import Ollama
 from app.services.oneriler import oneriler as oneriler_hesapla
 from app.services.openrouter import OpenRouterDeposu
 from app.services.oturumlar import Mesaj, OturumDeposu
@@ -286,6 +288,10 @@ class DurdurIstegi(BaseModel):
     harici: bool = False
 
 
+class OllamaIndirIstegi(BaseModel):
+    ad: str = Field(min_length=1, max_length=200)
+
+
 class IndirIstegi(BaseModel):
     repo: str = Field(pattern=r"^[\w.-]+/[\w.-]+$", max_length=200)
 
@@ -335,6 +341,7 @@ def uygulama_olustur(
     magaza: Magaza | None = None,
     kapat: Callable[[], None] | None = None,
     or_transport: Any = None,
+    ollama_transport: Any = None,
     gecit: bool = True,
 ) -> FastAPI:
     kayit = ModelKaydi(veri_dizini)
@@ -343,7 +350,13 @@ def uygulama_olustur(
     oturumlar = OturumDeposu(veri_dizini)
     ekler = EkDeposu(veri_dizini)
     openrouter = OpenRouterDeposu(veri_dizini, transport=or_transport)
-    yonetici = ModelYonetici(ayarlar, fabrika, uzak=openrouter)
+    ollama = Ollama(
+        lambda: ayarlar.oku().ollama_adres,
+        lambda: ayarlar.oku().baglam_token,
+        transport=ollama_transport,
+        site_transport=ollama_transport,
+    )
+    yonetici = ModelYonetici(ayarlar, fabrika, uzak=openrouter, ollama=ollama)
     talimatlar = TalimatDeposu(veri_dizini)
     skiller = skill_deposu or SkillDeposu(veri_dizini)
     projeler = WorkspaceDeposu(veri_dizini)
@@ -461,6 +474,15 @@ def uygulama_olustur(
     def model_yetenegi(model: str = "") -> ModelYetenegi:
         """model: projenin koordinator modeli (bos: aktif model). MODELLER disi = uzak."""
         a = ayarlar.oku()
+        model = model or (a.aktif_model if a.saglayici == "ollama" else "")
+        if model.startswith("ollama:"):
+            y = ollama.yetenekler.get(model.removeprefix("ollama:")) or {}
+            return ModelYetenegi(
+                model=model, saglayici="ollama", araclar=y.get("araclar", True),
+                json_cikti=True, goruntu=y.get("goruntu", False),
+                baglam=min(y.get("baglam", a.baglam_token), a.baglam_token),
+                dusunme=y.get("dusunme", False), tokenizer="tahmin",
+            )  # fmt: skip
         if model and model not in MODELLER:
             openrouter.eksik_modeli_getir(model)
             return uzak_yetenek(model, openrouter.liste_yolu)
@@ -978,6 +1000,7 @@ def uygulama_olustur(
         await agecidi.durdur()
         await yonetici.kapat()  # yalniz bizim baslattigimiz model sunucusunu durdurur
         await magaza.kapat()
+        await ollama.kapat()  # yalniz Kairo'nun baslattigi Ollama surecini durdurur
 
     app = FastAPI(title=URUN_ADI, version=__version__, lifespan=omur)
     app.state.ajan_deposu = ajan_deposu
@@ -1570,9 +1593,12 @@ def uygulama_olustur(
     async def proje_degisiklikler() -> dict:
         """Sag panel 'Degisiklikler': dal, commit edilmemis +/- ve varsa dalin PR'i."""
         kayit = sohbet.ajan_araclari(sohbet.aktif_alan())
+        makine = {"bilgisayar": platform.node()}  # Claude Code'daki ortam satiri
         if kayit is None:
-            return {"repo": False}
-        ozet = await asyncio.to_thread(kayit.git.git_ozet)
+            return {"repo": False} | makine
+        ozet = await asyncio.to_thread(kayit.git.git_ozet) | makine
+        if ozet.get("klasor"):  # worktree'de .git bir dosyadir (ana depoya isaret eder)
+            ozet["worktree"] = (Path(ozet["klasor"]) / ".git").is_file()
         if ozet["repo"] and ayarlar.oku().ag_acik:
             ozet["pr"] = await asyncio.to_thread(_dal_pr, ozet["klasor"], ozet["dal"])
         return ozet
@@ -2115,6 +2141,62 @@ def uygulama_olustur(
     @app.post("/api/magaza/indirmeler/{indirme_id}/iptal")
     async def magaza_iptal(indirme_id: str) -> dict:
         indirici.iptal(indirme_id)
+        return {"iptal": indirme_id}
+
+    # ---- Ollama: saglayici + model magazasi ----
+    @app.get("/api/ollama/durum")
+    async def ollama_durum() -> dict:
+        return await ollama.durum()
+
+    @app.post("/api/ollama/baslat")
+    async def ollama_baslat() -> dict:
+        return await ollama.baslat()
+
+    @app.get("/api/ollama/yuklu")
+    async def ollama_yuklu() -> dict:
+        return {"sistem": _sistem_bilgisi(), "modeller": await ollama.yuklu()}
+
+    @app.get("/api/ollama/detay")
+    async def ollama_detay(ad: str) -> dict:
+        return await ollama.detay(ad[:200])
+
+    @app.delete("/api/ollama/yuklu")
+    async def ollama_sil(ad: str) -> dict:
+        a = ayarlar.oku()
+        sonuc = await ollama.sil(ad[:200])
+        if a.ollama_model == ad:  # secili model silindi: sessizce baska modele gecilmez
+            ayarlar.guncelle({"ollama_model": ""})
+        return sonuc
+
+    @app.get("/api/ollama/ara")
+    async def ollama_ara(
+        q: str = "", sayfa: int = 1, sira: str = "popular", yetenek: str = ""
+    ) -> dict:
+        v = await ollama.ara(q[:100], sayfa, sira, yetenek)
+        return v | {"sistem": _sistem_bilgisi()}
+
+    @app.get("/api/ollama/etiketler")
+    async def ollama_etiketler(ad: str) -> dict:
+        s = _sistem_bilgisi()
+        bellek = {"toplam_gb": s["toplam_ram_gb"], "bos_gb": s["bos_ram_gb"]}
+        yuklu = {m["ad"] for m in await ollama.yuklu()} if await ollama.surum() else set()
+        return {"etiketler": [
+            e | {"uyumluluk": uyumluluk(e["boyut_gb"], bellek, s["disk_bos_gb"]),
+                 "yuklu": e["tam_ad"] in yuklu or (e["etiket"] == "latest" and ad in yuklu)}
+            for e in await ollama.etiketler(ad[:100])
+        ]}  # fmt: skip
+
+    @app.post("/api/ollama/indir")
+    async def ollama_indir(istek: OllamaIndirIstegi) -> dict:
+        return (await ollama.indir(istek.ad)).ozet()
+
+    @app.get("/api/ollama/indirmeler")
+    async def ollama_indirmeler() -> list[dict]:
+        return [i.ozet() for i in ollama.indirmeler.values()]
+
+    @app.post("/api/ollama/indirmeler/{indirme_id}/iptal")
+    async def ollama_iptal(indirme_id: str) -> dict:
+        ollama.iptal(indirme_id)
         return {"iptal": indirme_id}
 
     # ---- talimatlar ve skill'ler ----

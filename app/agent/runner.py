@@ -86,6 +86,12 @@ YON_DOLASMA = (
     "[Izleyici] Son {n} adimda ayni cagrilara donup duruyorsun (yalniz {f} farkli cagri). Elindeki "
     "bilgiyle karar ver: ya degisikligi yap ya da gorevi_bitir ile bulgulari raporla."
 )
+IZLE_KOPYA = 4  # ayni dosyanin numarali kopyasi (deneme1.py, deneme2.py...) bu kadar olursa
+YON_KOPYA = (
+    "[Izleyici] '{ad}' kalibinda {n} ayri dosya olusturdun ({ornek}...). Her denemede yeni kopya "
+    "acma: TEK dosyayi duzenleyip yeniden calistir. Ayni yaklasim {n} denemede sonuc vermediyse "
+    "dur, neyin eksik oldugunu soyleyerek gorevi_bitir ile raporla."
+)
 KOC_YAZ = "KOC: Yazdin; bitti demeden once sonucu dogrula (dosyayi oku ya da testi calistir)."
 
 
@@ -898,7 +904,13 @@ class AgentRunner:
                 while run.kuyruk:
                     m = run.kuyruk.pop(0)
                     run.mesajlar.append(
-                        {"role": "user", "content": f"[Kullanici yonlendirmesi] {m}"}
+                        {
+                            "role": "user",
+                            "content": (
+                                f"[Kullanici yonlendirmesi] {m}\n(Kullanici calisirken yazdi: soru "
+                                "soruyorsa once kisa cevap ver ve gerekirse plani guncelle.)"
+                            ),
+                        }  # fmt: skip
                     )
                     run.guncellemeler.append(f"Kullanici: {m[:200]}")
                 if self.takim is not None:  # takim mesajlari itmeli: alici okumadan gelir
@@ -1310,6 +1322,17 @@ class AgentRunner:
         if len(son) == IZLE_PENCERE and hatali >= IZLE_HATA:
             run.izleyici_son = len(adimlar)
             return YON_HATA.format(n=len(son), h=hatali)
+        # numarali kopyalar: _unpack1.py, _unpack2.py... (ilerleme sayaci her yazimi ilerleme sayar)
+        kaliplar: dict[str, set[str]] = {}
+        for a in adimlar:
+            yol = str((a.argumanlar or {}).get("yol", ""))
+            if a.arac.endswith("dosya_yaz") and a.durum is AdimDurum.tamam and yol:
+                ad = Path(yol.replace("\\", "/")).name
+                kaliplar.setdefault(re.sub(r"\d+", "#", ad), set()).add(ad)
+        kalip, adlar = max(kaliplar.items(), key=lambda x: len(x[1]), default=("", set()))
+        if "#" in kalip and len(adlar) >= IZLE_KOPYA:
+            run.izleyici_son = len(adimlar)
+            return YON_KOPYA.format(ad=kalip, n=len(adlar), ornek=", ".join(sorted(adlar)[:3]))
         son = adimlar[-IZLE_DOLASMA:]
         imzalar = {(a.arac, json.dumps(a.argumanlar, sort_keys=True, ensure_ascii=False))
                    for a in son}  # fmt: skip

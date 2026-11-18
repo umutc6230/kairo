@@ -22,9 +22,14 @@ LLMFabrikasi = Callable[..., YerelLLM]
 
 class ModelYonetici:
     def __init__(
-        self, ayarlar: AyarDeposu, fabrika: LLMFabrikasi = YerelLLM, uzak: Any = None
+        self,
+        ayarlar: AyarDeposu,
+        fabrika: LLMFabrikasi = YerelLLM,
+        uzak: Any = None,
+        ollama: Any = None,
     ) -> None:
         self.ayarlar = ayarlar
+        self.ollama = ollama  # Ollama: 'ollama:<ad>' model id'leri buradan
         self.uzak = uzak  # OpenRouterDeposu: yerel listede olmayan model id'leri buradan
         self._fabrika = fabrika
         self._llm: YerelLLM | None = None
@@ -82,6 +87,13 @@ class ModelYonetici:
         """Modeli hazirlar ve is bitene kadar kilitli tutar (bu sirada model degistirilemez)."""
         a = self.ayarlar.oku()
         model = model or a.aktif_model
+        if model.startswith("ollama:") and self.ollama is not None:
+            llm = await self.ollama.istemci(model)
+            try:
+                yield llm
+            finally:
+                await llm.kapat()
+            return
         if model in MODELLER and a.saglayici == "openrouter":
             # Saglayici OpenRouter: yerel (llama.cpp) model hicbir yoldan acilmaz/kullanilmaz
             raise UygulamaHatasi(
