@@ -266,8 +266,8 @@ function sohbetCiz(r) {
   const basari = r.durum === "basarili" && r.sonuc?.dogrulandi;
   // Claude Code gibi: modelin "ne ve neden" cumlesi, ait oldugu aracin USTUNDE akar
   const aciklamalar = new Set(r.adimlar.map((a) => a.aciklama).filter(Boolean));
-  const notlar = (r.guncellemeler || [])
-    .filter((g) => !g.startsWith("Kullanici:") && !g.startsWith("Onay bekleniyor") && ![...aciklamalar].some((x) => x.startsWith(g.slice(0, 200))))
+  const notlar = [...new Set((r.guncellemeler || []) // ayni izleyici notu iki kez basilmasin
+    .filter((g) => !g.startsWith("Kullanici:") && !g.startsWith("Onay bekleniyor") && ![...aciklamalar].some((x) => x.startsWith(g.slice(0, 200)))))]
     .slice(-2);
   const calisiyor = !BITMIS.has(r.durum);
   const akis = ccAkis(r.adimlar, calisiyor);
