@@ -33,6 +33,7 @@ from app.agent.arac_bul import ARAC_BUL
 from app.agent.hooks import HookSonucu
 from app.agent.ozet import mesaj_token, ozetle_gerekirse
 from app.agent.takim import SEMALAR as TAKIM_SEMALARI
+from app.agent.telemetri import span
 from app.agent.terminal import AKTIF_RUN, run_komutlarini_durdur
 from app.agent.yetenek import ModelYetenegi, butce_dokumu, dogrula, tahmini_token
 from app.exceptions import Bulunamadi, UygulamaHatasi
@@ -1127,13 +1128,16 @@ class AgentRunner:
                 ozel = (run.ajan_id or run.model_sabit) and run.model
                 baglanti = self.llm(run.model) if ozel else self.llm()
                 async with kilit, baglanti as llm:
-                    secim = await llm.sohbet(
-                        gonderilen,
-                        tools=semalar,
-                        max_tokens=run.baglam.get("cevap") or cevap_tokeni(self._baglam()),
-                    )
-                    kullanim = getattr(llm, "son_kullanim", None)
-                    kullanim = kullanim if isinstance(kullanim, dict) else {}
+                    with span("kairo.model", run=run.id, model=getattr(llm, "model", "")) as iz:
+                        secim = await llm.sohbet(
+                            gonderilen,
+                            tools=semalar,
+                            max_tokens=run.baglam.get("cevap") or cevap_tokeni(self._baglam()),
+                        )
+                        kullanim = getattr(llm, "son_kullanim", None)
+                        kullanim = kullanim if isinstance(kullanim, dict) else {}
+                        iz.update({f"usage.{k}": v for k, v in kullanim.items()
+                                   if isinstance(v, int | float)})  # fmt: skip
                 break
             except (SunucuKapali, ModelCevapHatasi) as e:
                 gecici = (
@@ -1283,7 +1287,8 @@ class AgentRunner:
         self._aracta.add(run.id)
         jeton = AKTIF_RUN.set(run.id)  # komutlar bu goreve kaydedilir (iptal)
         try:
-            sonuc = await asyncio.to_thread(fonk, **arguman_adlari(a.argumanlar))
+            with span("kairo.arac", run=run.id, arac=a.arac, adim=a.no):
+                sonuc = await asyncio.to_thread(fonk, **arguman_adlari(a.argumanlar))
         except (TypeError, ValueError, OSError, UygulamaHatasi) as e:
             sonuc = {"hata": f"{type(e).__name__}: {e}"}
         finally:
