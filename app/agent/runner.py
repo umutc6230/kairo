@@ -922,7 +922,8 @@ class AgentRunner:
                 self.depo.kaydet(run)
                 if yon := self._izleyici(run):  # 4: hata yogunlugu / dolasma -> yon notu
                     run.mesajlar.append({"role": "user", "content": yon})
-                    run.guncellemeler.append(yon.split(".")[0])
+                    # ilk cumle; dosya adindaki nokta (_unpack#.py) kesmesin
+                    run.guncellemeler.append(re.split(r"\.\s", yon)[0])
                 if gorseller := self._gorseller.pop(run_id, None):  # tur sonu: tool'lardan sonra
                     from app.services.sohbet import gorsel_mesaji
 

@@ -1007,6 +1007,10 @@ a.sp-satir { text-decoration: none; }
 #hap-model .soluk { margin-left: 6px; }
 
 #girdi.oneri-var::placeholder { color: var(--soluk); opacity: .85; font-style: italic; }
+.sp-dosya-kap > summary { cursor: pointer; list-style: none; display: flex; align-items: center; gap: 4px; }
+.sp-dosya-kap > summary::-webkit-details-marker { display: none; }
+.sp-dosya-kap > summary::before { content: "\203A"; display: inline-block; transition: transform .15s; }
+.sp-dosya-kap[open] > summary::before { transform: rotate(90deg); }
 .sira-rozet { margin-top: 4px; text-align: right; }
 .sira-listesi { display: flex; flex-direction: column; gap: 4px; padding: 6px 8px 0; }
 .sira-oge { display: flex; align-items: center; gap: 8px; padding: 4px 8px; border-radius: 8px; background: var(--yuzey2); font-size: 13px; }

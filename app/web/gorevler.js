@@ -307,24 +307,33 @@ function sohbetCiz(r) {
   sagPanelCiz(r);
 }
 
+let dosyaListesiAcik = null; // null: az dosyada acik, coksa kapali; kullanici secince hatirlanir
 function sagPanelCiz(r) {
   const p = document.getElementById("sag-panel-gorev");
   if (!p) return;
   const b = r.baglam || {};
   const degisen = r.adimlar.filter((a) => a.checkpoint && YAZAN.has(a.arac));
+  // ayni dosyaya birden cok yazim tek satir (son checkpoint'in diff'i acilir)
+  const benzersiz = new Map();
+  for (const a of degisen) {
+    const k = a.dosya || a.argumanlar?.yol || a.arac;
+    benzersiz.set(k, { a, n: (benzersiz.get(k)?.n || 0) + 1 });
+  }
   p.innerHTML = `
     ${b.baglam ? `<div class="sp-baslik">Bağlam <span class="soluk">%${kacir(b.dolu_yuzde)}</span></div>
       <div class="butce-cubuk" role="progressbar" aria-label="Bağlam doluluğu" aria-valuenow="${kacir(b.dolu_yuzde)}"><span style="width:${Math.min(100, b.dolu_yuzde)}%"></span></div>` : ""}
     <div class="sp-baslik">Plan</div>
     <ul class="plan-liste">${(r.plan || []).map((x) => `<li class="plan-${kacir(x.durum)}">${kacir(x.baslik)}</li>`).join("") || '<li class="soluk">-</li>'}</ul>
-    <div class="sp-baslik">Değişen dosyalar</div>
-    <ul class="sp-dosyalar">${degisen.map((a) => `<li><button class="bag" data-diff="${kacir(a.checkpoint)}"><span data-ikon="dosya"></span>${kacir(a.dosya || a.argumanlar?.yol || a.arac)}</button></li>`).join("") || '<li class="soluk">-</li>'}</ul>
+    <details class="sp-dosya-kap" ${dosyaListesiAcik ?? benzersiz.size <= 5 ? "open" : ""}><summary class="sp-baslik">Değişen dosyalar <span class="soluk">(${benzersiz.size})</span></summary>
+    <ul class="sp-dosyalar">${[...benzersiz.values()].map(({ a, n }) => `<li><button class="bag" data-diff="${kacir(a.checkpoint)}"><span data-ikon="dosya"></span>${kacir(a.dosya || a.argumanlar?.yol || a.arac)}${n > 1 ? ` <span class="soluk kucuk">×${n}</span>` : ""}</button></li>`).join("") || '<li class="soluk">-</li>'}</ul></details>
     <div class="sp-baslik">Bütçe</div>
     ${cubuk("Adım", r.kullanim.adim, r.butce.max_adim)}
     ${cubuk("Süre", r.kullanim.sure_sn, r.butce.max_sure_sn, " sn")}
     ${(r.cocuklar || []).length ? '<div class="sp-baslik">Alt ajanlar</div><div id="sp-cocuklar" class="soluk kucuk">yükleniyor…</div>' : ""}`;
   ikonlariYerlestir(p);
   $$("[data-diff]", p).forEach((x) => { x.onclick = () => diffAc(x.dataset.diff); });
+  const dosyaKap = $(".sp-dosya-kap", p);
+  if (dosyaKap) dosyaKap.ontoggle = () => { dosyaListesiAcik = dosyaKap.open; };
   if ((r.cocuklar || []).length) altAjanlariCiz(r.cocuklar);
   takimCiz(p, r.id);
 }
