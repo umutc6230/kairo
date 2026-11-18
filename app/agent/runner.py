@@ -240,6 +240,7 @@ class Run(BaseModel):
     butce_uyarildi: bool = False  # "butce bitiyor, raporla" uyarisi verildi mi
     sure_doldu: bool = False  # sure butcesi doldu, kullanicidan "devam" bekleniyor
     sure_dilimi: int = 0  # ilk sure butcesi; her "devam" bu kadar sure ekler
+    yeni_dosya_soruldu: bool = False  # bitirirken ozette olmayan yeni dosyalar bir kez soruldu
     kopya_bildirim: dict[str, int] = {}  # kalip -> uyarildigindaki kopya sayisi (tekrar uyarma)
     parent: str = ""  # alt ajan ise ebeveyn run kimligi
     izinli_araclar: list[str] = []  # alt ajanin dar arac seti
@@ -374,7 +375,8 @@ komut, kod, web, GitHub ve baglayicilarla istenen isi ARACLARLA kendin yaparsin.
   surum (yoksa "surum belirsiz") ve emin olmadigin kisim. Belgede bulmadigini uydurma.
 Kurallar:
 - Her arac cagrisindan ONCE ayni mesajda tek cumle yaz: ne yapacaksin ve neden. Kullanici gorur.
-  Kullanicinin dilinde yaz (Turkce istendiyse Turkce).
+  Varsayilan dil TURKCE: ilk cumle dahil her metni Turkce yaz (talimat dosyalari Ingilizce
+  olsa da); yalniz kullanici gorevi acikca baska dilde yazdiysa o dili kullan.
 - Ilk is plan_guncelle ile kisa plan yaz; ilerledikce guncelle.
 - Degistirmeden once oku (yama: beklenen_hash). Yazdigin dosyayi tekrar oku; kodu degistirdiysen
   testi/komutu calistir, test yoksa kucuk betikle calistirip ornek degerleri kontrol et.
@@ -1543,6 +1545,25 @@ class AgentRunner:
             self._arac_mesaji(run, a, {"tamam": True, "adim_sayisi": len(run.plan)})
         self.depo.kaydet(run)
 
+    @staticmethod
+    def _ozetsiz_yeni_dosyalar(run: Run, ozet: str) -> list[str]:
+        """Bu gorevde OLUSTURULUP komutla calistirilan (yardimci/gecici betik), hala duran ve
+        ozette adi gecmeyen dosyalar. Teslim edilen asil dosyalar komutla adiyla calistirilmaz."""
+        komutlar = " ".join(
+            str((x.argumanlar or {}).get("komut", "")) for x in run.adimlar
+            if x.arac == "komut_calistir"
+        )  # fmt: skip
+        kalan: list[str] = []
+        for x in run.adimlar:
+            if x.durum is not AdimDurum.tamam or '"islem": "olustur"' not in (x.sonuc or ""):
+                continue
+            m = re.search(r'"dosya": "((?:[^"\\]|\\.)*)"', x.sonuc)
+            yol = Path(json.loads(f'"{m.group(1)}"')) if m else None
+            if (yol and yol.name in komutlar and yol.exists() and yol.name not in ozet
+                    and yol.name not in kalan):  # fmt: skip
+                kalan.append(yol.name)
+        return kalan
+
     def _bitir(self, run: Run, a: Adim) -> None:
         """Kanit kontrolu: referans verilen adim basarili gercek bir arac adimi olmali ve SON
         dosya degisikliginden SONRA atilmis olmali (degisiklik oncesi okuma son durumu kanitlamaz).
@@ -1561,6 +1582,8 @@ class AgentRunner:
                 continue
             if n <= son_degisiklik:  # degisikligin kendisi kanit degil
                 continue
+            if x.arac == "komut_calistir" and (x.argumanlar or {}).get("arka_plan"):
+                continue  # baslatilan arka plan isinin cikis kodu yok; kanit, ona yapilan istek
             if x.arac == "komut_calistir":
                 kod = x.cikis_kodu
                 if kod != 0:  # bilinmeyen kod da kanit olamaz
@@ -1586,6 +1609,17 @@ class AgentRunner:
                  f"{son_degisiklik}; kanit bundan SONRA basarili bir adim olmali (or. testi "
                  "tekrar calistir). Kanitin yoksa kanit_adimlari=[] ile bitir."},
             )  # fmt: skip
+            self.depo.kaydet(run)
+            return
+        if not run.yeni_dosya_soruldu and (kalan := self._ozetsiz_yeni_dosyalar(run, ozet)):
+            # Claude Code gibi: gecici betik sessizce kalmasin; sil ya da kullaniciya soyle
+            run.yeni_dosya_soruldu = True
+            a.durum = AdimDurum.hata
+            self._arac_mesaji(run, a, {"hata": (
+                "Bu gorevde olusturdugun su dosyalar hala duruyor ama ozette yok: "
+                + ", ".join(kalan[:10]) + ". Gecici ise sil; kalici ise ozette ne olduklarini "
+                "yaz. Sonra gorevi_bitir'i tekrar cagir."
+            )})  # fmt: skip
             self.depo.kaydet(run)
             return
         if run.dal.startswith("is/") and not son_degisiklik:  # is emri degisiklik yapmadan bitti

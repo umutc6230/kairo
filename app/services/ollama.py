@@ -39,6 +39,14 @@ class OllamaHatasi(ModelCevapHatasi):
         self.gecici = gecici
 
 
+OLLAMA_MIN_BAGLAM = 32768  # ajan talimati + arac tanimlari ~18K; 16K'da gorev hic baslamiyordu
+
+
+def ollama_baglam(ayar_baglam: int) -> int:
+    """Ollama baglami: ayardaki deger, en az OLLAMA_MIN_BAGLAM (llama.cpp ayari 16K olabilir)."""
+    return max(ayar_baglam, OLLAMA_MIN_BAGLAM)
+
+
 def ollama_mi(model: str) -> bool:
     return model.startswith(ONEK)
 

@@ -222,8 +222,9 @@ class AjanAracKaydi:
         Coroutine UYGULAMANIN loop'una gonderilir: boylece arka plan isleri komut bitince
         kapanan gecici bir loop'a baglanmaz (yoksa `komut_durumu` olu loop'a bakardi).
         """
-        if self.loop is not None and self.loop.is_running():
-            return asyncio.run_coroutine_threadsafe(coro, self.loop).result(timeout=sure)
+        loop = self.loop or getattr(self.komutlar, "loop", None)
+        if loop is not None and loop.is_running():
+            return asyncio.run_coroutine_threadsafe(coro, loop).result(timeout=sure)
         return asyncio.run(coro)  # loop yoksa (test/CLI) tek seferlik
 
     def komut_calistir(

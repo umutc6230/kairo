@@ -216,3 +216,8 @@ async def test_sonraki_oneri_etiket_ve_tekrar_temizlenir(istemci, app) -> None:
         "oneri"
     ] == "Testleri calistir"
     assert (await istemci.post("/api/sonraki-oneri", json=govde)).json()["oneri"] == ""
+
+
+def test_ollama_baglami_ajan_talimatina_yeter() -> None:
+    # canli: 16K bagamda talimat 12K + arac 5.7K sigmadi, gorev 0 adimda basarisiz oldu
+    assert ol.ollama_baglam(16384) == 32768 and ol.ollama_baglam(65536) == 65536

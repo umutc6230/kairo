@@ -574,3 +574,29 @@ def test_plan_uzun_sure_guncellenmezse_hatirlatir() -> None:
     run.plan[0].durum = "tamam"  # plan bitmisse hatirlatma yok
     run.izleyici_son = 0
     assert AgentRunner._izleyici(run) == ""
+
+
+async def test_calistirilan_yardimci_betik_ozette_yoksa_bir_kez_sorulur(tmp_path, proje) -> None:
+    # canli: ajan dogrula_sunucu.py yazip calistirdi, "temizliyorum" dedi ama dosya kaldi
+    model = SahteModel([
+        cagri("proje_dosya_yaz", yol="dogrula.py", icerik="print(1)\n"),
+        cagri("komut_calistir", komut="python dogrula.py", aciklama="dene"),
+        cagri("gorevi_bitir", ozet="Tamam.", kanit_adimlari=[2]),
+        cagri("gorevi_bitir", ozet="Tamam. dogrula.py kontrol betigi, kalici.", kanit_adimlari=[2]),
+    ])  # fmt: skip
+    runner, *_ = kur(tmp_path, proje, model)
+    run = await bitir(runner, (await runner.baslat("x")).id)
+    assert run.adimlar[2].durum is AdimDurum.hata and "dogrula.py" in run.adimlar[2].sonuc
+    assert run.durum is RunDurum.basarili  # ikinci denemede ozette belirtti
+
+
+async def test_arka_plan_baslatma_kanit_listesinde_bitirmeyi_engellemez(tmp_path, proje) -> None:
+    bekle = "ping -n 4 127.0.0.1 > nul" if sys.platform == "win32" else "sleep 4"
+    model = SahteModel([
+        cagri("komut_calistir", komut=bekle, arka_plan=True, aciklama="arka"),
+        cagri("komut_calistir", komut="python -c \"print(1)\"", aciklama="istek"),
+        cagri("gorevi_bitir", ozet="ok", kanit_adimlari=[1, 2]),
+    ])  # fmt: skip
+    runner, *_ = kur(tmp_path, proje, model)
+    run = await bitir(runner, (await runner.baslat("x")).id)
+    assert run.durum is RunDurum.basarili and run.sonuc.kanit == [2]

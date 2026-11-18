@@ -76,7 +76,7 @@ from app.services.ekler import EkDeposu
 from app.services.hafiza import HafizaDeposu
 from app.services.model_magaza import Indirici, Magaza, ModelKaydi, uyumluluk
 from app.services.model_yonetici import LLMFabrikasi, ModelYonetici
-from app.services.ollama import Ollama
+from app.services.ollama import Ollama, ollama_baglam
 from app.services.oneriler import oneriler as oneriler_hesapla
 from app.services.openrouter import OpenRouterDeposu
 from app.services.oturumlar import Mesaj, OturumDeposu
@@ -358,7 +358,7 @@ def uygulama_olustur(
     openrouter = OpenRouterDeposu(veri_dizini, transport=or_transport)
     ollama = Ollama(
         lambda: ayarlar.oku().ollama_adres,
-        lambda: ayarlar.oku().baglam_token,
+        lambda: ollama_baglam(ayarlar.oku().baglam_token),
         transport=ollama_transport,
         site_transport=ollama_transport,
     )
@@ -486,7 +486,7 @@ def uygulama_olustur(
             return ModelYetenegi(
                 model=model, saglayici="ollama", araclar=y.get("araclar", True),
                 json_cikti=True, goruntu=y.get("goruntu", False),
-                baglam=min(y.get("baglam", a.baglam_token), a.baglam_token),
+                baglam=min(y.get("baglam", 8192), ollama_baglam(a.baglam_token)),
                 dusunme=y.get("dusunme", False), tokenizer="tahmin",
             )  # fmt: skip
         if model and model not in MODELLER:
@@ -970,6 +970,7 @@ def uygulama_olustur(
             logger.debug("Baglam isitma atlandi: {}", e)
 
     async def omur(_: FastAPI):
+        komutlar.loop = asyncio.get_running_loop()  # arka plan komutlari bu loop'ta yasar
         a = ayarlar.oku()
         if gecit and a.sunucu_acik:
             await agecidi.baslat(a.sunucu_port)
