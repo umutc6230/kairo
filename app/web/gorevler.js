@@ -43,6 +43,8 @@ const ADIM_TR = {
   cevap_bekliyor: "cevap bekliyor",
 };
 const BITMIS = new Set(["iptal", "basarili", "dogrulanmadi", "basarisiz"]);
+// yalniz calisan gorevde "suruyor" maddesi doner; bitmis/duraklamis gorevde yarida kalmis gorunur
+const planDurum = (r, d) => (d === "suruyor" && r.durum !== "calisiyor" ? "kesildi" : d || "bekliyor");
 const YAZAN = new Set(["proje_dosya_yaz", "proje_dosya_yama", "proje_dosya_tasi", "proje_dosya_sil"]);
 
 let secili = null;
@@ -272,7 +274,7 @@ function sohbetCiz(r) {
   // Claude Code gibi: gorev listesi cevabin icinde, adimlar ilerledikce isaretlenir
   const plan = r.plan || [];
   const planHtml = plan.length ? `<div class="sohbet-plan"><div class="sohbet-plan-baslik soluk kucuk">Plan · ${plan.filter((p) => p.durum === "tamam").length}/${plan.length}</div>
-    <ul class="plan-liste">${plan.map((p) => `<li class="plan-${kacir(p.durum || "bekliyor")}">${kacir(p.baslik || "")}</li>`).join("")}</ul></div>` : "";
+    <ul class="plan-liste">${plan.map((p) => `<li class="plan-${kacir(planDurum(r, p.durum))}">${kacir(p.baslik || "")}</li>`).join("")}</ul></div>` : "";
   kap.innerHTML = `
     ${planHtml}
     <ol class="adim-liste sade">${akis}</ol>
@@ -323,7 +325,7 @@ function sagPanelCiz(r) {
     ${b.baglam ? `<div class="sp-baslik">Bağlam <span class="soluk">%${kacir(b.dolu_yuzde)}</span></div>
       <div class="butce-cubuk" role="progressbar" aria-label="Bağlam doluluğu" aria-valuenow="${kacir(b.dolu_yuzde)}"><span style="width:${Math.min(100, b.dolu_yuzde)}%"></span></div>` : ""}
     <div class="sp-baslik">Plan</div>
-    <ul class="plan-liste">${(r.plan || []).map((x) => `<li class="plan-${kacir(x.durum)}">${kacir(x.baslik)}</li>`).join("") || '<li class="soluk">-</li>'}</ul>
+    <ul class="plan-liste">${(r.plan || []).map((x) => `<li class="plan-${kacir(planDurum(r, x.durum))}">${kacir(x.baslik)}</li>`).join("") || '<li class="soluk">-</li>'}</ul>
     <details class="sp-dosya-kap" ${dosyaListesiAcik ?? benzersiz.size <= 5 ? "open" : ""}><summary class="sp-baslik">Değişen dosyalar <span class="soluk">(${benzersiz.size})</span></summary>
     <ul class="sp-dosyalar">${[...benzersiz.values()].map(({ a, n }) => `<li><button class="bag" data-diff="${kacir(a.checkpoint)}"><span data-ikon="dosya"></span>${kacir(a.dosya || a.argumanlar?.yol || a.arac)}${n > 1 ? ` <span class="soluk kucuk">×${n}</span>` : ""}</button></li>`).join("") || '<li class="soluk">-</li>'}</ul></details>
     <div class="sp-baslik">Bütçe</div>
@@ -382,7 +384,7 @@ function detayCiz(r) {
         <ol class="adim-liste">${r.adimlar.map(adimSatiri).join("") || '<li class="soluk">Henüz adım yok.</li>'}</ol></div>
       <div class="gr-yan">
         <div class="kart"><div class="kart-baslik"><b>Plan</b></div>
-          <ul class="plan-liste">${(r.plan || []).map((p) => `<li class="plan-${kacir(p.durum)}">${kacir(p.baslik)}${p.kanit ? ` <span class="soluk kucuk">(${kacir(p.kanit)})</span>` : ""}</li>`).join("") || '<li class="soluk">Plan yok.</li>'}</ul></div>
+          <ul class="plan-liste">${(r.plan || []).map((p) => `<li class="plan-${kacir(planDurum(r, p.durum))}">${kacir(p.baslik)}${p.kanit ? ` <span class="soluk kucuk">(${kacir(p.kanit)})</span>` : ""}</li>`).join("") || '<li class="soluk">Plan yok.</li>'}</ul></div>
         <div class="kart"><div class="kart-baslik"><b>Bütçe</b></div>
           ${cubuk("Adım", r.kullanim.adim, r.butce.max_adim)}
           ${cubuk("Süre", r.kullanim.sure_sn, r.butce.max_sure_sn, " sn")}

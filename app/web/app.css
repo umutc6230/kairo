@@ -952,6 +952,7 @@ a.sp-satir { text-decoration: none; }
 .sohbet-plan .plan-liste li::before { content: ""; position: absolute; left: 0; top: 2px; width: 16px; height: 16px; border-radius: 50%; box-sizing: border-box; }
 .sohbet-plan .plan-bekliyor::before { border: 1.5px dashed var(--soluk, #8a8a84); }
 .sohbet-plan .plan-suruyor::before { border: 2px solid var(--cizgi2, #555); border-top-color: var(--metin, #eee); animation: plan-don .9s linear infinite; }
+.sohbet-plan .plan-kesildi::before { border: 1.5px solid var(--soluk, #8a8a84); }
 .sohbet-plan .plan-tamam, .sohbet-plan .plan-atlandi { color: var(--soluk, #9a9a94); }
 .sohbet-plan .plan-tamam::before { background: var(--soluk, #9a9a94) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Cpath d='M4 8.5l2.5 2.5L12 5.5' fill='none' stroke='%23202020' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E") center/12px no-repeat; }
 .sohbet-plan .plan-atlandi { text-decoration: line-through; }
