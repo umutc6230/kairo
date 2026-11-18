@@ -764,7 +764,8 @@ body.uzak-saglayici [data-yalniz-yerel] { display: none !important; }
 .sp-acilir.kapali .sp-ok svg { transform: rotate(-90deg); }
 .sp-acilir .sp-sag-metin { margin-left: auto; font-weight: 400; }
 .sp-gizli { display: none !important; }
-.sp-yol { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
+.sp-yol { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; flex: 1 1 0; }
+#sp-proje #sp-proje-metni { flex: 0 0 auto; max-width: 60%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; } /* uzun yol adi ezmesin */
 .sag-panel .sp-satir { padding: 6px; border-radius: 8px; min-height: 32px; }
 .sp-ad { flex: 1; min-width: 0; display: flex; align-items: center; gap: 4px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .sp-ok svg { width: 13px; height: 13px; color: var(--soluk); }

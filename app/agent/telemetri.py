@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import contextlib
 import contextvars
+import hashlib
 import os
 import re
 import secrets
@@ -20,7 +21,8 @@ from typing import Any
 import httpx
 from loguru import logger
 
-GIZLI = re.compile(r"key|token|secret|sifre|parola|password|anahtar", re.I)
+# "token(?!s)": access_token gizlenir, prompt_tokens gibi sayaclar (canli bulgu) gizlenmez
+GIZLI = re.compile(r"key|token(?!s)|secret|sifre|parola|password|anahtar", re.I)
 _UST: contextvars.ContextVar[tuple[str, str] | None] = contextvars.ContextVar("otel", default=None)
 
 
@@ -66,7 +68,17 @@ def span(ad: str, **oznitelik: Any) -> Iterator[dict]:
         yield oznitelik  # no-op: env yoksa sifir maliyet
         return
     ust = _UST.get()
-    trace_id = ust[0] if ust else secrets.token_hex(16)
+    # ayni gorevin (run) span'leri tek iz: Claude Code'daki oturum izi gibi zincir gorunur
+    run = oznitelik.get("run")
+    trace_id = (
+        ust[0]
+        if ust
+        else (
+            hashlib.sha256(f"kairo-run:{run}".encode()).hexdigest()[:32]
+            if run
+            else secrets.token_hex(16)
+        )
+    )
     span_id = secrets.token_hex(8)
     belirtec = _UST.set((trace_id, span_id))
     bas = time.time_ns()

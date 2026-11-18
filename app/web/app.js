@@ -183,7 +183,7 @@ function grupAdi(iso) {
 
 function sagPanelOrtam() {
   const p = $("#sp-proje-metni");
-  if (p) p.textContent = projeDurumu.aktif?.ad || "Proje seç (açınca sohbet ajan olur)";
+  if (p) p.textContent = projeDurumu.etkin?.ad || projeDurumu.aktif?.ad || "Proje seç (açınca sohbet ajan olur)";
 }
 document.addEventListener("oturumlar-degisti", () => { oturumlariYenile(); sagPanelOrtam(); });
 

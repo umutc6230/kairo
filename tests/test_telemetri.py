@@ -57,3 +57,23 @@ def test_ic_ice_span_hata_ve_gizli_maske(monkeypatch, giden) -> None:
     assert oz["api_key"] == {"stringValue": "***"} and oz["usage.cost"] == {"doubleValue": 0.25}
     kaynak = giden[0][1]["resourceSpans"][0]["resource"]["attributes"][0]
     assert kaynak == {"key": "service.name", "value": {"stringValue": "kairo"}}
+
+
+def test_sayaclar_gizlenmez_ve_ayni_gorev_tek_izde(monkeypatch, giden) -> None:
+    # canli: prompt_tokens "***" gidiyordu; her span ayri izdeydi
+    monkeypatch.setenv("OTEL_EXPORTER_OTLP_ENDPOINT", "http://otel:4318")
+    with telemetri.span("kairo.model", run="r9", access_token="gizli") as iz:
+        iz["usage.prompt_tokens"] = 1200
+    with telemetri.span("kairo.arac", run="r9", arac="proje_dosya_oku"):
+        pass
+    with telemetri.span("kairo.arac", run="baska"):
+        pass
+    _bekle(giden, 3)
+    spanlar = {(_span(k)["name"], _span(k)["attributes"][0]["value"]["stringValue"]): _span(k)
+               for k in giden}  # fmt: skip
+    model = spanlar[("kairo.model", "r9")]
+    oz = {a["key"]: a["value"] for a in model["attributes"]}
+    assert oz["usage.prompt_tokens"] == {"intValue": "1200"}
+    assert oz["access_token"] == {"stringValue": "***"}
+    assert model["traceId"] == spanlar[("kairo.arac", "r9")]["traceId"]
+    assert model["traceId"] != spanlar[("kairo.arac", "baska")]["traceId"]
