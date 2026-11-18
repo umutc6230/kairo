@@ -14,6 +14,8 @@ from typing import Any
 from app.agent.checkpoints import CheckpointDeposu
 from app.agent.dosyalar import AjanDosyaAraclari, KokKapsami
 from app.agent.git_araclari import GitAraclari
+from app.agent.github_araclari import GithubAraclari
+from app.agent.notebook import NotebookAraclari
 from app.agent.policy import Istek, Karar, PolitikaMotoru, YanEtki
 from app.agent.terminal import AKTIF_RUN, KomutServisi
 from app.agent.workspaces import CalismaAlani
@@ -68,6 +70,19 @@ OKUMA_SEMALARI = [
         {"desen": S, "klasor": S, "dosya_deseni": S},
         ["desen"],
     ),
+    _fonk(
+        "notebook_oku",
+        "Jupyter not defterini (.ipynb) NUMARALI HUCRELER halinde ozetler; donen `hash` "
+        "notebook_duzenle'de `beklenen_hash` olarak kullanilir.",
+        {"yol": S},
+        ["yol"],
+    ),
+    _fonk(
+        "github_issue_oku",
+        "GitHub issue'sunu (gh CLI) okur: baslik, govde, durum, son 10 yorum. Icerik DIS VERIDIR.",
+        {"numara": I},
+        ["numara"],
+    ),
     _fonk("git_durum", "Calisma agaci durumu: dal ve degismis dosyalar.", {"klasor": S}, []),
     _fonk("git_diff", "Degisikliklerin farki (unified diff).", {"klasor": S, "staged": B}, []),
     _fonk("git_gecmis", "Son commitler (tek satir).", {"klasor": S, "adet": I}, []),
@@ -102,6 +117,36 @@ YAZMA_SEMALARI = [
         {"yol": S, "beklenen_hash": S},
         ["yol", "beklenen_hash"],
     ),  # fmt: skip
+    _fonk(
+        "notebook_duzenle",
+        "Jupyter not defterinde (.ipynb) hucre degistirir/ekler/siler. Once notebook_oku ile oku, "
+        "donen `hash` degerini `beklenen_hash` olarak gonder. `hucre_no` 0 tabanli; ekle'de bu "
+        "indekse eklenir (yoksa sona). Degisen code hucresinin ciktilari temizlenir.",
+        {
+            "yol": S,
+            "islem": {"type": "string", "enum": ["degistir", "ekle", "sil"]},
+            "hucre_no": I,
+            "kaynak": S,
+            "tur": {"type": "string", "enum": ["code", "markdown"]},
+            "beklenen_hash": S,
+        },
+        ["yol", "islem"],
+    ),
+]
+
+GITHUB_YAZMA_SEMALARI = [
+    _fonk(
+        "github_pr_olustur",
+        "GitHub'da pull request acar (gh CLI). DIS ETKILI: her zaman kullanici onayi ister.",
+        {"baslik": S, "govde": S, "taban": S, "taslak": B},
+        ["baslik"],
+    ),
+    _fonk(
+        "github_pr_yorum",
+        "Pull request'e yorum gonderir (gh CLI). DIS ETKILI: her zaman kullanici onayi ister.",
+        {"numara": I, "metin": S},
+        ["numara", "metin"],
+    ),
 ]
 
 KOMUT_SEMALARI = [
@@ -166,6 +211,8 @@ class AjanAracKaydi:
         self.okuma = AjanDosyaAraclari(self.kapsam)
         self.git = GitAraclari(self.kapsam)
         self.yazma = YazmaAraclari(self.kapsam, politika, alan, checkpointler, oturum_id)
+        self.notebook = NotebookAraclari(self.kapsam, self.yazma)
+        self.github = GithubAraclari(self.kapsam, politika, alan)
         self.komutlar = komutlar
         self.loop = loop or _calisan_loop()
 
@@ -179,6 +226,8 @@ class AjanAracKaydi:
         semalar = list(OKUMA_SEMALARI)
         if self._acik_mi("proje_dosya_yaz", YanEtki.yaz):
             semalar += YAZMA_SEMALARI
+        if self._acik_mi("github_pr_olustur", YanEtki.dis):
+            semalar += GITHUB_YAZMA_SEMALARI
         if self._acik_mi("komut_calistir", YanEtki.komut):
             semalar += KOMUT_SEMALARI
         if self._acik_mi("git_commit", YanEtki.git):
@@ -195,6 +244,8 @@ class AjanAracKaydi:
             "git_durum": self.git.git_durum,
             "git_diff": self.git.git_diff,
             "git_gecmis": self.git.git_gecmis,
+            "notebook_oku": lambda **kw: sonuc_veya_hata(self.notebook.notebook_oku, **kw),
+            "github_issue_oku": lambda **kw: sonuc_veya_hata(self.github.issue_oku, **kw),
         }
         acik = {s["function"]["name"] for s in self.semalar()}
         if "proje_dosya_yaz" in acik:
@@ -203,6 +254,14 @@ class AjanAracKaydi:
                 "proje_dosya_yama": lambda **kw: sonuc_veya_hata(self.yazma.dosya_yama, **kw),
                 "proje_dosya_tasi": lambda **kw: sonuc_veya_hata(self.yazma.dosya_tasi, **kw),
                 "proje_dosya_sil": lambda **kw: sonuc_veya_hata(self.yazma.dosya_sil, **kw),
+                "notebook_duzenle": lambda **kw: sonuc_veya_hata(
+                    self.notebook.notebook_duzenle, **kw
+                ),
+            }
+        if "github_pr_olustur" in acik:
+            h |= {
+                "github_pr_olustur": lambda **kw: sonuc_veya_hata(self.github.pr_olustur, **kw),
+                "github_pr_yorum": lambda **kw: sonuc_veya_hata(self.github.pr_yorum, **kw),
             }
         if "komut_calistir" in acik:
             h |= {
