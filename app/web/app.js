@@ -330,8 +330,10 @@ async function oturumSil(o) {
 // ---------------- durum / model ----------------
 const DURUM_METNI = { hazir: "hazır", yukleniyor: "yükleniyor", kapali: "kapalı", hata: "hata", bilinmiyor: "…" };
 
-/** OpenRouter seciliyse yerel (llama.cpp) modeller arayuzde gorunmez ve kullanilmaz. */
-const uzakMi = () => durum.ayarlar?.saglayici === "openrouter";
+/** OpenRouter ya da Ollama seciliyse yerel (llama.cpp) modeller arayuzde gorunmez ve kullanilmaz. */
+const uzakMi = () => ["openrouter", "ollama"].includes(durum.ayarlar?.saglayici);
+const SAG_AD = { openrouter: "OpenRouter", ollama: "Ollama" };
+const uzakModel = () => (durum.ayarlar?.saglayici === "ollama" ? durum.ayarlar.ollama_model : durum.ayarlar?.or_model) || "";
 
 async function durumYenile() {
   try {
@@ -346,12 +348,14 @@ async function durumYenile() {
   const aktif = s.yuklenen_model || a.model;
   document.body.classList.toggle("uzak-saglayici", uzakMi());
   if (uzakMi()) {
-    $("#sunucu-nokta").className = `nokta ${a.or_model ? "hazir" : "hata"}`;
+    const um = uzakModel();
+    const sag = SAG_AD[a.saglayici];
+    $("#sunucu-nokta").className = `nokta ${um ? "hazir" : "hata"}`;
     // model adi yalniz mesaj kutusunun altindaki secicide (tekrar etmesin); burada baglanti durumu
-    $("#sunucu-metni").textContent = a.or_model ? "OpenRouter" : "OpenRouter · model seçilmedi";
+    $("#sunucu-metni").textContent = um ? sag : `${sag} · model seçilmedi`;
     const km = projeDurumu.aktif?.koordinator_model; // proje sohbeti bu modelle calisir
-    $("#hap-model-metni").textContent = (km || a.or_model) ? (km || a.or_model).split("/").pop() : "Model seç"; // Claude gibi kisa ad
-    $("#hap-model").title = km ? `Proje koordinatör modeli: ${km}` : a.or_model || "";
+    $("#hap-model-metni").textContent = (km || um) ? (km || um).replace(/^ollama:/, "").split("/").pop() : "Model seç"; // Claude gibi kisa ad
+    $("#hap-model").title = km ? `Proje koordinatör modeli: ${km}` : um ? `${sag}: ${um}` : "";
     const dus0 = durum.bilgi.dusunme_secenekleri.find((d) => d.deger === a.dusunme);
     $("#hap-dusunme-metni").textContent = dus0 ? dus0.kisa : a.dusunme;
     bantGuncelle();
@@ -390,8 +394,8 @@ function bantGuncelle() {
   const bant = $("#uyari-bandi");
   let html = "";
   const bos = s.bellek?.bos_gb;
-  if (a.saglayici === "openrouter" && a.or_model) {
-    // Uzak model: yerel RAM/dosya/llama.cpp uyarilari ilgisiz; bant onay kartini da ortuyordu
+  if (uzakMi() && uzakModel()) {
+    // Uzak / Ollama model: yerel RAM/dosya/llama.cpp uyarilari ilgisiz; bant onay kartini da ortuyordu
   } else if (!s.motor_var) {
     html = `<span class="vurgu">${ikon("uyari")}llama.cpp bulunamadı</span><span>${kacir(a.llm_dizin)} içinde llama.cpp\\llama-server.exe yok.</span><button class="btn kucuk" data-eylem="ayar">Ayarlar</button>`;
   } else if (p && !p.dosya_var) {
@@ -492,10 +496,15 @@ function dusunmeMenusu(capa, yukari = true) {
   })), { yukari });
 }
 
-function modelMenusu(capa) {
+async function modelMenusu(capa) {
   const a = durum.ayarlar;
-  const ogeler = [{ baslik: uzakMi() ? "Model · OpenRouter" : "Model" }];
-  if (uzakMi()) ogeler.push({ metin: a.or_model || "Model seçilmedi", sag: "uzak", secili: !!a.or_model, eylem: () => ayarlarAc() });
+  const ogeler = [{ baslik: uzakMi() ? `Model · ${SAG_AD[a.saglayici]}` : "Model" }];
+  if (a.saglayici === "ollama") { // Ollama'daki yuklu modeller: tiklayinca secilir
+    let liste = [];
+    try { liste = (await api("/api/ollama/yuklu")).modeller; } catch (e) { bildir(e.message, "hata"); }
+    for (const m of liste) ogeler.push({ metin: m.ad, sag: `${sayi(m.boyut_gb)} GB`, secili: m.ad === a.ollama_model, eylem: () => ayarKaydet({ ollama_model: m.ad }, true) });
+    if (!liste.length) ogeler.push({ metin: "Ollama'da model yok", pasif: true });
+  } else if (uzakMi()) ogeler.push({ metin: a.or_model || "Model seçilmedi", sag: "uzak", secili: !!a.or_model, eylem: () => ayarlarAc() });
   for (const m of uzakMi() ? [] : durum.sunucu.modeller) {
     ogeler.push({
       metin: m.ad, sag: m.dosya_var ? `~${m.ram_gb} GB` : "yok", secili: m.anahtar === a.model, pasif: !m.dosya_var,
@@ -513,7 +522,7 @@ function modelMenusu(capa) {
 function sunucuMenusu(capa, yukari) {
   const s = durum.sunucu;
   if (uzakMi()) {
-    menuAc(capa, [{ baslik: `OpenRouter · ${durum.ayarlar.or_model || "model seçilmedi"}` }, "ayrac",
+    menuAc(capa, [{ baslik: `${SAG_AD[durum.ayarlar.saglayici]} · ${uzakModel() || "model seçilmedi"}` }, "ayrac",
       { metin: "AI Ayarları", ikon: "disli", eylem: () => ayarlarAc() }], { yukari, sagaHizali: !yukari });
     return;
   }

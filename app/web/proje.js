@@ -179,9 +179,12 @@ export function projeAc() {
     $("#proje-guven-sec", govde).onchange = (e) =>
       sarmala(() => api(`/api/projeler/${aktif.id}/guven`, { method: "PUT", govde: { guven: e.target.value } }));
     // model onerileri: uzakta OpenRouter listesi, yerelde kurulu modeller (elle id de yazilabilir)
-    const oneriler = durum.ayarlar?.saglayici === "openrouter"
+    const sag = durum.ayarlar?.saglayici;
+    const oneriler = sag === "openrouter"
       ? api("/api/openrouter/modeller").then((v) => v.modeller.map((m) => m.id)).catch(() => [])
-      : Promise.resolve((durum.sunucu?.modeller || []).map((m) => m.anahtar));
+      : sag === "ollama"
+        ? api("/api/ollama/yuklu").then((v) => v.modeller.map((m) => m.anahtar)).catch(() => [])
+        : Promise.resolve((durum.sunucu?.modeller || []).map((m) => m.anahtar));
     if (!modelOnerileri.length) oneriler.then((idler) => { // ciz() modali yeniden kurar: listeyi sakla
       modelOnerileri = idler;
       const dl = $("#proje-model-liste", govde);
