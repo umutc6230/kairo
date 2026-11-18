@@ -560,3 +560,17 @@ def test_buyuk_talimatta_cevap_payi_kuculur_gorev_dusmez(tmp_path, proje) -> Non
     assert 1024 <= run.baglam["cevap"] < 8192
     assert not runner._baglami_hazirla(run, "kelime " * 12000, [])
     assert "talimat" in run.hata and "MCP" in run.hata
+
+
+def test_plan_uzun_sure_guncellenmezse_hatirlatir() -> None:
+    from app.agent.runner import IZLE_PLAN, Adim, PlanAdimi
+
+    run = Run(hedef="x", plan=[PlanAdimi(baslik="a", durum="suruyor")])
+    run.adimlar = [Adim(no=0, arac="plan_guncelle", argumanlar={}, durum=AdimDurum.tamam)] + [
+        Adim(no=i, arac="dosya_oku", argumanlar={"yol": f"{i}.py"}, durum=AdimDurum.tamam)
+        for i in range(1, IZLE_PLAN + 1)
+    ]
+    assert "Plani" in AgentRunner._izleyici(run)
+    run.plan[0].durum = "tamam"  # plan bitmisse hatirlatma yok
+    run.izleyici_son = 0
+    assert AgentRunner._izleyici(run) == ""

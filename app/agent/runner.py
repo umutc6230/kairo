@@ -92,6 +92,11 @@ YON_KOPYA = (
     "acma: TEK dosyayi duzenleyip yeniden calistir. Ayni yaklasim {n} denemede sonuc vermediyse "
     "dur, neyin eksik oldugunu soyleyerek gorevi_bitir ile raporla."
 )
+IZLE_PLAN = 30  # plan bu kadar adimdir guncellenmediyse hatirlatma
+YON_PLAN = (
+    "[Izleyici] Plani {n} adimdir guncellemedin; kullanici ne yaptigini goremiyor. Simdi "
+    "plan_guncelle ile adimlarin durumunu isaretle ve 1-2 cumleyle nerede oldugunu yaz."
+)
 KOC_YAZ = "KOC: Yazdin; bitti demeden once sonucu dogrula (dosyayi oku ya da testi calistir)."
 
 
@@ -1335,6 +1340,13 @@ class AgentRunner:
             run.izleyici_son = len(adimlar)
             return YON_KOPYA.format(ad=kalip, n=len(adlar), ornek=", ".join(sorted(adlar)[:3]))
         son = adimlar[-IZLE_DOLASMA:]
+        son_plan = max(
+            (i for i, a in enumerate(run.adimlar) if a.arac == "plan_guncelle"), default=-1
+        )
+        plan_acik = any(p.durum in ("bekliyor", "suruyor") for p in run.plan)
+        if plan_acik and len(run.adimlar) - son_plan - 1 >= IZLE_PLAN:
+            run.izleyici_son = len(adimlar)
+            return YON_PLAN.format(n=len(run.adimlar) - son_plan - 1)
         imzalar = {(a.arac, json.dumps(a.argumanlar, sort_keys=True, ensure_ascii=False))
                    for a in son}  # fmt: skip
         if len(son) == IZLE_DOLASMA and len(imzalar) * 2 < len(son):
