@@ -309,6 +309,14 @@ function sohbetCiz(r) {
   sagPanelCiz(r);
 }
 
+// Claude Code /cost karsiligi: saglayicinin bildirdigi maliyet + onbellekten okunan token orani
+function maliyetSatiri(k = {}) {
+  const parca = [`${Math.round(k.token || 0).toLocaleString("tr-TR")} token`];
+  if (k.onbellek_token && k.token) parca.push(`%${Math.round((k.onbellek_token / k.token) * 100)} önbellekten`);
+  if (k.maliyet_usd) parca.push(`$${k.maliyet_usd < 0.01 ? k.maliyet_usd.toFixed(4) : k.maliyet_usd.toFixed(2)}`);
+  return `<div class="soluk kucuk gorev-maliyet" title="Sağlayıcının bildirdiği kullanım">${kacir(parca.join(" · "))}</div>`;
+}
+
 let dosyaListesiAcik = null; // null: az dosyada acik, coksa kapali; kullanici secince hatirlanir
 function sagPanelCiz(r) {
   const p = document.getElementById("sag-panel-gorev");
@@ -331,6 +339,7 @@ function sagPanelCiz(r) {
     <div class="sp-baslik">Bütçe</div>
     ${cubuk("Adım", r.kullanim.adim, r.butce.max_adim)}
     ${cubuk("Süre", r.kullanim.sure_sn, r.butce.max_sure_sn, " sn")}
+    ${maliyetSatiri(r.kullanim)}
     ${(r.cocuklar || []).length ? '<div class="sp-baslik">Alt ajanlar</div><div id="sp-cocuklar" class="soluk kucuk">yükleniyor…</div>' : ""}`;
   ikonlariYerlestir(p);
   $$("[data-diff]", p).forEach((x) => { x.onclick = () => diffAc(x.dataset.diff); });

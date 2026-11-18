@@ -600,3 +600,35 @@ async def test_arka_plan_baslatma_kanit_listesinde_bitirmeyi_engellemez(tmp_path
     runner, *_ = kur(tmp_path, proje, model)
     run = await bitir(runner, (await runner.baslat("x")).id)
     assert run.durum is RunDurum.basarili and run.sonuc.kanit == [2]
+
+
+async def test_maliyet_ve_onbellek_saglayici_kullanimindan_toplanir(tmp_path, proje) -> None:
+    model = SahteModel([cagri("proje_listele"), {"content": "bitti"}])
+    model.son_kullanim = {
+        "prompt_tokens": 1000, "completion_tokens": 50, "cost": 0.0021,
+        "prompt_tokens_details": {"cached_tokens": 800},
+    }  # fmt: skip
+    runner, *_ = kur(tmp_path, proje, model)
+    run = await bitir(runner, (await runner.baslat("x")).id)
+    k = run.kullanim
+    assert k.model_cagrisi >= 2 and k.token == 1050 * k.model_cagrisi
+    assert k.maliyet_usd == pytest.approx(0.0021 * k.model_cagrisi)
+    assert k.onbellek_token == 800 * k.model_cagrisi
+
+
+def test_anthropic_icin_onbellek_isareti() -> None:
+    from app.services.openrouter import OpenRouterLLM, onbellek_isaretle
+
+    m = onbellek_isaretle([
+        {"role": "system", "content": "talimat"},
+        {"role": "assistant", "content": "a"},
+        {"role": "user", "content": "soru"},
+    ])  # fmt: skip
+    assert m[0]["content"][0]["cache_control"] == {"type": "ephemeral"}
+    assert m[2]["content"][0]["text"] == "soru" and m[1]["content"] == "a"
+    g = OpenRouterLLM("k", "anthropic/claude-x")._govde(
+        [{"role": "system", "content": "t"}], "kapali", 9
+    )
+    assert isinstance(g["messages"][0]["content"], list)
+    g = OpenRouterLLM("k", "deepseek/v4")._govde([{"role": "system", "content": "t"}], "kapali", 9)
+    assert g["messages"][0]["content"] == "t"  # kendiliginden onbellekleyen saglayici
