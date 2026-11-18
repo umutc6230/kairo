@@ -1429,9 +1429,11 @@ def uygulama_olustur(
         }
 
     # ---- oturumlar ----
+    akistaki: set[str] = set()  # duz sohbet cevabi suren oturumlar (telefon "calisiyor" gosterir)
+
     @app.get("/api/oturumlar")
     async def oturum_liste(q: str = "") -> list[dict]:
-        return oturumlar.liste(q)
+        return [{**o, "akista": o["id"] in akistaki} for o in oturumlar.liste(q)]
 
     @app.post("/api/oturumlar")
     async def oturum_yeni() -> dict:
@@ -2062,7 +2064,16 @@ def uygulama_olustur(
     @app.post("/api/oturumlar/{oturum_id}/mesaj")
     async def mesaj(oturum_id: str, istek: MesajIstegi) -> StreamingResponse:
         oturumlar.getir(oturum_id)  # yoksa 404 (akis baslamadan)
-        return sse(sohbet.mesaj_gonder(oturum_id, istek))
+
+        async def izlenen() -> AsyncIterator[dict]:
+            akistaki.add(oturum_id)
+            try:
+                async for olay in sohbet.mesaj_gonder(oturum_id, istek):
+                    yield olay
+            finally:
+                akistaki.discard(oturum_id)
+
+        return sse(izlenen())
 
     # ---- ekler ----
     @app.post("/api/ekler")

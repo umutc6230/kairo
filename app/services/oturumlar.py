@@ -173,6 +173,7 @@ class OturumDeposu:
                     "guncelleme": ham.get("guncelleme", ""),
                     "mesaj_sayisi": len(ham.get("mesajlar", [])),
                     "ajan_sayisi": len(ham.get("ajan_runlari", [])),
+                    "son_run": (ham.get("ajan_runlari") or [{}])[-1].get("run", ""),
                     "ust": ham.get("ust", ""),
                     "alan": ham.get("alan", ""),
                 }
