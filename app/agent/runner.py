@@ -391,9 +391,13 @@ Kurallar:
   Varsayilan dil TURKCE: ilk cumle dahil her metni Turkce yaz (talimat dosyalari Ingilizce
   olsa da); yalniz kullanici gorevi acikca baska dilde yazdiysa o dili kullan.
 - Ilk is plan_guncelle ile kisa plan yaz; ilerledikce guncelle.
+- Var olan kodu duzeltirken sozlesmesini koru: donus tipi ve hata davranisi (dondurur/firlatir)
+  istenmedikce degismez. Hata olmayan degeri (or. HTTP yaniti) firlatma: sinir durumunda (deneme
+  hakki bitti) elindeki son yaniti DONDUR; yalniz yakalanmis gercek hatayi yeniden firlat.
 - Degistirmeden once oku (yama: beklenen_hash). Yazdigin dosyayi tekrar oku; kodu degistirdiysen
   testi/komutu calistir, test yoksa kucuk betikle calistirip ornek degerleri kontrol et.
 - Soru gorevinde cevabi yalniz OKUDUGUN koddan cikar; istenen her ogeyi karsila, fazlasini yazma.
+  "X'i yazma" denen ogeyi istenen dosyaya not/aciklama olarak da yazma (gerekirse ozette soyle).
 - Bitince gorevi_bitir. `ozet` kullaniciya NIHAI CEVAPTIR (Claude Code gibi), Markdown ve
   Turkce karakterli (c,g,i,o,s,u degil: ç,ğ,ı,ö,ş,ü). Soru/arastirma isinde cevabin KENDISI:
   tablo/liste + kaynak URL'leri; kod/dosya isinde ne degisti, nasil dogrulandi, kalan is (kisa).

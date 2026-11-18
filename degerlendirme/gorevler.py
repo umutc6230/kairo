@@ -733,6 +733,7 @@ _MADDE = r"""
 import re
 
 HARIC = re.compile(r"okunmayan|kullan[iı]lan|dahil de[gğ]il|hari[cç]|referans", re.I)
+OLUMSUZ = re.compile(r"okunm(?:uyor|az)|kullan[iı]lm(?:[iı]yor|az)", re.I)
 
 
 def maddeler(metin):
@@ -744,7 +745,7 @@ def maddeler(metin):
         if atla:
             continue
         m = re.match(r"^\s*(?:[-*+]|\d+[.)])\s+(.*)$", s)
-        if m:
+        if m and not OLUMSUZ.search(m.group(1)):  # "X artik okunmuyor" notu X'i listelemez
             out.append(m.group(1))
         elif s.strip().startswith("|") and not re.fullmatch(r"\s*\|[\s:|-]+\|?\s*", s):
             out.append(s)
