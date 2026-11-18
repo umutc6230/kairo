@@ -220,6 +220,12 @@ function onayOnizleme(a) {
 
 function bekleyenKartlari(r) {
   const parcalar = [];
+  if (r.sure_doldu && r.durum === "duraklatildi") {
+    parcalar.push(`<div class="uyari-kutu soru-kart" role="alert">
+      <b>Süre bütçesi doldu.</b> Ajan ${kacir(Math.round((r.butce?.max_sure_sn || 0) / 60))} dakikadır çalışıyor. Devam etsin mi?
+      <div class="dugme-sira"><button class="btn ana" data-islem="devam">Devam et (aynı süre)</button>
+      <button class="btn tehlike" data-islem="iptal">Durdur</button></div></div>`);
+  }
   for (const a of r.adimlar) {
     if (a.durum === "onay_bekliyor" && a.onay_id) {
       parcalar.push(`<div class="uyari-kutu" role="alert">

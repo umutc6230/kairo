@@ -998,3 +998,7 @@ a.sp-satir { text-decoration: none; }
 .alt-satir .hap.duz:hover { background: var(--yuzey3, #2c2c29); }
 #hap-izole.secili { color: #d97757; }
 #hap-model .soluk { margin-left: 6px; }
+
+.sira-listesi { display: flex; flex-direction: column; gap: 4px; padding: 6px 8px 0; }
+.sira-oge { display: flex; align-items: center; gap: 8px; padding: 4px 8px; border-radius: 8px; background: var(--yuzey2); font-size: 13px; }
+.sira-oge .sira-metin { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }

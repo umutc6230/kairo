@@ -227,6 +227,8 @@ class Run(BaseModel):
     baglam: dict = {}  # son model cagrisinin butce dokumu (A4.1)
     ozet_sayisi: int = 0
     butce_uyarildi: bool = False  # "butce bitiyor, raporla" uyarisi verildi mi
+    sure_doldu: bool = False  # sure butcesi doldu, kullanicidan "devam" bekleniyor
+    sure_dilimi: int = 0  # ilk sure butcesi; her "devam" bu kadar sure ekler
     parent: str = ""  # alt ajan ise ebeveyn run kimligi
     izinli_araclar: list[str] = []  # alt ajanin dar arac seti
     sahip_dosyalar: list[str] = []  # alt ajanin yazabilecegi dosyalar (goreli yol)
@@ -647,6 +649,10 @@ class AgentRunner:
             raise UygulamaHatasi("Sonucu belirsiz adim var; once karar verin.")
         if any(a.durum is AdimDurum.cevap_bekliyor for a in run.adimlar):
             raise UygulamaHatasi("Ajan bir soru sordu; once soruyu cevaplayin.")
+        if run.sure_doldu:
+            run.sure_dilimi = run.sure_dilimi or run.butce.max_sure_sn
+            run.butce.max_sure_sn = int(run.kullanim.sure_sn) + run.sure_dilimi
+            run.sure_doldu = False
         run.durum = RunDurum.calisiyor
         run.hata = ""
         self.depo.kaydet(run)
@@ -863,6 +869,10 @@ class AgentRunner:
                     run.durum = RunDurum.duraklatildi
                     break
                 if neden := self._butce_asildi(run):
+                    if neden.startswith("Sure butcesi") and not run.parent:
+                        # Claude Code gibi: bitirme, sor; "Devam" ayni sure kadar ek verir
+                        run.durum, run.hata, run.sure_doldu = RunDurum.duraklatildi, neden, True
+                        break
                     run.durum, run.hata = RunDurum.basarisiz, neden
                     if run.parent and not run.sonuc.ozet:
                         # Alt ajan: eli bos donmesin; son yazdigi notlar ebeveyne kismi sonuc olur

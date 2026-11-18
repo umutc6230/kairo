@@ -351,6 +351,22 @@ async def test_adim_butcesi(tmp_path, proje) -> None:
     assert run.kullanim.adim == 3
 
 
+async def test_sure_butcesi_dolunca_sorar_devamda_ayni_sure_eklenir(tmp_path, proje) -> None:
+    model = SahteModel([cagri("proje_listele"), {"content": "bitti"}])
+    runner, depo, *_ = kur(tmp_path, proje, model)
+    run = await runner.baslat("x", butce=Butce(max_sure_sn=10))
+    await runner.duraklat(run.id)
+    run = depo.getir(run.id)
+    run.kullanim.sure_sn = 100  # sure butcesi asilmis gibi
+    depo.kaydet(run)
+    await runner.devam(run.id)
+    run = await bitir(runner, run.id)
+    assert run.durum is RunDurum.duraklatildi and run.sure_doldu and "Sure butcesi" in run.hata
+    await runner.devam(run.id)  # "Devam et": ayni 10 sn eklenir, gorev surer
+    run = depo.getir(run.id)
+    assert run.butce.max_sure_sn >= 110 and not run.sure_doldu
+
+
 async def test_ayni_basarisiz_cagri_tekrar_calistirilmaz(tmp_path, proje) -> None:
     kotu = lambda _m: cagri("proje_dosya_oku", yol="yok.txt")  # noqa: E731
     model = SahteModel([kotu, kotu, kotu])

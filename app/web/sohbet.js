@@ -529,6 +529,13 @@ export async function gonder() {
     boyutla();
     return;
   }
+  if (akisKontrol && girdi.value.trim()) { // Claude Code gibi: yanit surerken yazilan mesaj siraya girer
+    siradakiler.push(girdi.value);
+    girdi.value = "";
+    boyutla();
+    siraCiz();
+    return;
+  }
   if (akisKontrol || (!metin && !bekleyenEkler.length) || bekleyenEkler.some((e) => e.yukleniyor)) return;
   // Claude Code kisayollari (tek satir, eksiz): "!komut" kabukta calisir, "#not" hafizaya yazilir
   if (!bekleyenEkler.length && !metin.includes("\n")) {
@@ -620,7 +627,30 @@ export async function gonder() {
     akisKontrol = null;
     gonderDurumu();
     geriCagri.oturumlarYenile();
+    if (siradakiler.length) { // sirada bekleyen ilk mesaj sonraki tur olarak gider
+      $("#girdi").value = siradakiler.shift();
+      siraCiz();
+      gonder();
+    }
   }
+}
+
+// ---- yanit surerken yazilan mesajlarin sirasi ----
+const siradakiler = [];
+function siraCiz() {
+  let kap = $("#sira-listesi");
+  if (!kap) {
+    kap = el('<div id="sira-listesi" class="sira-listesi" aria-live="polite"></div>');
+    $("#yazma").prepend(kap);
+  }
+  kap.innerHTML = "";
+  siradakiler.forEach((m, i) => {
+    const c = el(`<div class="sira-oge"><span class="soluk kucuk">Sırada</span><span class="sira-metin">${kacir(m)}</span>
+      <button class="ikon-btn kucuk" title="Sıradan çıkar" aria-label="Sıradan çıkar">${ikon("x")}</button></div>`);
+    c.querySelector("button").onclick = () => { siradakiler.splice(i, 1); siraCiz(); };
+    kap.append(c);
+  });
+  kap.hidden = !siradakiler.length;
 }
 
 export function durdur() {
