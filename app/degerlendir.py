@@ -189,6 +189,7 @@ def kos(studio: Any, gorev: dict, proje: Path, sure_siniri: int = KOSU_SURESI) -
         "arac_hatasi": sum(1 for a in adimlar if a.get("durum") in ("hata", "reddedildi")),
         "adim": (son.get("kullanim") or {}).get("adim", len(adimlar)),
         "token": (son.get("kullanim") or {}).get("token", 0),
+        "maliyet_usd": (son.get("kullanim") or {}).get("maliyet_usd", 0),
         "sure_sn": sure, "ilk_adim_sn": ilk_adim,
     }  # fmt: skip
 
@@ -289,7 +290,7 @@ def ozet_tablo(kosular: list[dict]) -> dict:
         "zaman_asimi": sum(k["ajan_durumu"] == "zaman_asimi" for k in kosular),
         "toplam_sure_sn": round(sum(k["sure_sn"] for k in kosular), 1),
         "toplam_token": sum(k["token"] or 0 for k in kosular),
-        "toplam_maliyet_usd": round(sum(k.get("maliyet_usd") or 0 for k in kosular), 2),
+        "toplam_maliyet_usd": round(sum(k.get("maliyet_usd") or 0 for k in kosular), 4),
         "kararsiz_gorevler": [g for g, s in gorevler.items() if 0 < sum(s) < len(s)],
     }  # fmt: skip
 
@@ -345,6 +346,8 @@ def main(argv: list[str]) -> int:
     from app.services.ayarlar import AyarDeposu
 
     ayar = AyarDeposu(veri_dizini())
+    if (KOK / "data" / "openrouter.json").exists():  # kayitli (DPAPI sifreli) anahtar
+        shutil.copy2(KOK / "data" / "openrouter.json", veri_dizini() / "openrouter.json")
     gercek = AyarDeposu(KOK / "data").oku() if (KOK / "data" / "ayarlar.json").exists() else None
     degisiklik: dict[str, Any] = {"sunucu_acik": False}
     if gercek is not None:  # yerel model klasoru/adresi kullanicinin ayarindan
