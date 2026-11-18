@@ -9,7 +9,7 @@ import { projeDurumu } from "./proje.js";
 import { ikon, ikonlariYerlestir } from "./ikonlar.js";
 import { kacir, md } from "./md.js";
 import {
-  $, api, bildir, canliSayac, durum, el, istatistikCipleri, modal, modelAdi, modelProfil, onayla, sayi, sseOku,
+  $, $$, api, bildir, canliSayac, durum, el, istatistikCipleri, modal, modelAdi, modelProfil, onayla, sayi, sseOku,
 } from "./ortak.js";
 
 const bekleyenEkler = []; // {id?, ad, tur, onizleme, yukleniyor}
@@ -81,9 +81,18 @@ export function sohbetKur(cb) {
   girdi.addEventListener("input", () => { boyutla(); gonderDurumu(); });
   girdi.addEventListener("keydown", (e) => {
     if (oneriTusu(e)) return; // "/" ve "@" onerileri acikken ok/Enter/Tab onlara gider
+    if (e.key === "Tab" && !girdi.value && girdi.dataset.oneri) { // Claude Code: Tab = oneriyi al
+      e.preventDefault();
+      girdi.value = girdi.dataset.oneri;
+      oneriTemizle();
+      boyutla();
+      gonderDurumu();
+      return;
+    }
     if (e.key === "Enter" && !e.shiftKey && !e.isComposing) { e.preventDefault(); gonder(); }
   });
   girdiYardimKur(komutListesi);
+  girdi.addEventListener("oturum-degisti", () => oneriTemizle()); // baska sohbetin onerisi kalmasin
   girdi.addEventListener("paste", (e) => {
     const dosyalar = [...(e.clipboardData?.files || [])];
     if (dosyalar.length) { e.preventDefault(); dosyalar.forEach(ekYukle); return; }
@@ -513,6 +522,7 @@ export function mesajlariCiz(oturum) {
 export function yeniSohbetEkrani({ girdiyiKoru = false } = {}) {
   durdur();
   durum.oturumId = null;
+  oneriTemizle();
   mesajlariCiz(null);
   if (!girdiyiKoru) $("#girdi").value = ""; // acilista kullanicinin o ana dek yazdigi silinmesin
   boyutla();
@@ -522,6 +532,7 @@ export function yeniSohbetEkrani({ girdiyiKoru = false } = {}) {
 
 // ---- gonderme / akis ----
 export async function gonder() {
+  oneriTemizle();
   const girdi = $("#girdi");
   const metin = anahtarCoz(girdi.value.trim()); // maskeli yer tutucu -> gercek anahtar
   if (komutMu(metin, (istem) => { $("#girdi").value = istem; gonder(); })) { // yerel slash komut: modele mesaj olarak gitmez
@@ -631,9 +642,40 @@ export async function gonder() {
       $("#girdi").value = siradakiler.shift();
       siraCiz();
       gonder();
-    }
+    } else sonrakiOneri();
   }
 }
+
+// ---- sonraki mesaj onerisi (Claude Code gibi soluk metin, Tab ile al) ----
+const VARSAYILAN_YER = "Bir görev yaz ya da soru sor";
+function oneriTemizle() {
+  const g = $("#girdi");
+  delete g.dataset.oneri;
+  g.placeholder = VARSAYILAN_YER;
+  g.classList.remove("oneri-var");
+}
+let oneriSayac = 0;
+export async function sonrakiOneri() {
+  const kullanicilar = $$("#mesajlar .mesaj.kullanici .balon");
+  const asistanlar = $$("#mesajlar .mesaj.asistan");
+  const asistan = asistanlar[asistanlar.length - 1]?.innerText || "";
+  if (!asistan.trim()) return;
+  const no = ++oneriSayac;
+  const oturum = durum.oturumId;
+  try {
+    const { oneri } = await api("/api/sonraki-oneri", { method: "POST", govde: {
+      kullanici: (kullanicilar[kullanicilar.length - 1]?.innerText || "").slice(-4000),
+      asistan: asistan.slice(-6000),
+    } });
+    const g = $("#girdi");
+    // bu arada yeni tur, baska sohbet ya da yazilmaya baslanmis girdi: oneri gosterilmez
+    if (!oneri || no !== oneriSayac || oturum !== durum.oturumId || g.value || akisVar()) return;
+    g.dataset.oneri = oneri;
+    g.placeholder = `${oneri}   (Tab)`;
+    g.classList.add("oneri-var");
+  } catch { /* oneri istege bagli */ }
+}
+document.addEventListener("ajan-tur-bitti", () => sonrakiOneri());
 
 // ---- yanit surerken yazilan mesajlarin sirasi ----
 const siradakiler = [];

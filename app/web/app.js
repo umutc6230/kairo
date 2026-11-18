@@ -135,6 +135,7 @@ async function oturumAc(id, kaydetme = false) {
     // sohbet projeye ozgu: baska projenin sohbeti acilinca o proje etkin olur
     if (o.alan && o.alan !== projeDurumu.etkin?.id) await projeyeGec(o.alan);
     durum.oturumId = o.id;
+    document.getElementById("girdi").dispatchEvent(new Event("oturum-degisti"));
     gorunumGoster("sohbet");
     mesajlariCiz(o);
     ajanKayitlariniBirlestir(o);

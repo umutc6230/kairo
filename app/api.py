@@ -7,6 +7,7 @@ import contextlib
 import json
 import os
 import platform
+import re
 import secrets
 import shutil
 import subprocess
@@ -269,6 +270,11 @@ class SkillIceKurIstegi(BaseModel):
 class AltOturumIstegi(BaseModel):
     baslik: str = Field(min_length=1, max_length=200)
     kaynak: str = Field(default="", max_length=64)  # onerinin arac cagrisi id'si
+
+
+class SonrakiOneriIstegi(BaseModel):
+    kullanici: str = Field(default="", max_length=4000)
+    asistan: str = Field(default="", max_length=6000)
 
 
 class OneriRedIstegi(BaseModel):
@@ -1475,6 +1481,39 @@ def uygulama_olustur(
     @app.post("/api/oturumlar/{oturum_id}/alt")
     async def oturum_alt(oturum_id: str, istek: AltOturumIstegi) -> dict:
         return oturumlar.alt_olustur(oturum_id, istek.baslik, istek.kaynak).model_dump()
+
+    @app.post("/api/sonraki-oneri")
+    async def sonraki_oneri(istek: SonrakiOneriIstegi) -> dict:
+        """Claude Code gibi: tur bitince kullanicinin muhtemel sonraki mesajini tek satir onerir.
+        Girdi kutusunda soluk gorunur, Tab ile alinir. Oneri yoksa bos doner; hata sessizdir."""
+        if not istek.asistan.strip():
+            return {"oneri": ""}
+        istem = (
+            "Asagida bir kullanici ile kodlama asistaninin son konusma turu var. Kullanicinin "
+            "BIR SONRAKI mesajini, kullanicinin agzindan, Turkce, en fazla 70 karakterlik tek "
+            "emir cumlesi olarak tahmin et (or. 'main'e birlestir ve DURUM.md guncelle'). "
+            "Asistanin sundugu acik bir sonraki adim, soru ya da onay bekleyen is varsa onu sec. "
+            "Belirgin bir sonraki adim yoksa bos dize dondur.\n\n"
+            f"KULLANICI: {istek.kullanici[-1500:]}\n\nASISTAN: {istek.asistan[-4000:]}"
+        )
+        try:
+            async with asyncio.timeout(45), yonetici.kullan() as llm:
+                v = await llm.json_cikti(
+                    istem,
+                    {"type": "object", "properties": {"oneri": {"type": "string"}},
+                     "required": ["oneri"]},
+                    ad="sonraki_oneri", max_tokens=80, dusunme="kapali",
+                )  # fmt: skip
+        except Exception as e:  # noqa: BLE001 - oneri istege bagli; sohbeti bozmaz
+            logger.debug("Sonraki oneri alinamadi: {}", e)
+            return {"oneri": ""}
+        oneri = " ".join(str(v.get("oneri") or "").split()).strip(" .\"'")
+        # kucuk modeller istemdeki etiketi tekrarlayabilir ("SONRAKI mesaj: ...", "KULLANICI: ...")
+        oneri = re.sub(r"^[^:]{0,40}(sonraki|kullanici|mesaj)[^:]{0,20}:\s*", "", oneri, flags=re.I)
+        oneri = oneri.strip(" .\"'")
+        if oneri.casefold() == " ".join(istek.kullanici.split()).strip(" .\"'").casefold():
+            oneri = ""  # az once yazdigini tekrar onermek anlamsiz
+        return {"oneri": oneri[:100]}
 
     @app.post("/api/oturumlar/{oturum_id}/oneri-reddet")
     async def oturum_oneri_reddet(oturum_id: str, istek: OneriRedIstegi) -> dict:

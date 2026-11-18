@@ -162,3 +162,57 @@ async def test_model_yonetici_ollama_modelini_yonlendirir(tmp_path, servis) -> N
     assert cevap["message"]["content"] == "tamam"
     govde = json.loads(next(c for m, y, c in kayit if y == "/v1/chat/completions"))
     assert govde["model"] == "lfm3:1.7b"
+
+
+async def test_sonraki_oneri_ucu(istemci, app) -> None:
+    from contextlib import asynccontextmanager
+
+    gelen = []
+
+    class Sahte:
+        async def json_cikti(self, istem, *_a, **_k):
+            gelen.append(istem)
+            return {"oneri": "  main'e birlestir ve DURUM.md guncelle. "}
+
+    @asynccontextmanager
+    async def kullan(*_a, **_k):
+        yield Sahte()
+
+    app.state.yonetici.kullan = kullan
+    bos = await istemci.post("/api/sonraki-oneri", json={"kullanici": "x", "asistan": " "})
+    assert bos.json() == {"oneri": ""} and not gelen  # asistan cevabi yoksa model cagrilmaz
+    r = await istemci.post(
+        "/api/sonraki-oneri",
+        json={"kullanici": "derle", "asistan": "Teslim edildi; main birlesmedi."},
+    )
+    assert r.json() == {"oneri": "main'e birlestir ve DURUM.md guncelle"}
+    assert "main birlesmedi" in gelen[0]
+
+    @asynccontextmanager
+    async def bozuk(*_a, **_k):
+        raise RuntimeError("model kapali")
+        yield
+
+    app.state.yonetici.kullan = bozuk
+    assert (await istemci.post("/api/sonraki-oneri", json={"asistan": "a"})).json() == {"oneri": ""}
+
+
+async def test_sonraki_oneri_etiket_ve_tekrar_temizlenir(istemci, app) -> None:
+    from contextlib import asynccontextmanager
+
+    cevaplar = iter(["BIR SONRAKI mesaji: Testleri calistir", "'derle ve teslim et"])
+
+    class Sahte:
+        async def json_cikti(self, *_a, **_k):
+            return {"oneri": next(cevaplar)}
+
+    @asynccontextmanager
+    async def kullan(*_a, **_k):
+        yield Sahte()
+
+    app.state.yonetici.kullan = kullan
+    govde = {"kullanici": "Derle ve teslim et", "asistan": "Teslim edildi."}
+    assert (await istemci.post("/api/sonraki-oneri", json=govde)).json()[
+        "oneri"
+    ] == "Testleri calistir"
+    assert (await istemci.post("/api/sonraki-oneri", json=govde)).json()["oneri"] == ""

@@ -639,6 +639,11 @@ async function izleyiciYenile(v, zorla = true) {
     return;
   }
   if (izleyiciler.get(v.kap) !== v) return; // beklerken kutu baska goreve baglandi
+  // gorev bu izlemede bitti (sayfa acilisinda zaten bitmis olan sayilmaz): sonraki mesaj onerisi
+  if (v.sonDurum && !BITMIS.has(v.sonDurum) && BITMIS.has(r.durum)) {
+    setTimeout(() => document.dispatchEvent(new Event("ajan-tur-bitti")), 300);
+  }
+  v.sonDurum = r.durum;
   const imza = JSON.stringify(r) + [...v.acik].join(",");
   if (!zorla && imza === v.imza) return;
   v.imza = imza;
