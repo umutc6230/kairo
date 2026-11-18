@@ -277,6 +277,11 @@ class SonrakiOneriIstegi(BaseModel):
     asistan: str = Field(default="", max_length=6000)
 
 
+class GeriSarIstegi(BaseModel):
+    mesaj_id: str = Field(default="", max_length=64)
+    run: str = Field(default="", max_length=64)
+
+
 class OneriRedIstegi(BaseModel):
     kaynak: str = Field(min_length=1, max_length=64)
     karar: str = Field(default="reddedildi", pattern=r"^(reddedildi|is:[0-9a-f]{12})$")
@@ -1475,6 +1480,11 @@ def uygulama_olustur(
         return oturumlar.getir(oturum_id).model_dump()
 
     # ---- oturum catal / temizle / disa aktar (A4.5); temizle hafizaya dokunmaz ----
+    @app.post("/api/oturumlar/{oturum_id}/geri-sar")
+    async def oturum_geri_sar(oturum_id: str, istek: GeriSarIstegi) -> dict:
+        o, metin = oturumlar.geri_sar(oturum_id, istek.mesaj_id, istek.run)
+        return {"oturum": o.model_dump(), "metin": metin}
+
     @app.post("/api/oturumlar/{oturum_id}/catal")
     async def oturum_catal(oturum_id: str) -> dict:
         return oturumlar.catal(oturum_id).model_dump()

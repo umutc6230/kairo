@@ -189,6 +189,26 @@ function sutun() {
   return s;
 }
 
+// Claude Code rewind: secilen mesaj ve sonrasi silinir, mesaj metni tekrar girdiye gelir
+async function geriSar(m) {
+  const oid = durum.oturumId;
+  if (!oid || akisVar()) { bildir("Cevap sürerken geri sarılamaz.", "hata"); return; }
+  if (!(await onayla("Buradan geri sar", "Bu mesaj ve sonrasındaki konuşma silinecek; mesaj yazma kutusuna geri gelecek. Ajanın yaptığı dosya değişiklikleri geri alınmaz (onlar için /rewind).", { evet: "Geri sar", tehlike: true }))) return;
+  try {
+    const v = await api(`/api/oturumlar/${oid}/geri-sar`, { method: "POST", govde: m.id ? { mesaj_id: m.id } : { run: m.run } });
+    if (m.run) { // tarayici onbellegindeki ajan kayitlari da ayni noktaya kesilir
+      const t = ajanKayitlari();
+      t[oid] = (v.oturum.ajan_runlari || []).slice();
+      try { localStorage.setItem(AJAN_ANAHTAR, JSON.stringify(t)); } catch { /* depolama kapali */ }
+    }
+    await geriCagri.oturumAc(oid, true);
+    $("#girdi").value = v.metin || "";
+    boyutla();
+    gonderDurumu();
+    $("#girdi").focus();
+  } catch (e) { bildir(e.message, "hata"); }
+}
+
 function kullaniciMesaji(m) {
   const ekler = (m.ekler || []).map((e) => e.tur === "resim"
     ? `<img src="/api/ekler/${e.id}" alt="${kacir(e.ad)}" data-buyut="${e.id}">`
@@ -196,8 +216,11 @@ function kullaniciMesaji(m) {
   const d = el(`<div class="mesaj kullanici">
     ${ekler ? `<div class="mesaj-ekleri">${ekler}</div>` : ""}
     ${m.metin ? `<div class="balon">${kacir(maskele(m.metin))}</div>` : ""}
-    <div class="mesaj-alt"><button class="ikon-btn" title="Kopyala" data-ikon="kopyala"></button></div></div>`);
+    <div class="mesaj-alt"><button class="ikon-btn" title="Kopyala" data-ikon="kopyala"></button>
+      ${m.id || m.run ? '<button class="ikon-btn geri-sar" title="Buradan geri sar: bu mesaj ve sonrası silinir, mesaj kutuya gelir" aria-label="Buradan geri sar" data-ikon="yenile"></button>' : ""}</div></div>`);
   d.querySelector(".mesaj-alt .ikon-btn").onclick = () => kopyala(m.metin);
+  const gs = d.querySelector(".geri-sar");
+  if (gs) gs.onclick = () => geriSar(m);
   d.querySelectorAll("[data-buyut]").forEach((img) => {
     img.onclick = () => modal({ baslik: img.alt, icerik: `<img class="resim-buyuk" src="${img.src}">`, genis: true });
   });
@@ -853,7 +876,7 @@ export function ajanBloklariniCiz(oturumId) {
   const s = $("#mesajlar .mesaj-sutun") || sutun();
   bosDurum(false);
   kayitlar.forEach((k, i) => {
-    s.append(kullaniciMesaji({ rol: "kullanici", metin: k.metin, ekler: [] }));
+    s.append(kullaniciMesaji({ rol: "kullanici", metin: k.metin, ekler: [], run: k.run }));
     const b = ajanBlogu(k);
     s.append(b.kap);
     if (i === kayitlar.length - 1) sohbetteGorevGoster(b.detay, k.run);

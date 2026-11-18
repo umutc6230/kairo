@@ -9,7 +9,7 @@ from pathlib import Path
 
 from pydantic import BaseModel, Field
 
-from app.exceptions import Bulunamadi
+from app.exceptions import Bulunamadi, UygulamaHatasi
 from app.services.depo import json_oku, json_yaz
 
 
@@ -91,6 +91,27 @@ class OturumDeposu:
         asil = self.getir(oturum_id)
         kopya = Oturum(baslik=f"{asil.baslik} (kopya)"[:120], mesajlar=list(asil.mesajlar))
         return self.kaydet(kopya)
+
+    def geri_sar(self, oturum_id: str, mesaj_id: str = "", run: str = "") -> tuple[Oturum, str]:
+        """Claude Code rewind: secilen kullanici mesaji ve SONRASI silinir; metni geri doner
+        (girdiye konur). Ajan turlarinda `run` ile o gorev kaydi ve sonrakiler silinir.
+        Dosya degisikliklerine dokunmaz (onlar checkpoint /rewind ile geri alinir)."""
+        o = self.getir(oturum_id)
+        if mesaj_id:
+            i = next((n for n, m in enumerate(o.mesajlar) if m.id == mesaj_id), None)
+            if i is None or o.mesajlar[i].rol != "kullanici":
+                raise UygulamaHatasi("Geri sarilacak kullanici mesaji bulunamadi.")
+            metin = o.mesajlar[i].metin
+            o.mesajlar = o.mesajlar[:i]
+        elif run:
+            i = next((n for n, k in enumerate(o.ajan_runlari) if k.get("run") == run), None)
+            if i is None:
+                raise UygulamaHatasi("Geri sarilacak ajan turu bulunamadi.")
+            metin = str(o.ajan_runlari[i].get("metin", ""))
+            o.ajan_runlari = o.ajan_runlari[:i]
+        else:
+            raise UygulamaHatasi("Geri sarmak icin mesaj ya da ajan turu secilmeli.")
+        return self.kaydet(o), metin
 
     def temizle(self, oturum_id: str) -> Oturum:
         """Mesajlari siler, oturum kalir. Kalici hafizaya DOKUNMAZ (A4.5)."""
