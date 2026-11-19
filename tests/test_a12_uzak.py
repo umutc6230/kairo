@@ -166,3 +166,14 @@ async def test_tailscale_disi_ip_reddedilir(app, tmp_path) -> None:
         async with httpx.AsyncClient(transport=httpx.ASGITransport(app=asgi, client=(ip, 5000)),
                                      base_url="https://umut") as c:  # fmt: skip
             assert (await c.get("/uzak/")).status_code == beklenen, ip
+
+
+async def test_uzak_sayfa_dil(app, tmp_path) -> None:
+    depo = uzak.UzakDeposu(tmp_path)
+    for dil, beklenen in (("tr", 'lang="tr"'), ("en", 'lang="en"')):
+        uapp = uzak.uzak_uygulamasi(depo, app.state.uzak_ic_cagri, "AB:CD", lambda d=dil: d)
+        async with httpx.AsyncClient(transport=httpx.ASGITransport(app=uapp),
+                                     base_url="https://telefon.lan") as c:  # fmt: skip
+            html = (await c.get("/uzak")).text
+        assert beklenen in html
+        assert ("window.KAIRO_EN=" in html) == (dil == "en")

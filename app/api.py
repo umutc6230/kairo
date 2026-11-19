@@ -2818,7 +2818,7 @@ def uygulama_olustur(
         cert, key, parmak = await asyncio.to_thread(
             uzak_mod.sertifika, veri_dizini / "uzak-tls", hostlar
         )
-        uapp = uzak_mod.uzak_uygulamasi(uzak_depo, _ic_cagri, parmak)
+        uapp = uzak_mod.uzak_uygulamasi(uzak_depo, _ic_cagri, parmak, lambda: ayarlar.oku().dil)
         aglar = uzak_mod.TAILSCALE_AGLARI if a.uzak_ag == "tailscale" else None
         asgi = uzak_mod.tam_erisim_asgi(uzak_depo, uapp, app, oturum_anahtari, aglar)
         try:

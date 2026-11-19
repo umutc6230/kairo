@@ -279,7 +279,18 @@ def _eslestir(metod: str, yol: str) -> tuple[Rol, str] | None:
     return None
 
 
-def uzak_uygulamasi(depo: UzakDeposu, ic_cagri: IcCagri, parmak_izi: str = "") -> FastAPI:
+def _ingilizce_ekle(html: str) -> str:
+    """Arayuz dili en ise sozlugu ve i18n.js'i sayfaya gomer (CSP yalniz inline script izinli)."""
+    web = Path(__file__).parent / "web"
+    sozluk = (web / "en.json").read_text(encoding="utf-8").replace("</", "<\\/")
+    modul = (web / "i18n.js").read_text(encoding="utf-8")
+    ek = f'<script>window.KAIRO_EN={sozluk};</script>\n<script type="module">{modul}</script>\n'
+    return html.replace('<html lang="tr">', '<html lang="en">').replace("</body>", ek + "</body>")
+
+
+def uzak_uygulamasi(
+    depo: UzakDeposu, ic_cagri: IcCagri, parmak_izi: str = "", dil: Callable[[], str] = lambda: "tr"
+) -> FastAPI:
     app = FastAPI(docs_url=None, redoc_url=None, openapi_url=None)
     esles_siniri, cihaz_siniri = HizSiniri(5), HizSiniri(120)
 
@@ -299,6 +310,8 @@ def uzak_uygulamasi(depo: UzakDeposu, ic_cagri: IcCagri, parmak_izi: str = "") -
     @app.get("/uzak")
     async def sayfa() -> HTMLResponse:
         html = (Path(__file__).parent / "web" / "uzak.html").read_text(encoding="utf-8")
+        if dil() == "en":
+            html = _ingilizce_ekle(html)
         return HTMLResponse(html, headers={"Content-Security-Policy": (
             "default-src 'self'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; "
             "connect-src 'self'; frame-ancestors 'none'")})  # fmt: skip
