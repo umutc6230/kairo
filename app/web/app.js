@@ -645,7 +645,11 @@ async function baslat() {
   });
 
   await oturumlariYenile();
-  git({ tur: "yeni", acilis: true });
+  // Acilista son sohbet acilir (liste guncellemeye gore sirali); hic yoksa yeni sohbet.
+  // Kullanici o arada yazmaya basladiysa yazdigi bos ekranda korunur.
+  const son = durum.oturumlar?.[0];
+  if (son && !$("#girdi").value.trim()) git({ tur: "oturum", id: son.id });
+  else git({ tur: "yeni", acilis: true });
   setInterval(() => { if (!document.hidden) { durumYenile(); disDegisiklikleriAl(); } }, 3000);
   document.documentElement.dataset.hazir = "1"; // tum isleyiciler bagli (E2E ve otomasyon bunu bekler)
 }
