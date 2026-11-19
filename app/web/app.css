@@ -149,7 +149,19 @@ svg { display: block; }
 .kart-ayrac { height: 1px; background: var(--cizgi2); }
 
 /* ---- yazma alani ---- */
-.yazma-kap { padding: 0 24px 14px; width: 100%; max-width: 1008px; margin: 0 auto; }
+.yazma-kap { padding: 0 24px 14px; width: 100%; max-width: 1008px; margin: 0 auto; position: relative; }
+/* Baglam halkasi (yazma kutusu alt satiri) + dokum acilir paneli */
+.baglam-halka { width: 26px; height: 26px; padding: 4px; border: 0; border-radius: 50%; background: none; color: var(--soluk); cursor: pointer; display: inline-grid; place-items: center; }
+.baglam-halka:hover, .baglam-halka[aria-expanded="true"] { background: var(--yuzey2); }
+.baglam-halka:focus-visible { outline: 2px solid var(--mavi); outline-offset: 1px; }
+.baglam-halka svg { width: 18px; height: 18px; transform: rotate(-90deg); }
+.baglam-halka circle { fill: none; stroke-width: 2.5; }
+.baglam-halka .bh-iz { stroke: var(--cizgi2); }
+.baglam-halka .bh-dolu { stroke: var(--soluk); stroke-linecap: round; transition: stroke-dasharray .3s ease; }
+.baglam-halka.dolu-uyari .bh-dolu { stroke: var(--sari); }
+.baglam-halka.dolu-kritik .bh-dolu { stroke: var(--kirmizi); }
+.baglam-pop { position: absolute; right: 24px; bottom: calc(100% - 6px); width: min(340px, calc(100% - 48px)); z-index: 30; background: var(--yuzey); border: 1px solid var(--cizgi2); border-radius: var(--yaricap); padding: 12px 14px; box-shadow: 0 10px 30px rgb(0 0 0 / .35); font-size: 13px; }
+@media (prefers-reduced-motion: reduce) { .baglam-halka .bh-dolu { transition: none; } }
 .bant { display: flex; align-items: center; gap: 10px; padding: 10px 14px; margin-bottom: 10px; border-radius: var(--yaricap); background: var(--yuzey); font-size: 14px; color: var(--soluk); }
 .bant .vurgu { color: var(--kirmizi); display: inline-flex; gap: 6px; align-items: center; white-space: nowrap; flex-shrink: 0; font-weight: 600; }
 .bant > span:not(.vurgu) { min-width: 0; }
@@ -206,6 +218,8 @@ svg { display: block; }
 .mesaj-alt .ikon-btn { width: 28px; height: 28px; }
 .mesaj-alt .ikon-btn svg { width: 15px; height: 15px; }
 .mesaj-alt .istat { margin-left: 4px; }
+.mesaj-alt .mesaj-saat { margin: 0 2px 0 4px; font-variant-numeric: tabular-nums; }
+.mesaj-alt .sesli-oku[aria-pressed="true"] { color: var(--vurgu); background: var(--yuzey2); }
 .hata-kutu { border: 1px solid #f2706b55; background: #f2706b14; color: var(--tehlike-metin); padding: 10px 14px; border-radius: 10px; font-size: 14px; margin-top: 6px; }
 .uyari-kutu { border: 1px solid #f2b24c55; background: #f2b24c12; color: var(--uyari-metin); padding: 8px 12px; border-radius: 10px; font-size: 13.5px; margin: 6px 0; }
 
@@ -571,6 +585,7 @@ pre.duz { white-space: pre-wrap; font-family: var(--mono); font-size: 13px; marg
   .bos-durum { align-items: stretch; }
   .kart-satir span { min-width: 0; overflow-wrap: anywhere; }
   .yazma-kap { padding: 0 10px 10px; }
+  .baglam-pop { right: 10px; width: calc(100% - 20px); }
   .bant { flex-wrap: wrap; gap: 6px 10px; }
   .bant > span { min-width: 0; overflow-wrap: anywhere; }
   .alt-satir { flex-wrap: wrap; gap: 4px; }

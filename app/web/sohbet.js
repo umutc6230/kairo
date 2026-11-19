@@ -288,7 +288,7 @@ function asistanMesaji() {
     <div class="govde-metin md"></div>
     <div class="uyarilar"></div>
     <div class="canli-alt" hidden><span class="nokta3" aria-hidden="true"><i></i><i></i><i></i></span><span class="canli-sure"></span></div>
-    <div class="mesaj-alt" hidden><button class="ikon-btn" title="Kopyala" data-ikon="kopyala"></button><span class="istat istat-cipleri"></span></div>
+    <div class="mesaj-alt" hidden><button class="ikon-btn" title="Kopyala" data-ikon="kopyala"></button><button class="ikon-btn sesli-oku" title="Sesli oku" aria-label="Sesli oku" aria-pressed="false" data-ikon="hoparlor"></button><span class="mesaj-saat soluk"></span><span class="istat istat-cipleri"></span></div>
   </div>`);
   const dusunceKutu = d.querySelector(".dusunce");
   d.querySelector(".baykus-kap").innerHTML = ikon("logo");
@@ -475,7 +475,7 @@ function asistanMesaji() {
       this.durum("");
       d.querySelector(".uyarilar").append(el(`<div class="hata-kutu">${kacir(mesaj)}</div>`));
     },
-    bitir(ist) {
+    bitir(ist, zaman) {
       this.mod(null);
       const gecen = this.gecen();
       this.sayacDurdur = null;
@@ -486,9 +486,33 @@ function asistanMesaji() {
       alt.hidden = false;
       alt.querySelector(".istat").innerHTML = istatistikCipleri(ist);
       alt.querySelector(".ikon-btn").onclick = () => kopyala(this.metin);
+      const t = zaman ? new Date(zaman) : new Date();
+      if (!Number.isNaN(t.getTime())) {
+        const saat = alt.querySelector(".mesaj-saat");
+        saat.textContent = t.toLocaleTimeString("tr-TR", { hour: "2-digit", minute: "2-digit" });
+        saat.title = t.toLocaleString("tr-TR");
+      }
+      sesliOkuBagla(alt.querySelector(".sesli-oku"), () => d.querySelector(".govde-metin").textContent);
     },
   };
   return o;
+}
+
+// Sesli oku: tarayicinin kendi Turkce sesi (ek paket/ag yok). Ayni dugme durdurur.
+function sesliOkuBagla(b, metin) {
+  if (!("speechSynthesis" in window)) { b.hidden = true; return; }
+  b.onclick = () => {
+    const s = window.speechSynthesis;
+    const bu = b.getAttribute("aria-pressed") === "true";
+    s.cancel();
+    document.querySelectorAll('.sesli-oku[aria-pressed="true"]').forEach((x) => x.setAttribute("aria-pressed", "false"));
+    if (bu) return;
+    const u = new SpeechSynthesisUtterance((metin() || "").replace(/\s+/g, " ").trim());
+    u.lang = "tr-TR";
+    u.onend = u.onerror = () => b.setAttribute("aria-pressed", "false");
+    b.setAttribute("aria-pressed", "true");
+    s.speak(u);
+  };
 }
 
 function kaydedilmisAsistan(m) {
@@ -502,7 +526,7 @@ function kaydedilmisAsistan(m) {
   for (const a of m.araclar || []) o.aracSonucu(a);
   if (m.metin) o.parcaEkle(m.metin);
   if (m.hata) o.hata(m.hata);
-  o.bitir({ ...m.istatistik, model: m.istatistik?.model || m.model });
+  o.bitir({ ...m.istatistik, model: m.istatistik?.model || m.model }, m.zaman);
   return o.el;
 }
 
@@ -672,7 +696,7 @@ export async function gonder() {
 }
 
 // ---- sonraki mesaj onerisi (Claude Code gibi soluk metin, Tab ile al) ----
-const VARSAYILAN_YER = "Bir görev yaz ya da soru sor";
+const VARSAYILAN_YER = "Ne üzerinde çalışalım?";
 function oneriTemizle() {
   const g = $("#girdi");
   delete g.dataset.oneri;

@@ -641,6 +641,7 @@ async function baslat() {
     else if (k === "k") { e.preventDefault(); aramaAc(oturumAc); }
     else if (k === "b") { e.preventDefault(); $("#kok").classList.toggle("kenar-kapali"); }
     else if (k === ",") { e.preventDefault(); ayarlarAc(); }
+    else if (k === "l") { e.preventDefault(); $("#girdi")?.focus(); }
   });
 
   await oturumlariYenile();

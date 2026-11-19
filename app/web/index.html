@@ -64,11 +64,12 @@
           <div class="yazma-kap">
             <div class="bant" id="uyari-bandi" hidden></div>
             <div id="uzanti-bantlari"></div>
+            <div class="baglam-pop" id="baglam-pop" role="dialog" aria-label="Bağlam" hidden></div>
             <div class="yazma" id="yazma">
               <div class="ek-listesi" id="ek-listesi"></div>
               <div class="yazma-satir">
                 <button class="ikon-btn" id="btn-ek" title="Dosya ekle: resim, PDF, ses, metin" aria-label="Dosya ekle" data-ikon="arti"></button>
-                <textarea id="girdi" rows="1" placeholder="Bir görev yaz ya da soru sor" aria-label="Mesaj"></textarea>
+                <textarea id="girdi" rows="1" placeholder="Ne üzerinde çalışalım?" aria-label="Mesaj" aria-keyshortcuts="Control+L"></textarea>
                 <button class="ikon-btn" id="btn-dikte" title="Sesle yaz" aria-label="Sesle yaz" aria-pressed="false" data-ikon="mikrofon"></button>
                 <button class="gonder" id="btn-gonder" title="Gönder (Enter)" aria-label="Gönder" data-ikon="yukari" disabled></button>
                 <div id="dikte-durum" class="dikte-durum" role="status" aria-live="polite" hidden></div>
@@ -83,6 +84,7 @@
               <div class="alt-sag">
                 <button class="hap duz" id="hap-mod" title="Mod: ajanın neye izinli olduğu" hidden><span id="hap-mod-metni">Mod</span><span data-ikon="asagi" class="kucuk-ikon"></span></button>
                 <button class="hap duz" id="hap-model"><span id="hap-model-metni">Model</span><span class="soluk" id="hap-dusunme-metni">Kapalı</span></button>
+                <button class="baglam-halka" id="hap-baglam" title="Bağlam" aria-label="Bağlam doluluğu" aria-expanded="false" hidden><svg viewBox="0 0 20 20" aria-hidden="true"><circle class="bh-iz" cx="10" cy="10" r="7.5"/><circle class="bh-dolu" cx="10" cy="10" r="7.5" pathLength="100" stroke-dasharray="0 100"/></svg></button>
                 <span class="nokta buyuk" id="hap-nokta" data-yalniz-yerel title="Sunucu durumu"></span>
               </div>
             </div>
