@@ -15,7 +15,9 @@ pytestmark = pytest.mark.skipif(not kum.destekli(), reason="AppContainer yalniz 
 
 
 def _kos(kok: Path, komut: str) -> subprocess.CompletedProcess[bytes]:
-    return subprocess.run(kum.argv(kok, kok, komut), capture_output=True, timeout=60)  # noqa: S603
+    return subprocess.run(  # noqa: S603
+        kum.argv(kok, kok, komut), capture_output=True, timeout=60, cwd=kok
+    )
 
 
 @pytest.fixture
@@ -71,3 +73,39 @@ def test_cikis_kodu_ve_cikti_gecer(kok: Path) -> None:
 def test_frozen_argv_exe_kendisi(monkeypatch: pytest.MonkeyPatch, kok: Path) -> None:
     monkeypatch.setattr(sys, "frozen", True, raising=False)
     assert kum.argv(kok, kok, "x")[:2] == [sys.executable, "--kum"]
+
+
+def test_ev_ve_surucu_koku_reddedilir(tmp_path: Path) -> None:
+    for genis in (Path.home(), Path(Path.home().anchor)):
+        with pytest.raises(OSError, match="cok genis"):
+            kum.kok_dogrula(genis)
+    assert kum.kok_dogrula(tmp_path) == tmp_path.resolve()
+
+
+def test_her_projeye_ayri_kap(tmp_path: Path) -> None:
+    a, b = tmp_path / "a", tmp_path / "b"
+    a.mkdir()
+    b.mkdir()
+    assert kum.kap_adi(a) != kum.kap_adi(b)
+    assert len(kum.kap_adi(a)) <= 64  # AppContainer adi siniri
+
+
+def test_bir_projenin_kabi_digerine_yazamaz(tmp_path: Path) -> None:
+    a, b = tmp_path / "a", tmp_path / "b"
+    a.mkdir()
+    b.mkdir()
+    assert _kos(b, "echo b> b.txt").returncode == 0  # b'nin kabina b'de izin verildi
+    r = _kos(a, f'echo x> "{b / "a-dan.txt"}"')
+    assert r.returncode != 0
+    assert not (b / "a-dan.txt").exists()
+
+
+def test_projedeki_sahte_app_paketi_yardimciyi_ele_geciremez(kok: Path) -> None:
+    kacis = kok.parent / "ele-gecirildi.txt"
+    sahte = kok / "app" / "agent"
+    sahte.mkdir(parents=True)
+    (kok / "app" / "__init__.py").write_text("")
+    (sahte / "__init__.py").write_text("")
+    (sahte / "kum.py").write_text(f"open({str(kacis)!r}, 'w').write('x')\ndef main(a): return 0\n")
+    _kos(kok, "echo tamam")
+    assert not kacis.exists()

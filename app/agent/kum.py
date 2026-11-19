@@ -13,6 +13,7 @@ Kullanim (yardimci surec): `Kairo.exe --kum <kok> <cwd> <komut>` -> cikis kodu =
 from __future__ import annotations
 
 import ctypes
+import hashlib
 import os
 import subprocess
 import sys
@@ -98,16 +99,36 @@ def _k32() -> ctypes.WinDLL:
     return k
 
 
-def kap_sid() -> str:
+def kap_adi(kok: Path) -> str:
+    """Her proje kokune AYRI AppContainer: A projesine verilen yazma izni B'nin kabinde gecmez."""
+    oz = hashlib.sha256(str(kok.resolve()).lower().encode()).hexdigest()[:24]
+    return f"{KAP_ADI}.{oz}"
+
+
+def kok_dogrula(kok: Path) -> Path:
+    """Ev klasoru, onun ustleri, surucu koku ve Windows/Program Files kok olarak reddedilir."""
+    k = kok.resolve()
+    ev = Path.home().resolve()
+    sistem = [Path(os.environ.get(d, "")).resolve() for d in ("WINDIR", "PROGRAMFILES",
+              "PROGRAMFILES(X86)", "PROGRAMDATA") if os.environ.get(d)]  # fmt: skip
+    if not k.is_dir():
+        raise OSError(f"Proje klasoru yok: {k}")
+    genis = k == ev or k in ev.parents or k.parent == k
+    if genis or any(k == s or s in k.parents for s in sistem):
+        raise OSError(f"Kum havuzu bu klasore yazma izni vermez (cok genis): {k}. Proje acin.")
+    return k
+
+
+def kap_sid(ad: str = KAP_ADI) -> str:
     """AppContainer profilini (yoksa) olusturur, SID metnini dondurur."""
     userenv = ctypes.WinDLL("userenv")
     advapi = ctypes.WinDLL("advapi32", use_last_error=True)
     sid = ctypes.c_void_p()
     hr = userenv.CreateAppContainerProfile(
-        KAP_ADI, KAP_ADI, "Kairo komut kum havuzu", None, 0, ctypes.byref(sid)
+        ad, ad, "Kairo komut kum havuzu", None, 0, ctypes.byref(sid)
     )
     if hr & 0xFFFFFFFF == _ERROR_ALREADY_EXISTS_HR:
-        hr = userenv.DeriveAppContainerSidFromAppContainerName(KAP_ADI, ctypes.byref(sid))
+        hr = userenv.DeriveAppContainerSidFromAppContainerName(ad, ctypes.byref(sid))
     if hr != 0:
         raise OSError(f"AppContainer olusturulamadi (HRESULT {hr & 0xFFFFFFFF:#x})")
     metin = w.LPWSTR()
@@ -190,7 +211,8 @@ def _miras(k: ctypes.WinDLL, h: int) -> int:
 
 def calistir(kok: Path, cwd: Path, komut: str) -> int:
     k = _k32()
-    sid_metin = kap_sid()
+    kok = kok_dogrula(kok)
+    sid_metin = kap_sid(kap_adi(kok))
     koke_izin_ver(kok, sid_metin)
     sid = ctypes.c_void_p()
     if not ctypes.windll.advapi32.ConvertStringSidToSidW(sid_metin, ctypes.byref(sid)):
@@ -247,13 +269,21 @@ def argv(kok: Path, cwd: Path, komut: str) -> list[str]:
     """Yardimci surecin argv'si: derlenmiste exe'nin kendisi, gelistirmede python -m."""
     if getattr(sys, "frozen", False):
         return [sys.executable, "--kum", str(kok), str(cwd), komut]
-    return [sys.executable, "-m", "app.agent.kum", str(kok), str(cwd), komut]
+    # -P: calisma klasoru (proje) sys.path'e girmez; kod yalniz bu deponun mutlak kokunden
+    # yuklenir, projeye konmus sahte "app" paketi yardimciyi (kum disi) ele geciremez.
+    depo = str(Path(__file__).resolve().parents[2])
+    kod = (
+        f"import sys; sys.path.insert(0, {depo!r}); "
+        "from app.agent.kum import main; sys.exit(main(sys.argv[1:]))"
+    )
+    return [sys.executable, "-P", "-c", kod, str(kok), str(cwd), komut]
 
 
-def kok_kur() -> int:
-    """Bir kerelik, YONETICI olarak: surucu kokune listele izni (dir/PowerShell icin)."""
-    sid = kap_sid()
-    for kok in {Path(Path.cwd().anchor), Path(os.environ.get("SYSTEMDRIVE", "C:") + "\\")}:
+def kok_kur(proje: str) -> int:
+    """Bir kerelik, YONETICI olarak: surucu kokune o projenin kabi icin listele izni."""
+    proje_kok = kok_dogrula(Path(proje))
+    sid = kap_sid(kap_adi(proje_kok))
+    for kok in {Path(proje_kok.anchor)}:
         if sid not in _sddl(kok):
             _ace_ekle(kok, f"(A;;{_LISTELE:#x};;;{sid})")
         print(f"{kok} hazir")

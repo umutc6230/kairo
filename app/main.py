@@ -179,7 +179,7 @@ def main(argv: list[str] | None = None) -> int:
     if ham[:1] == ["--kum-kur"]:  # bir kerelik, yonetici: surucu kokune listele izni
         from app.agent import kum
 
-        return kum.kok_kur()
+        return kum.kok_kur(ham[1] if len(ham) > 1 else ".")
     if ham[:1] == ["degerlendir"]:  # A13 gercek model degerlendirmesi
         from app import degerlendir
 
