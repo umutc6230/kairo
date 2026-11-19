@@ -247,6 +247,7 @@ def main(argv: list[str] | None = None) -> int:
             min_size=(960, 640),
             frameless=True,
             easy_drag=False,
+            text_select=True,  # varsayilan False: mesajlarda secim/kopyalama ve secim menusu calismiyordu
             background_color="#1f1f1e",
             js_api=api,
         )
