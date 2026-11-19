@@ -113,6 +113,7 @@ class KullaniciAyarlari(BaseModel):
     otomatik_ogrenme: bool = False  # ajan kendi not ekleyebilir (A4.4: kullanici acar)
     otomatik_inceleme: bool = True  # gorev dosya yazdiysa bitince model inceler (Chimera)
     # ---- Claude Desktop ayar karsiliklari ----
+    dil: Literal["tr", "en"] = "tr"  # arayuz dili (app/web/i18n.js + en.json)
     tema: Literal["sistem", "acik", "koyu"] = "koyu"
     yazi_boyutu: Literal["kucuk", "orta", "buyuk"] = "orta"
     sohbet_genisligi: Literal["dar", "genis"] = "dar"
