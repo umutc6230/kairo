@@ -1,10 +1,10 @@
 # Yeniden kullanilabilir Kairo ajan Action'i: baska bir depodan
-# -P: calisilan depoda kendi "app" paketi olsa da Kairo kodu yalniz action_path'ten yuklenir.
 #   - uses: umutc6230/kairo@main
 #     with: { hedef: "testleri gecir", openrouter-api-key: "${{ secrets.OPENROUTER_API_KEY }}" }
 # Ayni guvenlik kurallari (.github/workflows/ajan.yml): degisiklik push edilmez/PR acilmaz,
 # "onayli" modda onay gereken adimda kod 3 ile durur (CI'da gozetimsiz onay YOK); sonuc ve diff
 # `rapor-klasoru` altina yazilir. Hedefi issue/PR metninden otomatik doldurmayin (prompt injection).
+# -P: calisilan depoda kendi "app" paketi olsa da Kairo kodu yalniz action_path'ten yuklenir.
 name: Kairo ajan
 description: Kairo'nun headless ajanini calisan depoda bir hedefle calistirir (OpenRouter modeli).
 inputs:
