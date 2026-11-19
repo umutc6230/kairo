@@ -143,6 +143,7 @@ class KumAdaptoru:
         from app.agent import kum
 
         kum.git_sertlestir(os.environ)  # surec ortami: Kairo'nun tum git cagrilari devralir
+        kum.SERT_AKTIF = True
 
     def durum(self) -> dict:
         from app.agent import kum

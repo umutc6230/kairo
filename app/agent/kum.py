@@ -182,6 +182,7 @@ def _ace_ekle(yol: Path, ace: str) -> None:
 
 
 GIT_SERT = {"core.hooksPath": "NUL", "core.fsmonitor": "false"}
+SERT_AKTIF = False  # KumAdaptoru olusunca True: ortam_allowlist sertlestirmeyi ekler
 
 
 def git_sertlestir(ortam: dict) -> None:
