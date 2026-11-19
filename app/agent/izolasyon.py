@@ -148,7 +148,8 @@ class KumAdaptoru:
             "not": (
                 "Windows AppContainer: ag kapali, yalniz proje klasorune yazilir, kullanici "
                 "profili kapali. Kullanici klasorune kurulu araclar calismayabilir. "
-                "`dir`/PowerShell surucu kokunu okuyamazsa bir kez yonetici olarak: Kairo.exe --kum-kur"
+                "`dir`/PowerShell surucu kokunu okuyamazsa bir kez yonetici olarak: "
+                "Kairo.exe --kum-kur"
                 if ok
                 else "Windows AppContainer yalniz Windows 8+ uzerinde var."
             ),
