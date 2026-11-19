@@ -215,7 +215,14 @@ class KararIstegi(BaseModel):
 
 
 DIKTE_MAX_SN = 30  # Gemma 4 ses girisi ~30 sn
-DIKTE_UZAK = "Dikte yalniz yerel Gemma 4 modeliyle calisir; ses buluta gonderilmez."
+DIKTE_UZAK = (
+    "Bulut dikte kapali: ses buluta gonderilmez. Ayarlar > 'Sesli dikte bulutta' acilirsa "
+    "secili OpenRouter modeli (ses destekliyse) kullanilir."
+)
+DIKTE_UZAK_SESSIZ = (
+    "Secili OpenRouter modeli sesi anlamiyor; ses girisli bir model secin "
+    "(or. google/gemini-2.5-flash)."
+)
 DIKTE_SESSIZ = "Secili model sesi anlamiyor; dikte icin Gemma 4 (E4B/12B) secin."
 DIKTE_TALIMATI = "Bu ses kaydini oldugu gibi yaziya dok. Yalniz soylenen metni yaz."
 DIKTE_MAX_BAYT = 16000 * 2 * DIKTE_MAX_SN + 4096  # 16 kHz mono 16 bit WAV
@@ -2095,7 +2102,14 @@ def uygulama_olustur(
     def dikte_durumu() -> dict:
         a = ayarlar.oku()
         if a.saglayici == "openrouter" and a.or_model:
-            return {"kullanilabilir": False, "model": a.or_model, "neden": DIKTE_UZAK}
+            if not a.dikte_bulut:
+                return {"kullanilabilir": False, "model": a.or_model, "neden": DIKTE_UZAK}
+            if not (openrouter.model_bilgisi(a.or_model) or {}).get("ses"):
+                return {"kullanilabilir": False, "model": a.or_model, "neden": DIKTE_UZAK_SESSIZ}
+            return {
+                "kullanilabilir": True, "model": a.or_model, "neden": "", "max_sn": DIKTE_MAX_SN,
+                "bulut": True,
+            }  # fmt: skip
         p = MODELLER.get(a.model)
         if p is None or not p.ses:
             return {"kullanilabilir": False, "model": a.model, "neden": DIKTE_SESSIZ}

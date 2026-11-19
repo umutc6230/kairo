@@ -109,7 +109,7 @@ async function bitir() {
 function durumuUygula(d) {
   const b = $("#btn-dikte");
   b.setAttribute("aria-disabled", String(!d.kullanilabilir));
-  b.title = d.kullanilabilir ? "Sesle yaz (yerel, en fazla 30 sn)" : `Sesle yazma kullanılamıyor: ${d.neden}`;
+  b.title = d.kullanilabilir ? `Sesle yaz (${d.bulut ? "bulutta: " + d.model : "yerel"}, en fazla 30 sn)` : `Sesle yazma kullanılamıyor: ${d.neden}`;
 }
 
 export async function dikteDurumuYenile() {
