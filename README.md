@@ -140,13 +140,7 @@ no installer and no administrator rights required.
 - Windows 10/11 (WebView2 is preinstalled). Python 3.12 to run from source.
 - For OpenRouter only, no model files are needed; an OpenRouter API key is enough.
 - For local models, a model folder containing `llama.cpp\llama-server.exe` (Vulkan) and `models\*.gguf`.
-  Bundled profiles:
-
-  | Profile | Model | Size |
-  |---|---|---|
-  | `deepseek-heretic` | DeepSeek-V4-Pro Qwen3.5 9B heretic (i1-Q4_K_M) | ~6.2 GB |
-  | `gemma4-12b-heretic` | Gemma 4 12B heretic QAT Q4_0, audio input | ~7.8 GB |
-  | `gemma4-e4b-heretic` | Gemma 4 E4B ultra-uncensored heretic (i1-Q4_K_M), audio input | ~5.9 GB |
+  Models are not bundled; download GGUF files yourself or through the built-in model store.
 
 - On machines with integrated graphics the model uses system RAM: plan for ~1-2 GB of free RAM
   above the model size.
