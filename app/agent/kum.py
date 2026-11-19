@@ -181,6 +181,32 @@ def _ace_ekle(yol: Path, ace: str) -> None:
         ctypes.windll.kernel32.LocalFree(sd)
 
 
+def git_kilitle(kok: Path, sid: str) -> None:
+    """.git kum kabina SALT OKUNUR: kabin yazdigi hook ya da core.fsmonitor, Kairo'nun kum DISINDA
+    calisan git komutlarinda calisip kacis olurdu. Deny ACE paket SID'inde islemedigi (denendi)
+    icin .git koktan devralmayi keser, kabin iznini kaldirir ve yalniz okuma verir. .git dosyasi
+    (worktree) da kilitlenir: yonlendirilirse git baska klasoru kullanir.
+    shortcut: kum icinde YENI olusturulan .git ancak sonraki calistirmada kilitlenir."""
+    g = kok / ".git"
+    if not g.exists():
+        return
+    oku = f"(A;{'OICI' if g.is_dir() else ''};0x1200a9;;;{sid})"
+    sddl = _sddl(g)
+    if sddl.startswith("D:P") and sddl.count(f";{sid})") == 1 and oku in sddl:
+        return  # zaten kilitli
+    miras = "(OI)(CI)" if g.is_dir() else ""
+    for a in (["/inheritance:d"], ["/remove:g", f"*{sid}"], ["/remove:d", f"*{sid}"],
+              ["/grant", f"*{sid}:{miras}RX"]):  # fmt: skip
+        r = subprocess.run(  # noqa: S603 - sabit arac, kabuk yok
+            ["icacls", str(g), *a, "/Q"],
+            capture_output=True,
+            text=True,
+            creationflags=subprocess.CREATE_NO_WINDOW,
+        )
+        if r.returncode != 0:
+            raise OSError(f".git kum havuzuna kilitlenemedi: {r.stderr or r.stdout}")
+
+
 def koke_izin_ver(kok: Path, sid: str) -> None:
     """Proje kokune Modify (alt klasorlere devralinir); izin zaten varsa dokunulmaz."""
     if sid not in _sddl(kok):
@@ -190,6 +216,7 @@ def koke_izin_ver(kok: Path, sid: str) -> None:
         )  # fmt: skip
         if r.returncode != 0:
             raise OSError(f"Proje klasorune kum havuzu izni verilemedi: {r.stderr or r.stdout}")
+    git_kilitle(kok, sid)
     # dir/PowerShell ust klasorleri listeler: yalniz O KLASOR icin (devralinmayan) listele.
     # Bedel: ust klasorlerdeki ADLAR gorunur, icerik degil. Yetki yoksa (or. C:\\) atlanir.
     for ust in kok.parents:

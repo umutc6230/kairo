@@ -109,3 +109,16 @@ def test_projedeki_sahte_app_paketi_yardimciyi_ele_geciremez(kok: Path) -> None:
     (sahte / "kum.py").write_text(f"open({str(kacis)!r}, 'w').write('x')\ndef main(a): return 0\n")
     _kos(kok, "echo tamam")
     assert not kacis.exists()
+
+
+def test_git_klasorune_yazamaz_silemez_ama_projeye_yazar(kok: Path) -> None:
+    (kok / ".git" / "hooks").mkdir(parents=True)
+    (kok / ".git" / "config").write_text("[core]\n")
+    r = _kos(kok, r"echo kotu> .git\hooks\pre-commit")
+    assert r.returncode != 0
+    assert not (kok / ".git" / "hooks" / "pre-commit").exists()
+    _kos(kok, r"echo x>> .git\config")
+    assert (kok / ".git" / "config").read_text() == "[core]\n"
+    _kos(kok, "rmdir /s /q .git")
+    assert (kok / ".git" / "config").exists()
+    assert _kos(kok, "echo ok> normal.txt").returncode == 0
