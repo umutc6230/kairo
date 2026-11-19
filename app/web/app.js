@@ -1,5 +1,6 @@
 // Giris noktasi: acilis, gezinme, kenar cubugu, durum cubugu, menuler, kisayollar.
 import { uzantiYuzeyleriKur } from "./uzantilar.js";
+import { t } from "./i18n.js";
 import { ikon, ikonlariYerlestir } from "./ikonlar.js";
 import { kacir } from "./md.js";
 import { aramaAc, ayarKaydet, ayarlarAc, ayarlarKur, modelYukle, sunucuDurdur } from "./ayarlar.js";
@@ -123,7 +124,7 @@ function baslikMenusu(capa) {
 
 function baslikAyarla(metin) {
   $("#sayfa-basligi").textContent = metin || "Yeni sohbet";
-  document.title = `${metin || "Yeni sohbet"} - Kairo`;
+  document.title = `${metin || t("Yeni sohbet")} - Kairo`;
   baglamYenile();
 }
 

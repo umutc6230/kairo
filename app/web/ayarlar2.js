@@ -1,10 +1,11 @@
 // Claude Desktop ayar karsiliklari: Gorunum, Bildirimler, Masaustu, Kod sekmeleri;
 // baglayici ice aktarma + dizin; gorunumun uygulanmasi ve bildirim gonderme.
+import { dil, dilKur } from "./i18n.js";
 import { ikonlariYerlestir } from "./ikonlar.js";
 import { kacir } from "./md.js";
 import { $, $$, api, bildir, durum, ekAvatar, onayla, sor } from "./ortak.js";
 
-const sec = (ad, secenekler) => `<select class="secim" data-ayar="${ad}">${secenekler.map(([v, e]) => `<option value="${v}">${e}</option>`).join("")}</select>`;
+const sec = (ad, secenekler) => `<select class="secim" data-ayar="${ad}">${secenekler.map(([v, e, en]) => `<option value="${v}"${en ? ` data-en="${en}"` : ""}>${e}</option>`).join("")}</select>`;
 const satir = (baslik, aciklama, kontrol) => `<div class="ayar-satir"><div><div>${baslik}</div>${aciklama ? `<div class="soluk kucuk">${aciklama}</div>` : ""}</div><div class="ayar-kontrol">${kontrol}</div></div>`;
 const anahtar = (ad) => `<label class="anahtar"><input type="checkbox" data-ayar="${ad}"><span></span></label>`;
 
@@ -12,7 +13,8 @@ export const EK_SEKMELER = `<button class="sekme" data-sekme="gorunum">Görünü
 
 export const EK_PANELLER = `
 <div class="modal-govde" data-panel="gorunum" hidden>
-  ${satir("Tema", "Sistem, Windows'un açık/koyu ayarını izler.", sec("tema", [["sistem", "Sistem"], ["acik", "Açık"], ["koyu", "Koyu"]]))}
+  ${satir("Dil / Language", "Arayüz dili. Değişince pencere yenilenir.", sec("dil", [["tr", "Türkçe"], ["en", "English"]]))}
+  ${satir("Tema","Sistem, Windows'un açık/koyu ayarını izler.", sec("tema", [["sistem", "Sistem"], ["acik", "Açık", "Light"], ["koyu", "Koyu"]]))}
   ${satir("Yazı boyutu", "", sec("yazi_boyutu", [["kucuk", "Küçük"], ["orta", "Orta"], ["buyuk", "Büyük"]]))}
   ${satir("Sohbet genişliği", "", sec("sohbet_genisligi", [["dar", "Dar"], ["genis", "Geniş"]]))}
   ${satir("Hareket", "Azalt seçilirse animasyonlar kapanır.", sec("hareket", [["sistem", "Sistem"], ["azalt", "Azalt"]]))}
@@ -70,6 +72,7 @@ export function ekSekmeKur(govde, kaydet) {
     e.onchange = async () => {
       const deger = e.type === "checkbox" ? e.checked : e.type === "number" ? Number(e.value) : e.value.trim();
       await kaydet({ [ad]: deger }, true);
+      if (ad === "dil") { try { localStorage.setItem("kairo-dil", deger); } catch { /* yok */ } location.reload(); return; }
       gorunumUygula(durum.ayarlar);
       if (ad === "baslangicta_ac" || ad === "hizli_kisayol") masaustuYenile(govde);
     };
@@ -106,6 +109,11 @@ export function gorunumUygula(a) {
   k.dataset.genislik = a.sohbet_genisligi || "dar";
   k.dataset.hareket = a.hareket || "sistem";
   k.dataset.ayrinti = a.ayrinti || "normal";
+  const d = a.dil || "tr";
+  if (d !== dil()) {
+    if (d === "en") dilKur("en");
+    else { try { localStorage.setItem("kairo-dil", "tr"); } catch { /* yok */ } location.reload(); }
+  }
 }
 window.matchMedia("(prefers-color-scheme: dark)").addEventListener("change", () => gorunumUygula(durum.ayarlar));
 
