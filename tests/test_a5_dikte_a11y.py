@@ -103,3 +103,31 @@ def test_html_erisilebilirlik_yapisi() -> None:
     assert "prefers-reduced-motion" in css and ":focus-visible" in css
     dikte = (WEB / "dikte.js").read_text(encoding="utf-8")
     assert "SpeechRecognition" not in dikte  # bulut konusma tanima kullanilmaz
+
+
+async def test_dikte_bulut_izinle_ve_ses_destekli_modelle(istemci, app) -> None:
+    from app.services.depo import json_yaz
+
+    await istemci.put("/api/ayarlar", json={"saglayici": "openrouter", "or_model": "g/ses"})
+    d = (await istemci.get("/api/dikte/durum")).json()
+    assert d["kullanilabilir"] is False and "buluta gonderilmez" in d["neden"]  # varsayilan kapali
+
+    await istemci.put("/api/ayarlar", json={"dikte_bulut": True})
+    d = (await istemci.get("/api/dikte/durum")).json()
+    assert d["kullanilabilir"] is False and "sesi anlamiyor" in d["neden"]  # model bilinmiyor
+
+    uzak = app.state.yonetici.uzak
+    json_yaz(uzak.liste_yolu, {"zaman": 0, "modeller": [{"id": "g/ses", "ses": True}]})
+    d = (await istemci.get("/api/dikte/durum")).json()
+    assert d["kullanilabilir"] is True and d["bulut"] is True and d["model"] == "g/ses"
+
+
+def test_openrouter_ses_isteginde_veri_toplama_kapali() -> None:
+    from app.services.openrouter import OpenRouterLLM, _sadelestir
+
+    llm = OpenRouterLLM("k", "g/ses")
+    ses = [{"role": "user", "content": [{"type": "input_audio", "input_audio": {"data": "x"}}]}]
+    assert llm._govde(ses, "kapali", 9)["provider"] == {"data_collection": "deny"}
+    assert "provider" not in llm._govde([{"role": "user", "content": "selam"}], "kapali", 9)
+    m = {"id": "a/b", "architecture": {"input_modalities": ["text", "audio"]}}
+    assert _sadelestir(m)["ses"] is True

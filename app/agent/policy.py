@@ -263,8 +263,12 @@ SOHBET_KAPSAM_SAAT = 24
 
 
 def islem_anahtari(istek: Istek) -> str:
-    """Kapsamli onay icin islem TURU: ayni arac, ayni yan etki, ayni host (yol/komut degil)."""
-    return f"{istek.arac}|{istek.yan_etki}|{(istek.host or '').lower()}"
+    """Kapsamli onay icin islem TURU: ayni arac, ayni yan etki, ayni host. Komutta komut metni de
+    anahtardadir: bir komuta verilen "her zaman" onayi o aracin TUM komutlarini (rm -rf) acmasin."""
+    anahtar = f"{istek.arac}|{istek.yan_etki}|{(istek.host or '').lower()}"
+    if istek.yan_etki is YanEtki.komut:
+        anahtar += f"|{' '.join((istek.komut or '').split())}"
+    return anahtar
 
 
 class Onay(BaseModel):

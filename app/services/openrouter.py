@@ -6,6 +6,7 @@ Model listesi GET /api/v1/models'ten cekilir, 24 saat diskte tutulur (atomik yaz
 
 from __future__ import annotations
 
+import json
 import os
 import threading
 import time
@@ -136,6 +137,8 @@ class OpenRouterLLM(YerelLLM):
         else:
             govde["reasoning"] = {"effort": EFOR.get(str(seviye), "medium")}
         govde["usage"] = {"include": True}  # cevapta maliyet (usage.cost)
+        if '"input_audio"' in json.dumps(govde["messages"]):  # kullanici sesi: veri toplanmasin
+            govde["provider"] = {"data_collection": "deny"}
         if self.model.startswith(ONBELLEK_ISARETLI):
             govde["messages"] = onbellek_isaretle(govde["messages"])
         return govde
@@ -170,6 +173,7 @@ def _sadelestir(m: dict) -> dict:
         "araclar": "tools" in params,
         "json": "structured_outputs" in params or "response_format" in params,
         "goruntu": "image" in girdiler,
+        "ses": "audio" in girdiler,
         "dusunme": "reasoning" in params,
     }
 
@@ -295,6 +299,11 @@ class OpenRouterDeposu:
             return
         liste = sorted((_sadelestir(m) for m in ham if m.get("id")), key=lambda m: m["ad"])
         json_yaz(self.liste_yolu, {"zaman": time.time(), "modeller": liste})
+
+    def model_bilgisi(self, model_id: str) -> dict | None:
+        """Onbellekteki sadelestirilmis model kaydi (yoksa None)."""
+        onb = json_oku(self.liste_yolu, None) or {}
+        return next((m for m in onb.get("modeller", []) if m.get("id") == model_id), None)
 
     async def modeller(self, yenile: bool = False, cikti: str = "") -> dict:
         """cikti: "image" | "video" -> o ciktiyi URETEN modeller (/models varsayilan olarak yalniz

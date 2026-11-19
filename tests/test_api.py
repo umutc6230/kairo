@@ -481,3 +481,11 @@ async def test_proje_koordinator_ve_uygulayici_modeli(istemci, sunucu, tmp_path)
         f"/api/projeler/{alan['id']}/modeller", json={"koordinator_model": "deepseek-heretic"}
     )
     assert r.status_code >= 400 and "yerel model" in r.json()["hata"]
+
+
+async def test_oturum_listesi_son_run_ve_akista(istemci):
+    """Telefon (TermFlow) calisan sohbeti listeden bilir: son ajan gorevi + duz akis bayragi."""
+    o = await yeni_oturum(istemci)
+    await istemci.post(f"/api/oturumlar/{o}/ajan-run", json={"run": "abc123", "metin": "x"})
+    satir = next(s for s in (await istemci.get("/api/oturumlar")).json() if s["id"] == o)
+    assert satir["son_run"] == "abc123" and satir["akista"] is False

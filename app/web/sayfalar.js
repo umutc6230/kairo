@@ -3,6 +3,7 @@ import { ikon, ikonlariYerlestir } from "./ikonlar.js";
 import { kacir, md } from "./md.js";
 import {
   $, api, bildir, canliSayac, durum, el, istatistikCipleri, istatistikMetni, modelAdi, modelCipleri, sayi, seciliModeller, sseOku,
+  ekResimleriYukle,
 } from "./ortak.js";
 
 const sayaclar = {}; // anahtar -> durdurma fonksiyonu
@@ -141,9 +142,10 @@ function ocrEkAyarla(ek) {
   ocrEk = ek;
   const on = $("#o-onizleme");
   on.innerHTML = ek.tur === "resim"
-    ? `<img src="/api/ekler/${ek.id}" alt=""><span class="kucuk">${kacir(ek.ad)}</span>`
+    ? `<img data-ek="${ek.id}" alt=""><span class="kucuk">${kacir(ek.ad)}</span>`
     : `<span class="buyuk-ikon" data-ikon="dosya"></span><span>${kacir(ek.ad)}</span><span class="kucuk soluk">PDF · ${sayi(ek.boyut / 1024, 0)} KB</span>`;
   ikonlariYerlestir(on);
+  ekResimleriYukle(on);
   $("#o-baslat").disabled = false;
 }
 

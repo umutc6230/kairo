@@ -354,6 +354,12 @@ def ortam_allowlist() -> dict[str, str]:
         "LOCALAPPDATA", "PROGRAMFILES", "PROGRAMDATA", "PYTHONIOENCODING", "LANG", "LC_ALL", "HOME",
     )  # fmt: skip
     ortam = {k: v for k, v in os.environ.items() if k.upper() in izinli}
+    from app.agent import kum
+
+    if (
+        kum.SERT_AKTIF
+    ):  # kum modunda git hook/fsmonitor kapali; SABITTEN kurulur, ortamdan kopyalanmaz
+        kum.git_sertlestir(ortam)
     ortam.setdefault("PYTHONIOENCODING", "utf-8")
     ortam["PYTHONDONTWRITEBYTECODE"] = "1"
     return ortam

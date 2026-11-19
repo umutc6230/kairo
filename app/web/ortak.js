@@ -62,6 +62,14 @@ export async function api(yol, { method = "GET", govde, form } = {}) {
   return veri;
 }
 
+/** <img data-ek="id">: img etiketi oturum basligini gonderemez (403), resmi fetch+blob ile yukle. */
+export function ekResimleriYukle(kok) {
+  kok.querySelectorAll("img[data-ek]").forEach(async (img) => {
+    const r = await fetch(`/api/ekler/${img.dataset.ek}`, { headers: oturumBasligi() }).catch(() => null);
+    if (r?.ok) img.src = URL.createObjectURL(await r.blob());
+  });
+}
+
 function hataMetni(veri) {
   if (Array.isArray(veri.detail)) return veri.detail.map((d) => d.msg).join("; ");
   return typeof veri.detail === "string" ? veri.detail : "";

@@ -1,4 +1,5 @@
 // Giris noktasi: acilis, gezinme, kenar cubugu, durum cubugu, menuler, kisayollar.
+import "./mesaj-serit.js";
 import { uzantiYuzeyleriKur } from "./uzantilar.js";
 import { t } from "./i18n.js";
 import { ikon, ikonlariYerlestir } from "./ikonlar.js";
@@ -642,10 +643,15 @@ async function baslat() {
     else if (k === "k") { e.preventDefault(); aramaAc(oturumAc); }
     else if (k === "b") { e.preventDefault(); $("#kok").classList.toggle("kenar-kapali"); }
     else if (k === ",") { e.preventDefault(); ayarlarAc(); }
+    else if (k === "l") { e.preventDefault(); $("#girdi")?.focus(); }
   });
 
   await oturumlariYenile();
-  git({ tur: "yeni", acilis: true });
+  // Acilista son sohbet acilir (liste guncellemeye gore sirali); hic yoksa yeni sohbet.
+  // Kullanici o arada yazmaya basladiysa yazdigi bos ekranda korunur.
+  const son = durum.oturumlar?.[0];
+  if (son && !$("#girdi").value.trim()) git({ tur: "oturum", id: son.id });
+  else git({ tur: "yeni", acilis: true });
   setInterval(() => { if (!document.hidden) { durumYenile(); disDegisiklikleriAl(); } }, 3000);
   document.documentElement.dataset.hazir = "1"; // tum isleyiciler bagli (E2E ve otomasyon bunu bekler)
 }

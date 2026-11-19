@@ -168,7 +168,8 @@ function ccGrup(adimlar, sonGrupCalisiyor) {
   const varsayilan = sonGrupCalisiyor || adimlar.some((a) => a.durum === "onay_bekliyor");
   const acik = varsayilan !== acikAdimlar.has(anahtar);
   const hata = adimlar.some((a) => ["hata", "reddedildi"].includes(a.durum) || a.cikis_kodu);
-  const suruyor = adimlar.some((a) => SURUYOR.has(a.durum));
+  // run bittiyse "sirada" kalan adimlar sürmüyor
+  const suruyor = sonGrupCalisiyor && adimlar.some((a) => SURUYOR.has(a.durum));
   return `<li class="cc-grup">
     <button class="cc-grup-baslik" aria-expanded="${acik}" data-grup="${anahtar}">
       <span>${kacir(ozet)}</span>${suruyor ? '<span class="parilti kucuk">sürüyor</span>' : ""}${hata ? '<span class="rozet kirmizi">hata</span>' : ""}<span class="cc-ok" aria-hidden="true">›</span>

@@ -1,7 +1,8 @@
 """Plugin'ler (A7.4-5, A7.7): manifest, karantina, inceleme, kurulum, surum/geri alma, kaldirma.
 
-Plugin = klasor + plugin.json {name, version, description, skills?: "skills"}. Bu surumde plugin
-yalniz SKILL tasir (MCP/hook eklemez: onlar kullanicinin acik onayiyla ayrica eklenir).
+Plugin = klasor + plugin.json {name, version, description, skills?: "skills"}. Plugin skill, komut,
+ajan, hook ve MCP tasir; hook ve MCP komut calistirdigi icin kurulumda KAPALI gelir, kullanici
+`bilesen_ac` ile acikca acar.
 Akis: kaynak klasor -> KARANTINA kopyasi (hicbir sey calistirilmaz) -> inceleme raporu (dosya
 listesi, sha256, riskli desenler) -> kullanici "kur" der -> plugins/<ad>/<surum>/ + aktif surum.
 Kurulum scripti (install.*, postinstall, setup.py) ASLA calistirilmaz; raporda isaretlenir.

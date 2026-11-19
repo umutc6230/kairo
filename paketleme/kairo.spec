@@ -10,7 +10,7 @@ a = Analysis(
     [str(KOK / "paketleme" / "giris.py")],
     pathex=[str(KOK)],
     datas=[(str(KOK / "app" / "web"), "app/web"), (str(KOK / "app" / "skills"), "app/skills")] + collect_data_files("webview"),
-    hiddenimports=collect_submodules("uvicorn") + ["webview.platforms.edgechromium", "clr"],
+    hiddenimports=collect_submodules("uvicorn") + collect_submodules("comtypes") + ["webview.platforms.edgechromium", "clr"],
     excludes=["tkinter", "PyQt5", "PyQt6", "PySide2", "PySide6", "matplotlib", "numpy", "pandas"],
     noarchive=False,
 )

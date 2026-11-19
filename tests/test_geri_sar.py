@@ -28,3 +28,26 @@ async def test_mesajdan_ve_ajan_turundan_geri_sarma(veri, istemci) -> None:
     for govde in ({"mesaj_id": asistan}, {"mesaj_id": "yok"}, {"run": "yok"}, {}):
         r = await istemci.post(f"/api/oturumlar/{o.id}/geri-sar", json=govde)
         assert r.status_code >= 400, govde
+
+
+async def test_mesajdan_dallanma_ve_sabitleme(veri, istemci) -> None:
+    depo = OturumDeposu(veri)
+    o = depo.olustur()
+    o.mesajlar = [
+        Mesaj(rol="kullanici", metin="a"),
+        Mesaj(rol="asistan", metin="b"),
+        Mesaj(rol="kullanici", metin="c"),
+    ]
+    depo.kaydet(o)
+
+    r = await istemci.post(f"/api/oturumlar/{o.id}/catal", json={"mesaj_id": o.mesajlar[1].id})
+    assert r.status_code == 200 and [m["metin"] for m in r.json()["mesajlar"]] == ["a", "b"]
+    assert len(depo.getir(o.id).mesajlar) == 3  # asil degismez
+    r = await istemci.post(f"/api/oturumlar/{o.id}/catal")  # govdesiz: tum gecmis
+    assert len(r.json()["mesajlar"]) == 3
+
+    yol = f"/api/oturumlar/{o.id}/mesajlar/{o.mesajlar[1].id}/sabitle"
+    assert (await istemci.post(yol)).json()["sabit"] is True
+    assert depo.getir(o.id).mesajlar[1].sabit is True
+    assert (await istemci.post(yol)).json()["sabit"] is False
+    assert (await istemci.post(f"/api/oturumlar/{o.id}/mesajlar/yok/sabitle")).status_code == 404
