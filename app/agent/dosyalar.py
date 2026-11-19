@@ -354,6 +354,9 @@ def ortam_allowlist() -> dict[str, str]:
         "LOCALAPPDATA", "PROGRAMFILES", "PROGRAMDATA", "PYTHONIOENCODING", "LANG", "LC_ALL", "HOME",
     )  # fmt: skip
     ortam = {k: v for k, v in os.environ.items() if k.upper() in izinli}
+    # kum sertlestirmesi (kum.git_sertlestir) git cagrilarina ulassin; sir tasimaz
+    git_ayar = re.compile(r"GIT_CONFIG_(COUNT|KEY_\d+|VALUE_\d+)")
+    ortam |= {k: v for k, v in os.environ.items() if git_ayar.fullmatch(k.upper())}
     ortam.setdefault("PYTHONIOENCODING", "utf-8")
     ortam["PYTHONDONTWRITEBYTECODE"] = "1"
     return ortam

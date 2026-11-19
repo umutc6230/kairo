@@ -157,3 +157,17 @@ def test_git_sertlestir_tekrar_eklemez() -> None:
     kum.git_sertlestir(o)
     kum.git_sertlestir(o)
     assert o["GIT_CONFIG_COUNT"] == "2"
+
+
+def test_sertlestirme_komut_ortamina_gecer(monkeypatch: pytest.MonkeyPatch) -> None:
+    from app.agent.dosyalar import ortam_allowlist
+
+    for k in [k for k in __import__("os").environ if k.startswith("GIT_CONFIG_")]:
+        monkeypatch.delenv(k)
+    monkeypatch.setenv("GIT_CONFIG_COUNT", "0")
+    import os
+
+    kum.git_sertlestir(os.environ)
+    o = ortam_allowlist()
+    assert o["GIT_CONFIG_COUNT"] == "2" and o["GIT_CONFIG_KEY_0"] == "core.hooksPath"
+    assert "GIT_CONFIG_GLOBAL" not in o  # yalniz COUNT/KEY/VALUE gecer
