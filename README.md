@@ -34,7 +34,7 @@ no installer and no administrator rights required.
 
 **Product Owner: Umut Çelik** · [X](https://x.com/umutc6230) · [GitHub](https://github.com/umutc6230)
 
-> Note: the user interface is currently in Turkish.
+> The interface is available in Turkish and English: **Settings > Appearance > Dil / Language**.
 
 ## Table of Contents
 
@@ -127,6 +127,8 @@ no installer and no administrator rights required.
 ### Interface
 - **Terminal** (Ctrl+\`), **Changes** (git diff) and **Browser** panels in the top bar; a right panel
   with environment, context usage, connectors, threads and file tree; a bottom status bar.
+- **Turkish / English interface**: switch under Settings > Appearance > "Dil / Language" (the page
+  reloads in the new language). Model replies and some backend messages may stay in Turkish.
 - Dark / light / system theme, font size, chat width, reduced-motion support, keyboard and
   screen-reader accessibility.
 - System tray, global quick-launch shortcut, optional launch at startup.
