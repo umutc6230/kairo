@@ -10,6 +10,7 @@ import { ikon, ikonlariYerlestir } from "./ikonlar.js";
 import { kacir, md } from "./md.js";
 import {
   $, $$, api, bildir, canliSayac, durum, el, istatistikCipleri, modal, modelAdi, modelProfil, onayla, sayi, sseOku,
+  ekResimleriYukle,
 } from "./ortak.js";
 
 const bekleyenEkler = []; // {id?, ad, tur, onizleme, yukleniyor}
@@ -211,7 +212,7 @@ async function geriSar(m) {
 
 function kullaniciMesaji(m) {
   const ekler = (m.ekler || []).map((e) => e.tur === "resim"
-    ? `<img src="/api/ekler/${e.id}" alt="${kacir(e.ad)}" data-buyut="${e.id}">`
+    ? `<img data-ek="${e.id}" alt="${kacir(e.ad)}" data-buyut="${e.id}">`
     : `<span class="ek-cip"><span class="tur">${ikon(TUR_IKON[e.tur] || "dosya")}</span><span class="ad">${kacir(e.ad)}</span></span>`).join("");
   const d = el(`<div class="mesaj kullanici">
     ${ekler ? `<div class="mesaj-ekleri">${ekler}</div>` : ""}
@@ -221,6 +222,7 @@ function kullaniciMesaji(m) {
   d.querySelector(".mesaj-alt .ikon-btn").onclick = () => kopyala(m.metin);
   const gs = d.querySelector(".geri-sar");
   if (gs) gs.onclick = () => geriSar(m);
+  ekResimleriYukle(d);
   d.querySelectorAll("[data-buyut]").forEach((img) => {
     img.onclick = () => modal({ baslik: img.alt, icerik: `<img class="resim-buyuk" src="${img.src}">`, genis: true });
   });
