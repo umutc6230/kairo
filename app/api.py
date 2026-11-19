@@ -1495,8 +1495,12 @@ def uygulama_olustur(
         return {"oturum": o.model_dump(), "metin": metin}
 
     @app.post("/api/oturumlar/{oturum_id}/catal")
-    async def oturum_catal(oturum_id: str) -> dict:
-        return oturumlar.catal(oturum_id).model_dump()
+    async def oturum_catal(oturum_id: str, istek: GeriSarIstegi | None = None) -> dict:
+        return oturumlar.catal(oturum_id, istek.mesaj_id if istek else "").model_dump()
+
+    @app.post("/api/oturumlar/{oturum_id}/mesajlar/{mesaj_id}/sabitle")
+    async def mesaj_sabitle(oturum_id: str, mesaj_id: str) -> dict:
+        return oturumlar.sabitle(oturum_id, mesaj_id).model_dump()
 
     @app.post("/api/oturumlar/{oturum_id}/alt")
     async def oturum_alt(oturum_id: str, istek: AltOturumIstegi) -> dict:

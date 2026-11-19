@@ -5,7 +5,7 @@ serit.className = "mesaj-serit";
 serit.setAttribute("aria-label", "Mesajlar arasında gezin");
 kap.parentElement.append(serit);
 
-const mesajlar = () => [...kap.querySelectorAll(".mesaj.kullanici")];
+const mesajlar = () => [...kap.querySelectorAll(".mesaj.kullanici, .mesaj.asistan.sabit")];
 
 function aktifiIsaretle() {
   const ust = kap.getBoundingClientRect().top + 40;
@@ -21,6 +21,7 @@ function ciz() {
     const b = document.createElement("button");
     const metin = m.textContent.trim().replace(/\s+/g, " ").slice(0, 80);
     b.title = metin;
+    b.classList.toggle("sabit", m.classList.contains("sabit"));
     b.setAttribute("aria-label", metin);
     b.onclick = () => m.scrollIntoView({ behavior: "smooth", block: "start" });
     return b;
@@ -30,6 +31,6 @@ function ciz() {
 
 let bekleyen = 0;
 new MutationObserver(() => { clearTimeout(bekleyen); bekleyen = setTimeout(ciz, 100); })
-  .observe(kap, { childList: true, subtree: true });
+  .observe(kap, { childList: true, subtree: true, attributes: true, attributeFilter: ["class"] });
 kap.addEventListener("scroll", aktifiIsaretle, { passive: true });
 ciz();

@@ -46,6 +46,7 @@ const P = {
   hoparlor: '<path d="M11 5 6 9H2v6h4l5 4z"/><path d="M15.5 8.5a5 5 0 0 1 0 7M19 5a10 10 0 0 1 0 14"/>',
   muzik: '<path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/>',
   yenile: '<path d="M21 12a9 9 0 1 1-2.6-6.4L21 8M21 3v5h-5"/>',
+  raptiye: '<path d="M9 4h6l-1 6 4 4H6l4-4zM12 14v7"/>',
   oynat: '<path d="m6 4 14 8-14 8z" fill="currentColor"/>',
   sihir: '<path d="m12 3 1.9 5.8L20 10l-5 3.6L16.6 20 12 16.4 7.4 20 9 13.6 4 10l6.1-1.2z"/>',
   bilgi: '<circle cx="12" cy="12" r="10"/><path d="M12 16v-4M12 8h.01"/>',

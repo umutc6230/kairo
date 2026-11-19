@@ -223,6 +223,8 @@ svg { display: block; }
 .mesaj-alt .istat { margin-left: 4px; }
 .mesaj-alt .mesaj-saat { margin: 0 2px 0 4px; font-variant-numeric: tabular-nums; }
 .mesaj-alt .sesli-oku[aria-pressed="true"] { color: var(--vurgu); background: var(--yuzey2); }
+.mesaj-alt .sabitle[aria-pressed="true"] { color: var(--vurgu); }
+.mesaj.kullanici .mesaj-alt { justify-content: flex-end; }
 .hata-kutu { border: 1px solid #f2706b55; background: #f2706b14; color: var(--tehlike-metin); padding: 10px 14px; border-radius: 10px; font-size: 14px; margin-top: 6px; }
 .uyari-kutu { border: 1px solid #f2b24c55; background: #f2b24c12; color: var(--uyari-metin); padding: 8px 12px; border-radius: 10px; font-size: 13.5px; margin: 6px 0; }
 
@@ -1053,3 +1055,4 @@ a.sp-satir { text-decoration: none; }
 .mesaj-serit button::before { content: ""; display: block; width: 8px; height: 2px; border-radius: 1px; background: var(--metin, #eee); opacity: .35; transition: width .15s, opacity .15s; }
 .mesaj-serit button:hover::before, .mesaj-serit button.aktif::before { width: 14px; opacity: 1; }
 .mesaj-serit button:focus-visible { outline: 1px solid var(--metin, #eee); }
+.mesaj-serit button.sabit::before { background: var(--vurgu); opacity: 1; }

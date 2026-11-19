@@ -247,10 +247,48 @@ function sutun() {
 }
 
 // Claude Code rewind: secilen mesaj ve sonrasi silinir, mesaj metni tekrar girdiye gelir
-async function geriSar(m) {
+// Saat etiketi: kayitli zaman yoksa (canli mesaj) simdi
+function saatYaz(saat, zaman) {
+  const t = zaman ? new Date(zaman) : new Date();
+  if (Number.isNaN(t.getTime())) return;
+  saat.textContent = t.toLocaleTimeString("tr-TR", { hour: "2-digit", minute: "2-digit" });
+  saat.title = t.toLocaleString("tr-TR");
+}
+
+// Kayitli mesajlarda (id var) dallan + sabitle dugmeleri
+function mesajDugmeleri(d, m) {
+  if (!m?.id) return;
+  d.dataset.id = m.id;
+  d.classList.toggle("sabit", !!m.sabit);
+  const dal = d.querySelector(".dallan");
+  if (dal) dal.onclick = async () => {
+    const oid = durum.oturumId;
+    if (!oid || akisVar()) { bildir("Cevap sürerken dallanılamaz.", "hata"); return; }
+    try {
+      const y = await api(`/api/oturumlar/${oid}/catal`, { method: "POST", govde: { mesaj_id: m.id } });
+      geriCagri.oturumlarYenile();
+      await geriCagri.oturumAc(y.id, true);
+      bildir("Yeni sohbete dallanıldı.");
+    } catch (e) { bildir(e.message, "hata"); }
+  };
+  const pin = d.querySelector(".sabitle");
+  if (pin) {
+    pin.setAttribute("aria-pressed", String(!!m.sabit));
+    pin.onclick = async () => {
+      try {
+        const y = await api(`/api/oturumlar/${durum.oturumId}/mesajlar/${m.id}/sabitle`, { method: "POST" });
+        m.sabit = y.sabit;
+        pin.setAttribute("aria-pressed", String(y.sabit));
+        d.classList.toggle("sabit", y.sabit);
+      } catch (e) { bildir(e.message, "hata"); }
+    };
+  }
+}
+
+async function geriSar(m, tekrar = false) {
   const oid = durum.oturumId;
   if (!oid || akisVar()) { bildir("Cevap sürerken geri sarılamaz.", "hata"); return; }
-  if (!(await onayla("Buradan geri sar", "Bu mesaj ve sonrasındaki konuşma silinecek; mesaj yazma kutusuna geri gelecek. Ajanın yaptığı dosya değişiklikleri geri alınmaz (onlar için /rewind).", { evet: "Geri sar", tehlike: true }))) return;
+  if (!(await onayla(tekrar ? "Yeniden dene" : "Mesajı düzenle", `Bu mesaj ve sonrasındaki konuşma silinecek; mesaj ${tekrar ? "tekrar gönderilecek" : "yazma kutusuna geri gelecek"}. Ajanın yaptığı dosya değişiklikleri geri alınmaz (onlar için /rewind).`, { evet: tekrar ? "Yeniden dene" : "Düzenle", tehlike: true }))) return;
   try {
     const v = await api(`/api/oturumlar/${oid}/geri-sar`, { method: "POST", govde: m.id ? { mesaj_id: m.id } : { run: m.run } });
     if (m.run) { // tarayici onbellegindeki ajan kayitlari da ayni noktaya kesilir
@@ -263,6 +301,7 @@ async function geriSar(m) {
     boyutla();
     gonderDurumu();
     $("#girdi").focus();
+    if (tekrar && v.metin) await gonder();
   } catch (e) { bildir(e.message, "hata"); }
 }
 
@@ -273,11 +312,18 @@ function kullaniciMesaji(m) {
   const d = el(`<div class="mesaj kullanici">
     ${ekler ? `<div class="mesaj-ekleri">${ekler}</div>` : ""}
     ${m.metin ? `<div class="balon">${kacir(maskele(m.metin))}</div>` : ""}
-    <div class="mesaj-alt"><button class="ikon-btn" title="Kopyala" data-ikon="kopyala"></button>
-      ${m.id || m.run ? '<button class="ikon-btn geri-sar" title="Buradan geri sar: bu mesaj ve sonrası silinir, mesaj kutuya gelir" aria-label="Buradan geri sar" data-ikon="yenile"></button>' : ""}</div></div>`);
-  d.querySelector(".mesaj-alt .ikon-btn").onclick = () => kopyala(m.metin);
+    <div class="mesaj-alt"><span class="mesaj-saat soluk"></span>
+      ${m.id ? '<button class="ikon-btn dallan" title="Buradan yeni sohbete dallan" aria-label="Buradan dallan" data-ikon="dal"></button>' : ""}
+      ${m.id || m.run ? `<button class="ikon-btn tekrar" title="Yeniden dene: bu mesaj ve sonrası silinir, mesaj tekrar gönderilir" aria-label="Yeniden dene" data-ikon="yenile"></button>
+      <button class="ikon-btn geri-sar" title="Düzenle: bu mesaj ve sonrası silinir, mesaj kutuya gelir" aria-label="Düzenle" data-ikon="kalem"></button>` : ""}
+      <button class="ikon-btn kopya" title="Kopyala" aria-label="Kopyala" data-ikon="kopyala"></button></div></div>`);
+  d.querySelector(".kopya").onclick = () => kopyala(m.metin);
+  saatYaz(d.querySelector(".mesaj-saat"), m.zaman);
+  mesajDugmeleri(d, m);
   const gs = d.querySelector(".geri-sar");
   if (gs) gs.onclick = () => geriSar(m);
+  const tk = d.querySelector(".tekrar");
+  if (tk) tk.onclick = () => geriSar(m, true);
   ekResimleriYukle(d);
   d.querySelectorAll("[data-buyut]").forEach((img) => {
     img.onclick = () => modal({ baslik: img.alt, icerik: `<img class="resim-buyuk" src="${img.src}">`, genis: true });
@@ -344,7 +390,7 @@ function asistanMesaji() {
     <div class="govde-metin md"></div>
     <div class="uyarilar"></div>
     <div class="canli-alt" hidden><span class="nokta3" aria-hidden="true"><i></i><i></i><i></i></span><span class="canli-sure"></span></div>
-    <div class="mesaj-alt" hidden><button class="ikon-btn" title="Kopyala" data-ikon="kopyala"></button><button class="ikon-btn sesli-oku" title="Sesli oku" aria-label="Sesli oku" aria-pressed="false" data-ikon="hoparlor"></button><span class="mesaj-saat soluk"></span><span class="istat istat-cipleri"></span></div>
+    <div class="mesaj-alt" hidden><button class="ikon-btn kopya" title="Kopyala" aria-label="Kopyala" data-ikon="kopyala"></button><button class="ikon-btn dallan" title="Buradan yeni sohbete dallan" aria-label="Buradan dallan" data-ikon="dal" hidden></button><button class="ikon-btn sabitle" title="Sabitle" aria-label="Sabitle" aria-pressed="false" data-ikon="raptiye" hidden></button><button class="ikon-btn sesli-oku" title="Sesli oku" aria-label="Sesli oku" aria-pressed="false" data-ikon="hoparlor"></button><span class="mesaj-saat soluk"></span><span class="istat istat-cipleri"></span></div>
   </div>`);
   const dusunceKutu = d.querySelector(".dusunce");
   d.querySelector(".baykus-kap").innerHTML = ikon("logo");
@@ -531,7 +577,7 @@ function asistanMesaji() {
       this.durum("");
       d.querySelector(".uyarilar").append(el(`<div class="hata-kutu">${kacir(mesaj)}</div>`));
     },
-    bitir(ist, zaman) {
+    bitir(ist, zaman, m) {
       this.mod(null);
       const gecen = this.gecen();
       this.sayacDurdur = null;
@@ -541,12 +587,12 @@ function asistanMesaji() {
       const alt = d.querySelector(".mesaj-alt");
       alt.hidden = false;
       alt.querySelector(".istat").innerHTML = istatistikCipleri(ist);
-      alt.querySelector(".ikon-btn").onclick = () => kopyala(this.metin);
-      const t = zaman ? new Date(zaman) : new Date();
-      if (!Number.isNaN(t.getTime())) {
-        const saat = alt.querySelector(".mesaj-saat");
-        saat.textContent = t.toLocaleTimeString("tr-TR", { hour: "2-digit", minute: "2-digit" });
-        saat.title = t.toLocaleString("tr-TR");
+      alt.querySelector(".kopya").onclick = () => kopyala(this.metin);
+      saatYaz(alt.querySelector(".mesaj-saat"), zaman);
+      if (m?.id) {
+        alt.querySelector(".dallan").hidden = false;
+        alt.querySelector(".sabitle").hidden = false;
+        mesajDugmeleri(d, m);
       }
       sesliOkuBagla(alt.querySelector(".sesli-oku"), () => d.querySelector(".govde-metin").textContent);
     },
@@ -582,7 +628,7 @@ function kaydedilmisAsistan(m) {
   for (const a of m.araclar || []) o.aracSonucu(a);
   if (m.metin) o.parcaEkle(m.metin);
   if (m.hata) o.hata(m.hata);
-  o.bitir({ ...m.istatistik, model: m.istatistik?.model || m.model }, m.zaman);
+  o.bitir({ ...m.istatistik, model: m.istatistik?.model || m.model }, m.zaman, m);
   return o.el;
 }
 
@@ -725,7 +771,7 @@ export async function gonder() {
           yanit.hata(o.mesaj);
           break;
         case "bitti":
-          yanit.bitir(o.mesaj.istatistik);
+          yanit.bitir(o.mesaj.istatistik, o.mesaj.zaman, o.mesaj);
           if (durum.ayarlar?.bildirim_yanit) masaustuBildirimi("Kairo yanıtladı", (o.mesaj.metin || "").slice(0, 140));
           break;
       }
