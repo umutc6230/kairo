@@ -112,6 +112,62 @@ export function sohbetKur(cb) {
     [...e.dataTransfer.files].forEach(ekYukle);
   });
   $("#mesajlar").addEventListener("click", kodKopyala);
+  secimMenusuKur();
+}
+
+// Claude gibi: mesajlarda metin secilince ustunde yuzen menu (yan sohbet / yanitla / kopyala).
+function secimMenusuKur() {
+  const kap = $("#mesajlar");
+  const menu = el(`<div class="secim-menu" role="toolbar" aria-label="Seçili metin" hidden>
+    <button data-yan><span data-ikon="yanSohbet"></span>Yan sohbet başlat</button>
+    <button data-yanit><span data-ikon="sol"></span>Yanıtla</button>
+    <button data-kopya title="Kopyala" aria-label="Kopyala"><span data-ikon="kopyala"></span></button></div>`);
+  document.body.append(menu);
+  ikonlariYerlestir(menu);
+  let secili = "";
+  const kapat = () => { menu.hidden = true; };
+  const goster = () => {
+    const s = window.getSelection();
+    secili = s.toString().trim();
+    if (!secili || !s.rangeCount || !kap.contains(s.getRangeAt(0).commonAncestorContainer)) return kapat();
+    menu.querySelector("[data-yan]").hidden = !durum.oturumId; // yan sohbet acik bir oturum ister
+    menu.hidden = false;
+    const r = s.getRangeAt(0).getBoundingClientRect();
+    const g = menu.offsetWidth;
+    const y = menu.offsetHeight;
+    menu.style.left = `${Math.max(8, Math.min(r.left + r.width / 2 - g / 2, innerWidth - g - 8))}px`;
+    menu.style.top = `${r.top - y - 8 < 8 ? r.bottom + 8 : r.top - y - 8}px`;
+  };
+  kap.addEventListener("mouseup", () => setTimeout(goster, 0)); // tik sonrasi secim guncellensin
+  kap.addEventListener("keyup", (e) => { if (e.shiftKey) goster(); });
+  kap.addEventListener("scroll", kapat);
+  document.addEventListener("mousedown", (e) => { if (!menu.contains(e.target)) kapat(); });
+  document.addEventListener("keydown", (e) => { if (e.key === "Escape") kapat(); });
+  menu.addEventListener("mousedown", (e) => e.preventDefault()); // tiklayinca secim kaybolmasin
+  const alinti = () => `${secili.split("\n").map((s) => `> ${s}`).join("\n")}\n\n`;
+  const girdiyeYaz = (metin) => {
+    const g = $("#girdi");
+    g.value = metin;
+    boyutla();
+    gonderDurumu();
+    g.focus();
+    g.setSelectionRange(metin.length, metin.length);
+  };
+  menu.querySelector("[data-yanit]").onclick = () => {
+    kapat();
+    const g = $("#girdi").value;
+    girdiyeYaz(alinti() + g);
+  };
+  menu.querySelector("[data-kopya]").onclick = () => { kapat(); kopyala(secili); };
+  menu.querySelector("[data-yan]").onclick = async () => {
+    kapat();
+    const metin = alinti();
+    try {
+      const alt = await api(`/api/oturumlar/${durum.oturumId}/alt`, { method: "POST", govde: { baslik: secili.slice(0, 60) } });
+      await geriCagri.oturumAc(alt.id, true);
+      girdiyeYaz(metin);
+    } catch (hata) { bildir(hata.message, "hata"); }
+  };
 }
 
 function boyutla() {
