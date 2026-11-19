@@ -280,9 +280,36 @@ async function threadlerYenile() {
       const g = isler.filter((x) => asamalar.includes(x.asama));
       return g.length ? `<div class="sp-satir soluk kucuk"><span class="thread-nokta ${sinif}"></span><span class="sp-ad">${ad}</span><span>${g.length}</span></div>${g.map((x) =>
         `<button class="sp-satir sp-tik sp-is" data-git-ajanlar title="${kacir(x.baslik)}"><span class="sp-ad">${kacir(x.baslik)}</span><span class="soluk kucuk">${SURE(sn(x))}</span></button>`).join("")}` : "";
-    }).join("") || '<span class="soluk kucuk">Yok</span>';
+    }).join("") || `<span class="soluk kucuk">${v.aktif_proje ? "Yok · koordinatör paralel iş başlatınca görünür" : "Proje açık değil"}</span>`;
     kap.querySelectorAll("[data-git-ajanlar]").forEach((b) => { b.onclick = () => document.querySelector('.nav-oge[data-git="ajanlar"]')?.click(); });
   } catch { /* sessiz */ }
+}
+
+const projeAcik = () => !!document.getElementById("sp-proje-metni")?.textContent && !/^Proje seç/.test(document.getElementById("sp-proje-metni").textContent);
+
+// Claude Code gibi bolum basliklari: tiklayinca altindaki satirlar (sonraki ayraca kadar)
+// acilir/kapanir; secim tarayicida hatirlanir.
+const BOLUM_ANAHTAR = "kairo.spBolum";
+function bolumleriKur() {
+  let kapali = {};
+  try { kapali = JSON.parse(localStorage.getItem(BOLUM_ANAHTAR) || "{}"); } catch { /* bos */ }
+  document.querySelectorAll("#sag-panel .sp-acilir").forEach((b) => {
+    const uygula = (acik) => {
+      b.setAttribute("aria-expanded", String(acik));
+      b.classList.toggle("kapali", !acik);
+      for (let n = b.nextElementSibling; n && !n.classList.contains("sp-ayrac"); n = n.nextElementSibling) {
+        n.classList.toggle("sp-gizli", !acik);
+      }
+    };
+    uygula(!kapali[b.dataset.bolum]);
+    b.onclick = () => {
+      const acik = b.getAttribute("aria-expanded") !== "true";
+      kapali[b.dataset.bolum] = !acik;
+      try { localStorage.setItem(BOLUM_ANAHTAR, JSON.stringify(kapali)); } catch { /* depolama kapali */ }
+      uygula(acik);
+      if (acik && b.dataset.bolum === "baglam") baglamYenile();
+    };
+  });
 }
 
 // Claude Code'daki "Changes": dalin PR'i (varsa) + commit edilmemis degisiklik; tiklayinca diff dock'u
@@ -293,7 +320,18 @@ async function degisikliklerYenile() {
   if (!kap || $("#sag-panel").hidden) return;
   try {
     const d = await api("/api/proje/degisiklikler");
-    if (!d.repo) { kap.innerHTML = '<span class="soluk kucuk">Yok</span>'; return; }
+    if (d.bilgisayar) $("#sp-bilgisayar").textContent = d.bilgisayar;
+    $("#sp-dal-satir").hidden = !d.repo;
+    if (d.repo) {
+      $("#sp-dal").textContent = d.dal || "dal yok";
+      $("#sp-dal").title = d.dal || "";
+      $("#sp-worktree").hidden = !d.worktree;
+    }
+    $("#sp-proje-yol").textContent = d.klasor ? ` · ${d.klasor.replace(/[\\/][^\\/]+[\\/]?$/, "")}` : "";
+    if (!d.repo) { // neden bos oldugu gorunsun (Claude Code: yalniz git deposunda)
+      kap.innerHTML = `<span class="soluk kucuk">${d.klasor || projeAcik() ? "Git deposu değil" : "Proje açık değil · git deposu olan bir proje açınca görünür"}</span>`;
+      return;
+    }
     const pr = d.pr && /^https:\/\/github\.com\//.test(d.pr.url || "") ? d.pr : null;
     kap.innerHTML = (pr ? `<a class="sp-satir sp-tik sp-is" href="${kacir(pr.url)}" target="_blank" rel="noopener" title="${kacir(pr.title)}">${ikon("dis")}<span class="sp-ad">${kacir(pr.title)}<span class="sp-alt soluk kucuk">#${Number(pr.number)} · ${kacir(String(pr.state || "").toLowerCase())} · ${ARTI_EKSI(pr.additions, pr.deletions)}</span></span></a>` : "")
       + `<button class="sp-satir sp-tik sp-is" data-diff title="Commit edilmemiş değişiklikleri göster">${ikon("diff")}<span class="sp-ad">${kacir(d.dal || "dal yok")}<span class="sp-alt soluk kucuk">${d.dosya ? `${Number(d.dosya)} dosya · ${ARTI_EKSI(d.ekle, d.sil)}` : "temiz"}</span></span></button>`;
@@ -330,11 +368,9 @@ export function sagPanelKur({ baglayiciAc, ayarAc, degisiklikAc }) {
   degisiklikAcGeri = degisiklikAc;
   setInterval(degisikliklerYenile, 10000);
   degisikliklerYenile();
-  $("#sp-baglam-satir").onclick = (e) => {
-    const acik = $("#sp-baglam-detay").hidden;
-    detayAcKapa(e.currentTarget, $("#sp-baglam-detay"), acik);
-    if (acik) { baglamDetayCiz(); baglamYenile(); }
-  };
+  bolumleriKur();
+  baglamDetayCiz();
+  baglamYenile();
   $("#sp-uzak").onchange = async (e) => {
     try {
       await api(e.target.checked ? "/api/uzak/ac" : "/api/uzak/kapat", { method: "POST" });

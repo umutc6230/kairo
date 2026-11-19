@@ -1252,7 +1252,7 @@ class SohbetServisi:
         profil = getattr(ayar, "baglam_profili", "otomatik")
         if profil != "otomatik":
             return profil == "hafif"
-        model = alan.koordinator_model or (ayar.model if ayar.saglayici != "openrouter" else "")
+        model = alan.koordinator_model or (ayar.model if ayar.saglayici == "yerel" else "")
         m = MODELLER.get(model)
         return m is not None and m.ram_gb <= HAFIF_RAM_GB
 
@@ -1289,8 +1289,8 @@ class SohbetServisi:
         sohbet mesaji bu kismi llama-server onbelleginden kullanir (dahili GPU'da dakikalar)."""
         ayar = self.yonetici.ayarlar.oku()
         sistem, araclar, _, _ = self.baglam_hazirla(ayar, "", [])
-        if not sistem or ayar.saglayici == "openrouter":
-            return  # uzak modelde isitma ucretli istek olur, yerel onbellek de yok
+        if not sistem or ayar.saglayici != "yerel":
+            return  # uzak/Ollama modelde isitma ucretli istek olur, yerel onbellek de yok
         try:
             async with self.yonetici.kullan(ayar.aktif_model) as llm:
                 await llm.sohbet(

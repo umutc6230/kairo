@@ -33,6 +33,7 @@ from app.agent.arac_bul import ARAC_BUL
 from app.agent.hooks import HookSonucu
 from app.agent.ozet import mesaj_token, ozetle_gerekirse
 from app.agent.takim import SEMALAR as TAKIM_SEMALARI
+from app.agent.telemetri import span
 from app.agent.terminal import AKTIF_RUN, run_komutlarini_durdur
 from app.agent.yetenek import ModelYetenegi, butce_dokumu, dogrula, tahmini_token
 from app.exceptions import Bulunamadi, UygulamaHatasi
@@ -48,8 +49,17 @@ YAN_ETKILI = {
     "komut_durdur",
     "git_dal",
     "git_commit",
+    "notebook_duzenle",
+    "github_pr_olustur",
+    "github_pr_yorum",
 }
-DEGISTIREN = {"proje_dosya_yaz", "proje_dosya_yama", "proje_dosya_tasi", "proje_dosya_sil"}
+DEGISTIREN = {
+    "proje_dosya_yaz",
+    "proje_dosya_yama",
+    "proje_dosya_tasi",
+    "proje_dosya_sil",
+    "notebook_duzenle",
+}
 VARSAYILAN_BAGLAM = 16384
 CEVAP_TOKEN = 2048  # kucuk baglamli yerel model icin taban
 DONGU_UYAR = 3  # ayni arac+arguman bu kadar ardisik tekrarlanirsa calistirilmaz, model uyarilir
@@ -85,6 +95,17 @@ YON_HATA = (
 YON_DOLASMA = (
     "[Izleyici] Son {n} adimda ayni cagrilara donup duruyorsun (yalniz {f} farkli cagri). Elindeki "
     "bilgiyle karar ver: ya degisikligi yap ya da gorevi_bitir ile bulgulari raporla."
+)
+IZLE_KOPYA = 4  # ayni dosyanin numarali kopyasi (deneme1.py, deneme2.py...) bu kadar olursa
+YON_KOPYA = (
+    "[Izleyici] '{ad}' kalibinda {n} ayri dosya olusturdun ({ornek}...). Her denemede yeni kopya "
+    "acma: TEK dosyayi duzenleyip yeniden calistir. Ayni yaklasim {n} denemede sonuc vermediyse "
+    "dur, neyin eksik oldugunu soyleyerek gorevi_bitir ile raporla."
+)
+IZLE_PLAN = 30  # plan bu kadar adimdir guncellenmediyse hatirlatma
+YON_PLAN = (
+    "[Izleyici] Plani {n} adimdir guncellemedin; kullanici ne yaptigini goremiyor. Simdi "
+    "plan_guncelle ile adimlarin durumunu isaretle ve 1-2 cumleyle nerede oldugunu yaz."
 )
 KOC_YAZ = "KOC: Yazdin; bitti demeden once sonucu dogrula (dosyayi oku ya da testi calistir)."
 
@@ -158,6 +179,9 @@ class Kullanim(BaseModel):
     token: int = 0
     sure_sn: float = 0.0
     model_cagrisi: int = 0
+    # Claude Code /cost karsiligi: saglayicinin bildirdigi maliyet ve onbellekten okunan token
+    maliyet_usd: float = 0.0
+    onbellek_token: int = 0
 
 
 class PlanAdimi(BaseModel):
@@ -227,6 +251,10 @@ class Run(BaseModel):
     baglam: dict = {}  # son model cagrisinin butce dokumu (A4.1)
     ozet_sayisi: int = 0
     butce_uyarildi: bool = False  # "butce bitiyor, raporla" uyarisi verildi mi
+    sure_doldu: bool = False  # sure butcesi doldu, kullanicidan "devam" bekleniyor
+    sure_dilimi: int = 0  # ilk sure butcesi; her "devam" bu kadar sure ekler
+    yeni_dosya_soruldu: bool = False  # bitirirken ozette olmayan yeni dosyalar bir kez soruldu
+    kopya_bildirim: dict[str, int] = {}  # kalip -> uyarildigindaki kopya sayisi (tekrar uyarma)
     parent: str = ""  # alt ajan ise ebeveyn run kimligi
     izinli_araclar: list[str] = []  # alt ajanin dar arac seti
     sahip_dosyalar: list[str] = []  # alt ajanin yazabilecegi dosyalar (goreli yol)
@@ -345,7 +373,7 @@ ALT_AJAN_ARACI = _f(
     ["gorev", "araclar"],
 )
 ALT_AJAN_MIN_ADIM = 15
-YAZAN_ARACLAR = {"proje_dosya_yaz", "proje_dosya_yama", "proje_dosya_tasi", "proje_dosya_sil"}
+YAZAN_ARACLAR = DEGISTIREN
 
 SISTEM = """Sen kullanicinin bilgisayarinda calisan asistan ajansin (Claude Code gibi): dosya,
 komut, kod, web, GitHub ve baglayicilarla istenen isi ARACLARLA kendin yaparsin.
@@ -360,11 +388,16 @@ komut, kod, web, GitHub ve baglayicilarla istenen isi ARACLARLA kendin yaparsin.
   surum (yoksa "surum belirsiz") ve emin olmadigin kisim. Belgede bulmadigini uydurma.
 Kurallar:
 - Her arac cagrisindan ONCE ayni mesajda tek cumle yaz: ne yapacaksin ve neden. Kullanici gorur.
-  Kullanicinin dilinde yaz (Turkce istendiyse Turkce).
+  Varsayilan dil TURKCE: ilk cumle dahil her metni Turkce yaz (talimat dosyalari Ingilizce
+  olsa da); yalniz kullanici gorevi acikca baska dilde yazdiysa o dili kullan.
 - Ilk is plan_guncelle ile kisa plan yaz; ilerledikce guncelle.
+- Var olan kodu duzeltirken sozlesmesini koru: donus tipi ve hata davranisi (dondurur/firlatir)
+  istenmedikce degismez. Hata olmayan degeri (or. HTTP yaniti) firlatma: sinir durumunda (deneme
+  hakki bitti) elindeki son yaniti DONDUR; yalniz yakalanmis gercek hatayi yeniden firlat.
 - Degistirmeden once oku (yama: beklenen_hash). Yazdigin dosyayi tekrar oku; kodu degistirdiysen
   testi/komutu calistir, test yoksa kucuk betikle calistirip ornek degerleri kontrol et.
 - Soru gorevinde cevabi yalniz OKUDUGUN koddan cikar; istenen her ogeyi karsila, fazlasini yazma.
+  "X'i yazma" denen ogeyi istenen dosyaya not/aciklama olarak da yazma (gerekirse ozette soyle).
 - Bitince gorevi_bitir. `ozet` kullaniciya NIHAI CEVAPTIR (Claude Code gibi), Markdown ve
   Turkce karakterli (c,g,i,o,s,u degil: ç,ğ,ı,ö,ş,ü). Soru/arastirma isinde cevabin KENDISI:
   tablo/liste + kaynak URL'leri; kod/dosya isinde ne degisti, nasil dogrulandi, kalan is (kisa).
@@ -647,6 +680,10 @@ class AgentRunner:
             raise UygulamaHatasi("Sonucu belirsiz adim var; once karar verin.")
         if any(a.durum is AdimDurum.cevap_bekliyor for a in run.adimlar):
             raise UygulamaHatasi("Ajan bir soru sordu; once soruyu cevaplayin.")
+        if run.sure_doldu:
+            run.sure_dilimi = run.sure_dilimi or run.butce.max_sure_sn
+            run.butce.max_sure_sn = int(run.kullanim.sure_sn) + run.sure_dilimi
+            run.sure_doldu = False
         run.durum = RunDurum.calisiyor
         run.hata = ""
         self.depo.kaydet(run)
@@ -863,6 +900,10 @@ class AgentRunner:
                     run.durum = RunDurum.duraklatildi
                     break
                 if neden := self._butce_asildi(run):
+                    if neden.startswith("Sure butcesi") and not run.parent:
+                        # Claude Code gibi: bitirme, sor; "Devam" ayni sure kadar ek verir
+                        run.durum, run.hata, run.sure_doldu = RunDurum.duraklatildi, neden, True
+                        break
                     run.durum, run.hata = RunDurum.basarisiz, neden
                     if run.parent and not run.sonuc.ozet:
                         # Alt ajan: eli bos donmesin; son yazdigi notlar ebeveyne kismi sonuc olur
@@ -888,7 +929,13 @@ class AgentRunner:
                 while run.kuyruk:
                     m = run.kuyruk.pop(0)
                     run.mesajlar.append(
-                        {"role": "user", "content": f"[Kullanici yonlendirmesi] {m}"}
+                        {
+                            "role": "user",
+                            "content": (
+                                f"[Kullanici yonlendirmesi] {m}\n(Kullanici calisirken yazdi: soru "
+                                "soruyorsa once kisa cevap ver ve gerekirse plani guncelle.)"
+                            ),
+                        }  # fmt: skip
                     )
                     run.guncellemeler.append(f"Kullanici: {m[:200]}")
                 if self.takim is not None:  # takim mesajlari itmeli: alici okumadan gelir
@@ -900,7 +947,8 @@ class AgentRunner:
                 self.depo.kaydet(run)
                 if yon := self._izleyici(run):  # 4: hata yogunlugu / dolasma -> yon notu
                     run.mesajlar.append({"role": "user", "content": yon})
-                    run.guncellemeler.append(yon.split(".")[0])
+                    # ilk cumle; dosya adindaki nokta (_unpack#.py) kesmesin
+                    run.guncellemeler.append(re.split(r"\.\s", yon)[0])
                 if gorseller := self._gorseller.pop(run_id, None):  # tur sonu: tool'lardan sonra
                     from app.services.sohbet import gorsel_mesaji
 
@@ -1084,11 +1132,16 @@ class AgentRunner:
                 ozel = (run.ajan_id or run.model_sabit) and run.model
                 baglanti = self.llm(run.model) if ozel else self.llm()
                 async with kilit, baglanti as llm:
-                    secim = await llm.sohbet(
-                        gonderilen,
-                        tools=semalar,
-                        max_tokens=run.baglam.get("cevap") or cevap_tokeni(self._baglam()),
-                    )
+                    with span("kairo.model", run=run.id, model=getattr(llm, "model", "")) as iz:
+                        secim = await llm.sohbet(
+                            gonderilen,
+                            tools=semalar,
+                            max_tokens=run.baglam.get("cevap") or cevap_tokeni(self._baglam()),
+                        )
+                        kullanim = getattr(llm, "son_kullanim", None)
+                        kullanim = kullanim if isinstance(kullanim, dict) else {}
+                        iz.update({f"usage.{k}": v for k, v in kullanim.items()
+                                   if isinstance(v, int | float)})  # fmt: skip
                 break
             except (SunucuKapali, ModelCevapHatasi) as e:
                 gecici = (
@@ -1107,8 +1160,19 @@ class AgentRunner:
         if secim.get("finish_reason") == "length" and not mesaj.get("tool_calls"):
             # Cevap sinirda kesildi (genelde cok uzun dosya icerigi): modele bolmesini soyle
             mesaj = {**mesaj, "_kesildi": True}
-        run.kullanim.token += tahmini_token(json.dumps(gonderilen, ensure_ascii=False)) + (
-            tahmini_token(json.dumps(mesaj, ensure_ascii=False))
+        if kullanim.get("prompt_tokens"):  # saglayicinin gercek sayimi tahminden iyidir
+            run.kullanim.token += int(kullanim["prompt_tokens"]) + int(
+                kullanim.get("completion_tokens") or 0
+            )
+        else:
+            run.kullanim.token += tahmini_token(json.dumps(gonderilen, ensure_ascii=False)) + (
+                tahmini_token(json.dumps(mesaj, ensure_ascii=False))
+            )
+        run.kullanim.maliyet_usd = round(
+            run.kullanim.maliyet_usd + float(kullanim.get("cost") or 0), 6
+        )
+        run.kullanim.onbellek_token += int(
+            (kullanim.get("prompt_tokens_details") or {}).get("cached_tokens") or 0
         )
         return mesaj
 
@@ -1227,7 +1291,8 @@ class AgentRunner:
         self._aracta.add(run.id)
         jeton = AKTIF_RUN.set(run.id)  # komutlar bu goreve kaydedilir (iptal)
         try:
-            sonuc = await asyncio.to_thread(fonk, **arguman_adlari(a.argumanlar))
+            with span("kairo.arac", run=run.id, arac=a.arac, adim=a.no):
+                sonuc = await asyncio.to_thread(fonk, **arguman_adlari(a.argumanlar))
         except (TypeError, ValueError, OSError, UygulamaHatasi) as e:
             sonuc = {"hata": f"{type(e).__name__}: {e}"}
         finally:
@@ -1300,7 +1365,31 @@ class AgentRunner:
         if len(son) == IZLE_PENCERE and hatali >= IZLE_HATA:
             run.izleyici_son = len(adimlar)
             return YON_HATA.format(n=len(son), h=hatali)
+        # numarali kopyalar: _unpack1.py, _unpack2.py... (ilerleme sayaci her yazimi ilerleme sayar)
+        kaliplar: dict[str, set[str]] = {}
+        for a in adimlar:
+            yol = str((a.argumanlar or {}).get("yol", ""))
+            if a.arac.endswith("dosya_yaz") and a.durum is AdimDurum.tamam and yol:
+                ad = Path(yol.replace("\\", "/")).name
+                kaliplar.setdefault(re.sub(r"\d+", "#", ad), set()).add(ad)
+        kalip, adlar = max(kaliplar.items(), key=lambda x: len(x[1]), default=("", set()))
+        # yalniz YENI kopya varsa uyar: eski kopyalar kayitta kalir, ayni not her 6 adimda donmesin
+        if (
+            "#" in kalip
+            and len(adlar) >= IZLE_KOPYA
+            and len(adlar) > run.kopya_bildirim.get(kalip, 0)
+        ):
+            run.kopya_bildirim[kalip] = len(adlar)
+            run.izleyici_son = len(adimlar)
+            return YON_KOPYA.format(ad=kalip, n=len(adlar), ornek=", ".join(sorted(adlar)[:3]))
         son = adimlar[-IZLE_DOLASMA:]
+        son_plan = max(
+            (i for i, a in enumerate(run.adimlar) if a.arac == "plan_guncelle"), default=-1
+        )
+        plan_acik = any(p.durum in ("bekliyor", "suruyor") for p in run.plan)
+        if plan_acik and len(run.adimlar) - son_plan - 1 >= IZLE_PLAN:
+            run.izleyici_son = len(adimlar)
+            return YON_PLAN.format(n=len(run.adimlar) - son_plan - 1)
         imzalar = {(a.arac, json.dumps(a.argumanlar, sort_keys=True, ensure_ascii=False))
                    for a in son}  # fmt: skip
         if len(son) == IZLE_DOLASMA and len(imzalar) * 2 < len(son):
@@ -1439,6 +1528,8 @@ class AgentRunner:
             c = self.depo.getir(cocuk.id)
             run.kullanim.adim += c.kullanim.adim  # cocugun harcamasi ebeveynden duser
             run.kullanim.token += c.kullanim.token
+            run.kullanim.maliyet_usd = round(run.kullanim.maliyet_usd + c.kullanim.maliyet_usd, 6)
+            run.kullanim.onbellek_token += c.kullanim.onbellek_token
         sonuc = {
             "alt_ajan": c.id,
             "durum": str(c.durum),
@@ -1490,6 +1581,25 @@ class AgentRunner:
             self._arac_mesaji(run, a, {"tamam": True, "adim_sayisi": len(run.plan)})
         self.depo.kaydet(run)
 
+    @staticmethod
+    def _ozetsiz_yeni_dosyalar(run: Run, ozet: str) -> list[str]:
+        """Bu gorevde OLUSTURULUP komutla calistirilan (yardimci/gecici betik), hala duran ve
+        ozette adi gecmeyen dosyalar. Teslim edilen asil dosyalar komutla adiyla calistirilmaz."""
+        komutlar = " ".join(
+            str((x.argumanlar or {}).get("komut", "")) for x in run.adimlar
+            if x.arac == "komut_calistir"
+        )  # fmt: skip
+        kalan: list[str] = []
+        for x in run.adimlar:
+            if x.durum is not AdimDurum.tamam or '"islem": "olustur"' not in (x.sonuc or ""):
+                continue
+            m = re.search(r'"dosya": "((?:[^"\\]|\\.)*)"', x.sonuc)
+            yol = Path(json.loads(f'"{m.group(1)}"')) if m else None
+            if (yol and yol.name in komutlar and yol.exists() and yol.name not in ozet
+                    and yol.name not in kalan):  # fmt: skip
+                kalan.append(yol.name)
+        return kalan
+
     def _bitir(self, run: Run, a: Adim) -> None:
         """Kanit kontrolu: referans verilen adim basarili gercek bir arac adimi olmali ve SON
         dosya degisikliginden SONRA atilmis olmali (degisiklik oncesi okuma son durumu kanitlamaz).
@@ -1508,6 +1618,8 @@ class AgentRunner:
                 continue
             if n <= son_degisiklik:  # degisikligin kendisi kanit degil
                 continue
+            if x.arac == "komut_calistir" and (x.argumanlar or {}).get("arka_plan"):
+                continue  # baslatilan arka plan isinin cikis kodu yok; kanit, ona yapilan istek
             if x.arac == "komut_calistir":
                 kod = x.cikis_kodu
                 if kod != 0:  # bilinmeyen kod da kanit olamaz
@@ -1533,6 +1645,17 @@ class AgentRunner:
                  f"{son_degisiklik}; kanit bundan SONRA basarili bir adim olmali (or. testi "
                  "tekrar calistir). Kanitin yoksa kanit_adimlari=[] ile bitir."},
             )  # fmt: skip
+            self.depo.kaydet(run)
+            return
+        if not run.yeni_dosya_soruldu and (kalan := self._ozetsiz_yeni_dosyalar(run, ozet)):
+            # Claude Code gibi: gecici betik sessizce kalmasin; sil ya da kullaniciya soyle
+            run.yeni_dosya_soruldu = True
+            a.durum = AdimDurum.hata
+            self._arac_mesaji(run, a, {"hata": (
+                "Bu gorevde olusturdugun su dosyalar hala duruyor ama ozette yok: "
+                + ", ".join(kalan[:10]) + ". Gecici ise sil; kalici ise ozette ne olduklarini "
+                "yaz. Sonra gorevi_bitir'i tekrar cagir."
+            )})  # fmt: skip
             self.depo.kaydet(run)
             return
         if run.dal.startswith("is/") and not son_degisiklik:  # is emri degisiklik yapmadan bitti

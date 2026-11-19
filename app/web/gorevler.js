@@ -43,6 +43,8 @@ const ADIM_TR = {
   cevap_bekliyor: "cevap bekliyor",
 };
 const BITMIS = new Set(["iptal", "basarili", "dogrulanmadi", "basarisiz"]);
+// yalniz calisan gorevde "suruyor" maddesi doner; bitmis/duraklamis gorevde yarida kalmis gorunur
+const planDurum = (r, d) => (d === "suruyor" && r.durum !== "calisiyor" ? "kesildi" : d || "bekliyor");
 const YAZAN = new Set(["proje_dosya_yaz", "proje_dosya_yama", "proje_dosya_tasi", "proje_dosya_sil"]);
 
 let secili = null;
@@ -220,6 +222,12 @@ function onayOnizleme(a) {
 
 function bekleyenKartlari(r) {
   const parcalar = [];
+  if (r.sure_doldu && r.durum === "duraklatildi") {
+    parcalar.push(`<div class="uyari-kutu soru-kart" role="alert">
+      <b>Süre bütçesi doldu.</b> Ajan ${kacir(Math.round((r.butce?.max_sure_sn || 0) / 60))} dakikadır çalışıyor. Devam etsin mi?
+      <div class="dugme-sira"><button class="btn ana" data-islem="devam">Devam et (aynı süre)</button>
+      <button class="btn tehlike" data-islem="iptal">Durdur</button></div></div>`);
+  }
   for (const a of r.adimlar) {
     if (a.durum === "onay_bekliyor" && a.onay_id) {
       parcalar.push(`<div class="uyari-kutu" role="alert">
@@ -258,12 +266,17 @@ function sohbetCiz(r) {
   const basari = r.durum === "basarili" && r.sonuc?.dogrulandi;
   // Claude Code gibi: modelin "ne ve neden" cumlesi, ait oldugu aracin USTUNDE akar
   const aciklamalar = new Set(r.adimlar.map((a) => a.aciklama).filter(Boolean));
-  const notlar = (r.guncellemeler || [])
-    .filter((g) => !g.startsWith("Kullanici:") && !g.startsWith("Onay bekleniyor") && ![...aciklamalar].some((x) => x.startsWith(g.slice(0, 200))))
+  const notlar = [...new Set((r.guncellemeler || []) // ayni izleyici notu iki kez basilmasin
+    .filter((g) => !g.startsWith("Kullanici:") && !g.startsWith("Onay bekleniyor") && ![...aciklamalar].some((x) => x.startsWith(g.slice(0, 200)))))]
     .slice(-2);
   const calisiyor = !BITMIS.has(r.durum);
   const akis = ccAkis(r.adimlar, calisiyor);
+  // Claude Code gibi: gorev listesi cevabin icinde, adimlar ilerledikce isaretlenir
+  const plan = r.plan || [];
+  const planHtml = plan.length ? `<div class="sohbet-plan"><div class="sohbet-plan-baslik soluk kucuk">Plan · ${plan.filter((p) => p.durum === "tamam").length}/${plan.length}</div>
+    <ul class="plan-liste">${plan.map((p) => `<li class="plan-${kacir(planDurum(r, p.durum))}">${kacir(p.baslik || "")}</li>`).join("")}</ul></div>` : "";
   kap.innerHTML = `
+    ${planHtml}
     <ol class="adim-liste sade">${akis}</ol>
     ${notlar.map((g) => `<div class="ajan-not md">${md(g)}</div>`).join("")}
     ${calisiyor ? `<div class="baykus-canli" data-mod="${r.durum === "calisiyor" ? "calisiyor" : "bekliyor"}" style="--bk-gecikme:-${(Date.now() / 1000 % 3600).toFixed(2)}s"><span class="baykus-kap">${ikon("logo")}</span><span class="baykus-etiket">${r.durum === "calisiyor" ? "Çalışıyor…" : "Onay bekliyor…"}</span></div>` : ""}
@@ -296,24 +309,42 @@ function sohbetCiz(r) {
   sagPanelCiz(r);
 }
 
+// Claude Code /cost karsiligi: saglayicinin bildirdigi maliyet + onbellekten okunan token orani
+function maliyetSatiri(k = {}) {
+  const parca = [`${Math.round(k.token || 0).toLocaleString("tr-TR")} token`];
+  if (k.onbellek_token && k.token) parca.push(`%${Math.round((k.onbellek_token / k.token) * 100)} önbellekten`);
+  if (k.maliyet_usd) parca.push(`$${k.maliyet_usd < 0.01 ? k.maliyet_usd.toFixed(4) : k.maliyet_usd.toFixed(2)}`);
+  return `<div class="soluk kucuk gorev-maliyet" title="Sağlayıcının bildirdiği kullanım">${kacir(parca.join(" · "))}</div>`;
+}
+
+let dosyaListesiAcik = null; // null: az dosyada acik, coksa kapali; kullanici secince hatirlanir
 function sagPanelCiz(r) {
   const p = document.getElementById("sag-panel-gorev");
   if (!p) return;
   const b = r.baglam || {};
   const degisen = r.adimlar.filter((a) => a.checkpoint && YAZAN.has(a.arac));
+  // ayni dosyaya birden cok yazim tek satir (son checkpoint'in diff'i acilir)
+  const benzersiz = new Map();
+  for (const a of degisen) {
+    const k = a.dosya || a.argumanlar?.yol || a.arac;
+    benzersiz.set(k, { a, n: (benzersiz.get(k)?.n || 0) + 1 });
+  }
   p.innerHTML = `
     ${b.baglam ? `<div class="sp-baslik">Bağlam <span class="soluk">%${kacir(b.dolu_yuzde)}</span></div>
       <div class="butce-cubuk" role="progressbar" aria-label="Bağlam doluluğu" aria-valuenow="${kacir(b.dolu_yuzde)}"><span style="width:${Math.min(100, b.dolu_yuzde)}%"></span></div>` : ""}
     <div class="sp-baslik">Plan</div>
-    <ul class="plan-liste">${(r.plan || []).map((x) => `<li class="plan-${kacir(x.durum)}">${kacir(x.baslik)}</li>`).join("") || '<li class="soluk">-</li>'}</ul>
-    <div class="sp-baslik">Değişen dosyalar</div>
-    <ul class="sp-dosyalar">${degisen.map((a) => `<li><button class="bag" data-diff="${kacir(a.checkpoint)}"><span data-ikon="dosya"></span>${kacir(a.dosya || a.argumanlar?.yol || a.arac)}</button></li>`).join("") || '<li class="soluk">-</li>'}</ul>
+    <ul class="plan-liste">${(r.plan || []).map((x) => `<li class="plan-${kacir(planDurum(r, x.durum))}">${kacir(x.baslik)}</li>`).join("") || '<li class="soluk">-</li>'}</ul>
+    <details class="sp-dosya-kap" ${dosyaListesiAcik ?? benzersiz.size <= 5 ? "open" : ""}><summary class="sp-baslik">Değişen dosyalar <span class="soluk">(${benzersiz.size})</span></summary>
+    <ul class="sp-dosyalar">${[...benzersiz.values()].map(({ a, n }) => `<li><button class="bag" data-diff="${kacir(a.checkpoint)}"><span data-ikon="dosya"></span>${kacir(a.dosya || a.argumanlar?.yol || a.arac)}${n > 1 ? ` <span class="soluk kucuk">×${n}</span>` : ""}</button></li>`).join("") || '<li class="soluk">-</li>'}</ul></details>
     <div class="sp-baslik">Bütçe</div>
     ${cubuk("Adım", r.kullanim.adim, r.butce.max_adim)}
     ${cubuk("Süre", r.kullanim.sure_sn, r.butce.max_sure_sn, " sn")}
+    ${maliyetSatiri(r.kullanim)}
     ${(r.cocuklar || []).length ? '<div class="sp-baslik">Alt ajanlar</div><div id="sp-cocuklar" class="soluk kucuk">yükleniyor…</div>' : ""}`;
   ikonlariYerlestir(p);
   $$("[data-diff]", p).forEach((x) => { x.onclick = () => diffAc(x.dataset.diff); });
+  const dosyaKap = $(".sp-dosya-kap", p);
+  if (dosyaKap) dosyaKap.ontoggle = () => { dosyaListesiAcik = dosyaKap.open; };
   if ((r.cocuklar || []).length) altAjanlariCiz(r.cocuklar);
   takimCiz(p, r.id);
 }
@@ -362,7 +393,7 @@ function detayCiz(r) {
         <ol class="adim-liste">${r.adimlar.map(adimSatiri).join("") || '<li class="soluk">Henüz adım yok.</li>'}</ol></div>
       <div class="gr-yan">
         <div class="kart"><div class="kart-baslik"><b>Plan</b></div>
-          <ul class="plan-liste">${(r.plan || []).map((p) => `<li class="plan-${kacir(p.durum)}">${kacir(p.baslik)}${p.kanit ? ` <span class="soluk kucuk">(${kacir(p.kanit)})</span>` : ""}</li>`).join("") || '<li class="soluk">Plan yok.</li>'}</ul></div>
+          <ul class="plan-liste">${(r.plan || []).map((p) => `<li class="plan-${kacir(planDurum(r, p.durum))}">${kacir(p.baslik)}${p.kanit ? ` <span class="soluk kucuk">(${kacir(p.kanit)})</span>` : ""}</li>`).join("") || '<li class="soluk">Plan yok.</li>'}</ul></div>
         <div class="kart"><div class="kart-baslik"><b>Bütçe</b></div>
           ${cubuk("Adım", r.kullanim.adim, r.butce.max_adim)}
           ${cubuk("Süre", r.kullanim.sure_sn, r.butce.max_sure_sn, " sn")}
@@ -628,6 +659,11 @@ async function izleyiciYenile(v, zorla = true) {
     return;
   }
   if (izleyiciler.get(v.kap) !== v) return; // beklerken kutu baska goreve baglandi
+  // gorev bu izlemede bitti (sayfa acilisinda zaten bitmis olan sayilmaz): sonraki mesaj onerisi
+  if (v.sonDurum && !BITMIS.has(v.sonDurum) && BITMIS.has(r.durum)) {
+    setTimeout(() => document.dispatchEvent(new Event("ajan-tur-bitti")), 300);
+  }
+  v.sonDurum = r.durum;
   const imza = JSON.stringify(r) + [...v.acik].join(",");
   if (!zorla && imza === v.imza) return;
   v.imza = imza;

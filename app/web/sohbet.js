@@ -9,7 +9,7 @@ import { projeDurumu } from "./proje.js";
 import { ikon, ikonlariYerlestir } from "./ikonlar.js";
 import { kacir, md } from "./md.js";
 import {
-  $, api, bildir, canliSayac, durum, el, istatistikCipleri, modal, modelAdi, modelProfil, onayla, sayi, sseOku,
+  $, $$, api, bildir, canliSayac, durum, el, istatistikCipleri, modal, modelAdi, modelProfil, onayla, sayi, sseOku,
 } from "./ortak.js";
 
 const bekleyenEkler = []; // {id?, ad, tur, onizleme, yukleniyor}
@@ -81,9 +81,18 @@ export function sohbetKur(cb) {
   girdi.addEventListener("input", () => { boyutla(); gonderDurumu(); });
   girdi.addEventListener("keydown", (e) => {
     if (oneriTusu(e)) return; // "/" ve "@" onerileri acikken ok/Enter/Tab onlara gider
+    if (e.key === "Tab" && !girdi.value && girdi.dataset.oneri) { // Claude Code: Tab = oneriyi al
+      e.preventDefault();
+      girdi.value = girdi.dataset.oneri;
+      oneriTemizle();
+      boyutla();
+      gonderDurumu();
+      return;
+    }
     if (e.key === "Enter" && !e.shiftKey && !e.isComposing) { e.preventDefault(); gonder(); }
   });
   girdiYardimKur(komutListesi);
+  girdi.addEventListener("oturum-degisti", () => oneriTemizle()); // baska sohbetin onerisi kalmasin
   girdi.addEventListener("paste", (e) => {
     const dosyalar = [...(e.clipboardData?.files || [])];
     if (dosyalar.length) { e.preventDefault(); dosyalar.forEach(ekYukle); return; }
@@ -180,6 +189,26 @@ function sutun() {
   return s;
 }
 
+// Claude Code rewind: secilen mesaj ve sonrasi silinir, mesaj metni tekrar girdiye gelir
+async function geriSar(m) {
+  const oid = durum.oturumId;
+  if (!oid || akisVar()) { bildir("Cevap sürerken geri sarılamaz.", "hata"); return; }
+  if (!(await onayla("Buradan geri sar", "Bu mesaj ve sonrasındaki konuşma silinecek; mesaj yazma kutusuna geri gelecek. Ajanın yaptığı dosya değişiklikleri geri alınmaz (onlar için /rewind).", { evet: "Geri sar", tehlike: true }))) return;
+  try {
+    const v = await api(`/api/oturumlar/${oid}/geri-sar`, { method: "POST", govde: m.id ? { mesaj_id: m.id } : { run: m.run } });
+    if (m.run) { // tarayici onbellegindeki ajan kayitlari da ayni noktaya kesilir
+      const t = ajanKayitlari();
+      t[oid] = (v.oturum.ajan_runlari || []).slice();
+      try { localStorage.setItem(AJAN_ANAHTAR, JSON.stringify(t)); } catch { /* depolama kapali */ }
+    }
+    await geriCagri.oturumAc(oid, true);
+    $("#girdi").value = v.metin || "";
+    boyutla();
+    gonderDurumu();
+    $("#girdi").focus();
+  } catch (e) { bildir(e.message, "hata"); }
+}
+
 function kullaniciMesaji(m) {
   const ekler = (m.ekler || []).map((e) => e.tur === "resim"
     ? `<img src="/api/ekler/${e.id}" alt="${kacir(e.ad)}" data-buyut="${e.id}">`
@@ -187,8 +216,11 @@ function kullaniciMesaji(m) {
   const d = el(`<div class="mesaj kullanici">
     ${ekler ? `<div class="mesaj-ekleri">${ekler}</div>` : ""}
     ${m.metin ? `<div class="balon">${kacir(maskele(m.metin))}</div>` : ""}
-    <div class="mesaj-alt"><button class="ikon-btn" title="Kopyala" data-ikon="kopyala"></button></div></div>`);
+    <div class="mesaj-alt"><button class="ikon-btn" title="Kopyala" data-ikon="kopyala"></button>
+      ${m.id || m.run ? '<button class="ikon-btn geri-sar" title="Buradan geri sar: bu mesaj ve sonrası silinir, mesaj kutuya gelir" aria-label="Buradan geri sar" data-ikon="yenile"></button>' : ""}</div></div>`);
   d.querySelector(".mesaj-alt .ikon-btn").onclick = () => kopyala(m.metin);
+  const gs = d.querySelector(".geri-sar");
+  if (gs) gs.onclick = () => geriSar(m);
   d.querySelectorAll("[data-buyut]").forEach((img) => {
     img.onclick = () => modal({ baslik: img.alt, icerik: `<img class="resim-buyuk" src="${img.src}">`, genis: true });
   });
@@ -513,6 +545,7 @@ export function mesajlariCiz(oturum) {
 export function yeniSohbetEkrani({ girdiyiKoru = false } = {}) {
   durdur();
   durum.oturumId = null;
+  oneriTemizle();
   mesajlariCiz(null);
   if (!girdiyiKoru) $("#girdi").value = ""; // acilista kullanicinin o ana dek yazdigi silinmesin
   boyutla();
@@ -522,11 +555,19 @@ export function yeniSohbetEkrani({ girdiyiKoru = false } = {}) {
 
 // ---- gonderme / akis ----
 export async function gonder() {
+  oneriTemizle();
   const girdi = $("#girdi");
   const metin = anahtarCoz(girdi.value.trim()); // maskeli yer tutucu -> gercek anahtar
   if (komutMu(metin, (istem) => { $("#girdi").value = istem; gonder(); })) { // yerel slash komut: modele mesaj olarak gitmez
     girdi.value = "";
     boyutla();
+    return;
+  }
+  if (akisKontrol && girdi.value.trim()) { // Claude Code gibi: yanit surerken yazilan mesaj siraya girer
+    siradakiler.push(girdi.value);
+    girdi.value = "";
+    boyutla();
+    siraCiz();
     return;
   }
   if (akisKontrol || (!metin && !bekleyenEkler.length) || bekleyenEkler.some((e) => e.yukleniyor)) return;
@@ -620,7 +661,61 @@ export async function gonder() {
     akisKontrol = null;
     gonderDurumu();
     geriCagri.oturumlarYenile();
+    if (siradakiler.length) { // sirada bekleyen ilk mesaj sonraki tur olarak gider
+      $("#girdi").value = siradakiler.shift();
+      siraCiz();
+      gonder();
+    } else sonrakiOneri();
   }
+}
+
+// ---- sonraki mesaj onerisi (Claude Code gibi soluk metin, Tab ile al) ----
+const VARSAYILAN_YER = "Bir görev yaz ya da soru sor";
+function oneriTemizle() {
+  const g = $("#girdi");
+  delete g.dataset.oneri;
+  g.placeholder = VARSAYILAN_YER;
+  g.classList.remove("oneri-var");
+}
+let oneriSayac = 0;
+export async function sonrakiOneri() {
+  const kullanicilar = $$("#mesajlar .mesaj.kullanici .balon");
+  const asistanlar = $$("#mesajlar .mesaj.asistan");
+  const asistan = asistanlar[asistanlar.length - 1]?.innerText || "";
+  if (!asistan.trim()) return;
+  const no = ++oneriSayac;
+  const oturum = durum.oturumId;
+  try {
+    const { oneri } = await api("/api/sonraki-oneri", { method: "POST", govde: {
+      kullanici: (kullanicilar[kullanicilar.length - 1]?.innerText || "").slice(-4000),
+      asistan: asistan.slice(-6000),
+    } });
+    const g = $("#girdi");
+    // bu arada yeni tur, baska sohbet ya da yazilmaya baslanmis girdi: oneri gosterilmez
+    if (!oneri || no !== oneriSayac || oturum !== durum.oturumId || g.value || akisVar()) return;
+    g.dataset.oneri = oneri;
+    g.placeholder = `${oneri}   (Tab)`;
+    g.classList.add("oneri-var");
+  } catch { /* oneri istege bagli */ }
+}
+document.addEventListener("ajan-tur-bitti", () => sonrakiOneri());
+
+// ---- yanit surerken yazilan mesajlarin sirasi ----
+const siradakiler = [];
+function siraCiz() {
+  let kap = $("#sira-listesi");
+  if (!kap) {
+    kap = el('<div id="sira-listesi" class="sira-listesi" aria-live="polite"></div>');
+    $("#yazma").prepend(kap);
+  }
+  kap.innerHTML = "";
+  siradakiler.forEach((m, i) => {
+    const c = el(`<div class="sira-oge"><span class="soluk kucuk">Sırada</span><span class="sira-metin">${kacir(m)}</span>
+      <button class="ikon-btn kucuk" title="Sıradan çıkar" aria-label="Sıradan çıkar">${ikon("x")}</button></div>`);
+    c.querySelector("button").onclick = () => { siradakiler.splice(i, 1); siraCiz(); };
+    kap.append(c);
+  });
+  kap.hidden = !siradakiler.length;
 }
 
 export function durdur() {
@@ -743,7 +838,8 @@ const BITMIS_RUN = new Set(["iptal", "basarili", "dogrulanmadi", "basarisiz"]);
 
 async function ajanaGonder(oturumId, metin) {
   const s = sutun();
-  s.append(kullaniciMesaji({ rol: "kullanici", metin, ekler: [] }));
+  const balon = kullaniciMesaji({ rol: "kullanici", metin, ekler: [] });
+  s.append(balon);
   bosDurum(false);
   const kayitlar = ajanKayitlari()[oturumId] || [];
   const son = kayitlar[kayitlar.length - 1];
@@ -752,12 +848,13 @@ async function ajanaGonder(oturumId, metin) {
       const r = await api(`/api/gorevler/${son.run}`);
       if (!BITMIS_RUN.has(r.durum)) {
         await api(`/api/gorevler/${son.run}/mesaj`, { method: "POST", govde: { metin } });
-        bildir("Ajana iletildi; sonraki adımdan önce işlenir.", "basari", 1500);
+        // Claude Code gibi: mesajin calisan goreve sira ile verildigi balonda gorunur
+        balon.append(el('<div class="sira-rozet soluk kucuk"><span class="rozet sari">sırada</span> Çalışan göreve iletildi; ajan sıradaki adımdan önce okuyup cevaplar.</div>'));
         sonaKaydir(true);
         return;
       }
     }
-    const izole = document.getElementById("hap-izole")?.getAttribute("aria-pressed") === "true";
+    const izole = !!document.getElementById("hap-izole")?.checked;
     // onceki: ayni sohbetin son gorevi -> ajan onceki turlarin ozetini gorur (konusma surekliligi)
     const r = await api("/api/gorevler", { method: "POST", govde: { hedef: metin, izole, onceki: son?.run || "", etkilesimli: true } });
     ajanKaydet(oturumId, { run: r.id, metin });
@@ -779,11 +876,17 @@ export function ajanBloklariniCiz(oturumId) {
   const s = $("#mesajlar .mesaj-sutun") || sutun();
   bosDurum(false);
   kayitlar.forEach((k, i) => {
-    s.append(kullaniciMesaji({ rol: "kullanici", metin: k.metin, ekler: [] }));
+    s.append(kullaniciMesaji({ rol: "kullanici", metin: k.metin, ekler: [], run: k.run }));
     const b = ajanBlogu(k);
     s.append(b.kap);
     if (i === kayitlar.length - 1) sohbetteGorevGoster(b.detay, k.run);
-    else api(`/api/gorevler/${k.run}`).then((r) => { b.detay.innerHTML = `<div class="soluk kucuk">Görev: ${kacir(r.durum)} · ${kacir(r.sonuc?.ozet || r.hata || "")}</div>`; }).catch(() => {});
+    // onceki turlar: sonuc markdown olarak (son tur gibi), hata duz metin
+    else api(`/api/gorevler/${k.run}`).then((r) => {
+      b.detay.innerHTML = r.sonuc?.ozet
+        ? `<div class="ajan-sonuc ajan-rapor"><div class="md">${md(r.sonuc.ozet)}</div></div>`
+        : `<div class="uyari-kutu">${kacir(r.hata || r.durum)}</div>`;
+      ikonlariYerlestir(b.detay);
+    }).catch(() => {});
   });
   ikonlariYerlestir(s);
   sonaKaydir(true);

@@ -179,9 +179,12 @@ export function projeAc() {
     $("#proje-guven-sec", govde).onchange = (e) =>
       sarmala(() => api(`/api/projeler/${aktif.id}/guven`, { method: "PUT", govde: { guven: e.target.value } }));
     // model onerileri: uzakta OpenRouter listesi, yerelde kurulu modeller (elle id de yazilabilir)
-    const oneriler = durum.ayarlar?.saglayici === "openrouter"
+    const sag = durum.ayarlar?.saglayici;
+    const oneriler = sag === "openrouter"
       ? api("/api/openrouter/modeller").then((v) => v.modeller.map((m) => m.id)).catch(() => [])
-      : Promise.resolve((durum.sunucu?.modeller || []).map((m) => m.anahtar));
+      : sag === "ollama"
+        ? api("/api/ollama/yuklu").then((v) => v.modeller.map((m) => m.anahtar)).catch(() => [])
+        : Promise.resolve((durum.sunucu?.modeller || []).map((m) => m.anahtar));
     if (!modelOnerileri.length) oneriler.then((idler) => { // ciz() modali yeniden kurar: listeyi sakla
       modelOnerileri = idler;
       const dl = $("#proje-model-liste", govde);
@@ -238,10 +241,18 @@ function modHapiCiz() {
   if (!b) return;
   const aktif = projeDurumu.aktif;
   b.hidden = !aktif;
-  const iz = $("#hap-izole");
-  if (iz) {
-    iz.hidden = !aktif;
-    iz.onclick = () => { const a = iz.getAttribute("aria-pressed") !== "true"; iz.setAttribute("aria-pressed", String(a)); iz.classList.toggle("secili", a); };
+  const izKap = $("#hap-izole-kap");
+  if (izKap) izKap.hidden = !aktif;
+  // Claude Code'daki klasor secici: etkin proje adi; menude son projeler + yeni klasor
+  const k = $("#hap-klasor");
+  if (k) {
+    $("#hap-klasor-metni").textContent = projeDurumu.etkin?.ad || "Proje seç";
+    k.onclick = () => menuAc(k, [{ baslik: "Proje" }, ...(projeDurumu.liste || []).map((p) => ({
+      metin: p.ad, aciklama: p.kokler[0] || "", ikon: "klasor", secili: p.ad === projeDurumu.etkin?.ad,
+      eylem: async () => {
+        try { await api("/api/projeler", { method: "POST", govde: { yol: p.kokler[0] } }); await projeYenile(); } catch (e) { bildir(e.message, "hata"); }
+      },
+    })), { metin: "Klasör aç / yönet...", ikon: "arti", eylem: projeAc }], { yukari: true });
   }
   if (!aktif) return;
   const m = MOD_TR[projeDurumu.izin?.mod] || MOD_TR[aktif.mod];

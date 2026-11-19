@@ -77,10 +77,10 @@
             <div class="alt-satir">
               <div class="alt-sol">
                 <button class="hap duz" id="hap-bilgisayar" data-yalniz-yerel><span data-ikon="ekran"></span><span>Bu bilgisayar</span><span data-ikon="asagi" class="kucuk-ikon"></span></button>
-                <span class="hap duz" id="hap-klasor" data-yalniz-yerel><span data-ikon="klasor"></span><span id="hap-klasor-metni">llm</span></span>
+                <button class="hap duz" id="hap-klasor" title="Proje klasörü seç"><span data-ikon="klasor"></span><span id="hap-klasor-metni">Proje seç</span><span data-ikon="asagi" class="kucuk-ikon"></span></button>
+                <label class="hap duz onay-hap" id="hap-izole-kap" title="Ajan ayrı git dalında (worktree) çalışsın; sen birleştirene kadar ana dosyalara dokunmaz" hidden><input type="checkbox" id="hap-izole"><span>Worktree</span></label>
               </div>
               <div class="alt-sag">
-                <button class="hap duz" id="hap-izole" aria-pressed="false" title="Ajan ayrı git dalında (worktree) çalışsın; sen birleştirene kadar ana dosyalara dokunmaz" hidden>Ayrı dal</button>
                 <button class="hap duz" id="hap-mod" title="Mod: ajanın neye izinli olduğu" hidden><span id="hap-mod-metni">Mod</span><span data-ikon="asagi" class="kucuk-ikon"></span></button>
                 <button class="hap duz" id="hap-model"><span id="hap-model-metni">Model</span><span class="soluk" id="hap-dusunme-metni">Kapalı</span></button>
                 <span class="nokta buyuk" id="hap-nokta" data-yalniz-yerel title="Sunucu durumu"></span>
@@ -191,6 +191,21 @@
               <div class="ayar-not">Gösterge: gereken RAM ≈ model boyutu × 1,15 + 1 GB. "Çalışır": Windows ve diğer programlara 5 GB bırakır; "Zorlanır": diğer programlar kapalıyken açılır. Filtreler yüklenen sayfalara uygulanır; daha fazlası için aşağıdan yükle.</div>
               <div id="m-sonuclar" class="skill-liste"></div>
               <div class="satir" style="justify-content:center"><button class="btn" id="m-daha" hidden>Daha fazla yükle</button></div>
+            </div>
+            <div class="kart" id="ol-kart">
+              <div class="kart-baslik"><b>Ollama</b><span class="soluk kucuk" id="ol-durum"></span></div>
+              <div class="ayar-not">Ollama modelleri (ollama.com). İndirme ve silme Ollama'nın kendisiyle yapılır; seçmek için AI Ayarları'nda sağlayıcıyı Ollama yap ya da "Kullan" de.</div>
+              <div id="ol-yuklu" class="skill-liste"></div>
+              <div id="ol-indirmeler" class="kaynak-liste"></div>
+              <div class="satir"><input class="alan" id="ol-ara" placeholder="Boş: popüler modeller · ya da qwen, gemma, llama, deepseek...">
+                <button class="btn ana" id="ol-ara-btn"><span data-ikon="ara"></span>Ara</button></div>
+              <div class="satir-arasi m-filtreler"><span class="ornekler">
+                <label>Yetenek <select class="alan kucuk" id="ol-f-yetenek"><option value="">Hepsi</option><option value="tools">Araç</option><option value="vision">Görsel</option><option value="thinking">Düşünme</option><option value="embedding">Embedding</option></select></label>
+                <label>Sırala <select class="alan kucuk" id="ol-f-sira"><option value="popular">En popüler</option><option value="newest">En yeni</option></select></label>
+                <label class="onay"><input type="checkbox" id="ol-f-yerel" checked> Bulut (cloud) modellerini gizle</label></span>
+                <span class="soluk kucuk" id="ol-sayac"></span></div>
+              <div id="ol-sonuclar" class="skill-liste"></div>
+              <div class="satir" style="justify-content:center"><button class="btn" id="ol-daha" hidden>Daha fazla yükle</button></div>
             </div>
           </div>
         </section>
@@ -330,24 +345,25 @@
         <div id="sp-agac" class="sp-agac"></div>
       </aside>
       <aside id="sag-panel" class="yan-panel sag-panel" aria-label="Oturum paneli">
-        <div class="sp-bolum">Ortam</div>
-        <div class="sp-satir"><span data-ikon="ekran"></span><span class="sp-ad">Bu bilgisayar</span><button class="ikon-btn kucuk-ikon" id="sp-ayar" title="Ayarlar" data-ikon="disli"></button></div>
-        <button class="sp-satir sp-tik" id="sp-proje"><span data-ikon="klasor"></span><span class="sp-ad" id="sp-proje-metni">Proje seç</span></button>
+        <button class="sp-bolum sp-acilir" data-bolum="ortam" aria-expanded="true">Ortam <span class="sp-ok" data-ikon="asagi"></span></button>
+        <div class="sp-satir"><span data-ikon="ekran"></span><span class="sp-ad" id="sp-bilgisayar">Bu bilgisayar</span><button class="ikon-btn kucuk-ikon" id="sp-ayar" title="Ayarlar" data-ikon="disli"></button></div>
+        <button class="sp-satir sp-tik" id="sp-proje"><span data-ikon="klasor"></span><span class="sp-ad" id="sp-proje-metni">Proje seç</span><span class="soluk kucuk sp-yol" id="sp-proje-yol"></span></button>
+        <div class="sp-satir" id="sp-dal-satir" hidden><span data-ikon="dal"></span><span class="sp-ad" id="sp-dal"></span><span class="soluk kucuk" id="sp-worktree" hidden>Worktree</span></div>
         <label class="sp-satir"><span data-ikon="uzak"></span><span class="sp-ad">Uzak erişim</span><span class="anahtar"><input type="checkbox" id="sp-uzak"><span></span></span></label>
         <div class="sp-ayrac"></div>
-        <button class="sp-satir sp-tik" id="sp-baglam-satir" title="Bağlam ayrıntısı" aria-expanded="false" aria-controls="sp-baglam-detay"><span class="sp-ad">Bağlam <span class="sp-ok" data-ikon="sag"></span></span><span id="sp-baglam" class="soluk kucuk">-</span><span class="baglam-cubuk"><span id="sp-baglam-dolu"></span></span></button>
-        <div id="sp-baglam-detay" class="sp-detay" hidden></div>
+        <button class="sp-bolum sp-acilir" data-bolum="baglam" aria-expanded="true">Bağlam <span class="sp-ok" data-ikon="asagi"></span><span id="sp-baglam" class="soluk kucuk sp-sag-metin">-</span><span class="baglam-cubuk" hidden><span id="sp-baglam-dolu"></span></span></button>
+        <div id="sp-baglam-detay" class="sp-detay"></div>
         <div class="sp-ayrac"></div>
         <button class="sp-satir sp-tik" id="sp-baglayici-baslik" aria-expanded="false" aria-controls="sp-baglayici-detay"><span class="sp-ad">Bağlayıcılar <span class="sp-ok" data-ikon="sag"></span></span><span id="sp-baglayici" class="soluk kucuk"></span></button>
         <div id="sp-baglayici-detay" class="sp-detay" hidden></div>
         <div class="sp-ayrac"></div>
-        <div class="sp-bolum">Değişiklikler</div>
+        <button class="sp-bolum sp-acilir" data-bolum="degisiklik" aria-expanded="true">Değişiklikler <span class="sp-ok" data-ikon="asagi"></span></button>
         <div id="sp-degisiklik" class="sp-isler"><span class="soluk kucuk">Yok</span></div>
         <div class="sp-ayrac"></div>
-        <div class="sp-bolum">Thread'ler</div>
+        <button class="sp-bolum sp-acilir" data-bolum="thread" aria-expanded="true">Thread'ler <span class="sp-ok" data-ikon="asagi"></span></button>
         <div id="sp-threadler" class="sp-isler"><span class="soluk kucuk">Yok</span></div>
         <div class="sp-ayrac"></div>
-        <div class="sp-bolum">Arka plan işleri</div>
+        <button class="sp-bolum sp-acilir" data-bolum="isler" aria-expanded="true">Arka plan işleri <span class="sp-ok" data-ikon="asagi"></span></button>
         <div id="sp-isler" class="sp-isler"><span class="soluk kucuk">Yok</span></div>
         <div id="sag-panel-gorev"></div>
       </aside>

@@ -169,6 +169,9 @@ class KomutServisi:
         self.isler: dict[str, KomutIsi] = {}
         self.en_fazla_is = en_fazla_is
         self.izolasyon = izolasyon  # her cagrida guncel ayardan uretilir
+        # uygulamanin loop'u (acilista atanir): arac kaydi is parcaciginda kurulunca loop'u
+        # yakalayamiyor, arka plan komutu gecici loop'ta baslayip loop kapaninca oluyordu
+        self.loop: asyncio.AbstractEventLoop | None = None
         _SERVISLER.add(self)
 
     def _yer_ac(self) -> None:

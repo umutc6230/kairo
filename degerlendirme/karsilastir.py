@@ -46,7 +46,8 @@ def rapor(yerel_r: list[dict], cc: dict) -> str:
         f"| Model | `{yerel_r[0]['surumler']['model']}` ({yerel_r[0]['surumler']['saglayici']}) "
         f"| `{cc['surumler']['model']}` |",
         f"| Surum | `feature/ajan-katmani` | {cc['surumler']['uygulama']} |",
-        f"| Kosu | {len(yerel)} ({oy['kosu']} olculen) | {len(cc['kosular'])} (gorev basina 1) |",
+        f"| Kosu | {len(yerel)} ({oy['kosu']} olculen) | {len(cc['kosular'])} "
+        f"(gorev basina {round(len(cc['kosular']) / max(len(cg), 1))}) |",
         "| Izinler | otomatik mod; onaylar harness tarafindan verildi ve SAYILDI | "
         "acceptEdits + Bash/Read/Edit/Write/Glob/Grep on-izinli |",
         f"| Istemci donanimi | {ortam.get('cpu')}, {ortam.get('ram_gb')} GB | ayni makine |", "",
@@ -56,7 +57,8 @@ def rapor(yerel_r: list[dict], cc: dict) -> str:
         f"| Yanlis basari beyani | {oy['yanlis_basari_beyani']} | {oc['yanlis_basari_beyani']} |",
         f"| Kullanici mudahalesi (onay) | {oy['mudahale_toplam']} | 0 (on-izinli) |",
         f"| Ortalama sure / kosu | {_ort_sure(olculen)} sn | {_ort_sure(cc['kosular'])} sn |",
-        f"| Maliyet | 0 $ (ucretsiz model) | {oc.get('toplam_maliyet_usd', '?')} $ |",
+        f"| Maliyet | {round(sum(r['ozet'].get('toplam_maliyet_usd') or 0 for r in yerel_r), 4)} $ "
+        f"| {oc.get('toplam_maliyet_usd', '?')} $ |",
         f"| Olculemedi | {oy['olculemedi']} (kota/harness) | {oc.get('olculemedi', 0)} |", "",
         "## Kategori", "", "| Kategori | Kairo | Claude Code | Fark (puan) |",
         "|---|---|---|---|",
@@ -87,7 +89,7 @@ def rapor(yerel_r: list[dict], cc: dict) -> str:
         "  olculmeden farkin urun payi AYRISTIRILAMAZ.",
         f"- Yerel ilk surum kapisi (>= %80): {'GECTI' if oy['basari_yuzde'] >= 80 else 'GECMEDI'}"
         f" (%{oy['basari_yuzde']}). Yanlis basari beyani {oy['yanlis_basari_beyani']} kosu.",
-        "- Belirsizlik: Claude Code gorev basina 1 kosu; %100 tavan etkisi (set onun icin kolay).",
+        "- Belirsizlik: %100 tavan etkisi (set Claude Code icin kolay).",
         "  Ayirt edici olcum icin daha zor gorevlerle set buyutulmeli.",
         f"- Kararsiz yerel gorevler: {', '.join(oy['kararsiz_gorevler']) or 'yok'}.",
         "", "Ham veri: `degerlendirme/raporlar/` (yerelde; git'e eklenmez).",

@@ -29,3 +29,21 @@ def test_dolasma_ve_saglikli_gorev():
     az = Run(hedef="x")
     az.adimlar = [_a(i, durum=AdimDurum.hata) for i in range(4)]
     assert AgentRunner._izleyici(az) == ""
+
+
+def test_numarali_dosya_kopyalarinda_yon():
+    # canli: ajan her denemede _unpack1.py ... _unpack43.py yazdi; ilerleme sayaci yakalamadi
+    run = Run(hedef="x")
+    adimlar = []
+    for i in range(1, 6):
+        adimlar += [_a(2 * i, "proje_dosya_yaz", yol=f"C:\cikti\_unpack{i}.py", icerik="x"),
+                    _a(2 * i + 1, "komut", komut=f"python _unpack{i}.py")]  # fmt: skip
+    run.adimlar = adimlar
+    yon = AgentRunner._izleyici(run)
+    assert "_unpack#.py" in yon and "TEK dosyayi" in yon
+    # yeni kopya yoksa ayni not tekrar gelmez (canli: eski 51 kopya yuzunden her 6 adimda geldi)
+    run.adimlar += [_a(100 + i, "komut", komut=f"x{i}") for i in range(IZLE_ARALIK)]
+    assert "_unpack#" not in AgentRunner._izleyici(run)
+    farkli = Run(hedef="x")  # farkli adli dosyalar kopya sayilmaz
+    farkli.adimlar = [_a(i, "proje_dosya_yaz", yol=f"{ad}.py") for i, ad in enumerate("abcdef")]
+    assert AgentRunner._izleyici(farkli) == ""

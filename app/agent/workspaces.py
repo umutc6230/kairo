@@ -74,6 +74,31 @@ class CalismaAlani(BaseModel):
         """Proje icindeki talimat dosyalari sistem mesajina eklenebilir mi (A1.2)."""
         return self.guven is Guven.guvenilir
 
+    def alt_talimatlar(self, dosya: Path) -> list[Path]:
+        """Claude Code ic ice CLAUDE.md: dosyanin klasorunden proje kokune kadar (kok HARIC,
+        o sistem mesajinda) talimat dosyalari; en ust klasordeki once. Yalniz guvenilir projede."""
+        if not self.talimat_okunur_mu():
+            return []
+        bulunan: list[Path] = []
+        for kok in self.kokler:
+            k = Path(kok)
+            try:
+                if not icinde_mi(kok, dosya):
+                    continue
+            except YetkiYok:
+                continue
+            d = dosya.parent
+            while d != k and k in d.parents:
+                for ad in PROJE_TALIMAT_ADLARI:
+                    p = d / ad
+                    try:
+                        if p.is_file() and icinde_mi(kok, p):
+                            bulunan.append(kanonik(p))
+                    except YetkiYok:
+                        continue
+                d = d.parent
+        return list(reversed(list(dict.fromkeys(bulunan))))
+
     def proje_talimatlari(self) -> list[Path]:
         """Guvenilir projede bulunan talimat dosyalari. Guvenilmeyen/sinirli projede BOS."""
         if not self.talimat_okunur_mu():

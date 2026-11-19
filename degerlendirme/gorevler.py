@@ -733,6 +733,7 @@ _MADDE = r"""
 import re
 
 HARIC = re.compile(r"okunmayan|kullan[iı]lan|dahil de[gğ]il|hari[cç]|referans", re.I)
+OLUMSUZ = re.compile(r"okunm(?:uyor|az)|kullan[iı]lm(?:[iı]yor|az)", re.I)
 
 
 def maddeler(metin):
@@ -744,11 +745,23 @@ def maddeler(metin):
         if atla:
             continue
         m = re.match(r"^\s*(?:[-*+]|\d+[.)])\s+(.*)$", s)
-        if m:
+        if m and not OLUMSUZ.search(m.group(1)):  # "X artik okunmuyor" notu X'i listelemez
             out.append(m.group(1))
         elif s.strip().startswith("|") and not re.fullmatch(r"\s*\|[\s:|-]+\|?\s*", s):
             out.append(s)
     return out
+
+
+def ilk_adlar(metin):
+    # Her madde/tablo satirinin KONUSU: ilk hucre ya da maddenin ilk adi. Aciklama sutunu ve
+    # yontem cumlelerindeki adlar sayilmaz (dogru ama aciklamali cevap kalmasin).
+    adlar = set()
+    for m in maddeler(metin):
+        bas = m.strip().strip("|").split("|")[0] if m.strip().startswith("|") else m
+        a = re.findall(r"[A-Za-z_]\w*", bas)
+        if a:
+            adlar.add(a[0])
+    return adlar
 """
 
 gorev(
@@ -758,9 +771,12 @@ gorev(
     korunan=list(_KESIF),
     gizli={"_gizli/madde.py": _MADDE, "_gizli/k.py": d("""
         import pathlib, sys
-        from madde import maddeler
-        c = " ".join(maddeler(pathlib.Path("CEVAP.md").read_text(encoding="utf-8")))
-        ok = all(x in c for x in ("APP_PORT", "APP_DB_URL", "APP_DEBUG", "8000")) and "LEGACY_PORT" not in c
+        from madde import ilk_adlar, maddeler
+        metin = pathlib.Path("CEVAP.md").read_text(encoding="utf-8")
+        c, adlar = " ".join(maddeler(metin)), ilk_adlar(metin)
+        # LEGACY_PORT bir satirin KONUSU olamaz; aciklamada "artik okunmuyor" diye gecmesi serbest
+        ok = {"APP_PORT", "APP_DB_URL", "APP_DEBUG"} <= adlar and "8000" in c
+        ok = ok and "LEGACY_PORT" not in adlar
         sys.exit(0 if ok else 1)
     """)},
     kontroller=[{"argv": ["{py}", "_gizli/k.py"]}],
@@ -812,10 +828,10 @@ gorev(
     gizli={"_gizli/madde.py": _MADDE, "_gizli/k.py": d("""
         import pathlib, sys
         import re
-        from madde import maddeler
+        from madde import ilk_adlar
         c = pathlib.Path("KULLANILMAYAN.md").read_text(encoding="utf-8")
-        # liste maddesi + tablo satiri sayilir; 'kullanilanlar/referans' bolumu sayilmaz
-        adlar = {a for m in maddeler(c) for a in re.findall(r"[A-Za-z_]\\w*", m)}
+        # her satirin KONUSU sayilir (aciklama/yontem adlari degil); referans bolumu sayilmaz
+        adlar = ilk_adlar(c)
         ok = {"eskiFormat", "yedekAl"} <= adlar and not ({"formatla", "geriYukle"} & adlar)
         sys.exit(0 if ok else 1)
     """)},

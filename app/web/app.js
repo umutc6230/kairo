@@ -6,6 +6,7 @@ import { aramaAc, ayarKaydet, ayarlarAc, ayarlarKur, modelYukle, sunucuDurdur } 
 import { $, $$, api, bildir, durum, el, menuAc, modal, modelAdi, modelProfil, onayla, oturumBasligi, sayi, sor, turkcelestir } from "./ortak.js";
 import { sayfaModelleriniYenile, sayfalarKur } from "./sayfalar.js";
 import { modelSayfasiYukle, modellerKur } from "./modeller.js";
+import { ollamaKur, ollamaYukle } from "./ollama.js";
 import { projeAc, projeDurumu, projeKur, projeYenile } from "./proje.js";
 import { skillSayfasiYukle, skillerKur } from "./skiller.js";
 import { eklentilerKur, yukle as eklentileriYukle } from "./eklentiler.js";
@@ -46,7 +47,7 @@ function git(hedef, { kaydetme = false } = {}) {
     if (hedef.tur === "gorevler") gorevSayfasiYukle();
     if (hedef.tur === "rutinler") rutinleriYukle();
     if (hedef.tur === "ajanlar") ajanlarYukle();
-    if (hedef.tur === "modeller") modelSayfasiYukle();
+    if (hedef.tur === "modeller") { modelSayfasiYukle(); ollamaYukle(); }
   }
   $("#btn-geri").disabled = gecmisKonum <= 0;
   $("#btn-ileri").disabled = gecmisKonum >= gecmis.length - 1;
@@ -134,6 +135,7 @@ async function oturumAc(id, kaydetme = false) {
     // sohbet projeye ozgu: baska projenin sohbeti acilinca o proje etkin olur
     if (o.alan && o.alan !== projeDurumu.etkin?.id) await projeyeGec(o.alan);
     durum.oturumId = o.id;
+    document.getElementById("girdi").dispatchEvent(new Event("oturum-degisti"));
     gorunumGoster("sohbet");
     mesajlariCiz(o);
     ajanKayitlariniBirlestir(o);
@@ -181,7 +183,7 @@ function grupAdi(iso) {
 
 function sagPanelOrtam() {
   const p = $("#sp-proje-metni");
-  if (p) p.textContent = projeDurumu.aktif?.ad || "Proje seç (açınca sohbet ajan olur)";
+  if (p) p.textContent = projeDurumu.etkin?.ad || projeDurumu.aktif?.ad || "Proje seç (açınca sohbet ajan olur)";
 }
 document.addEventListener("oturumlar-degisti", () => { oturumlariYenile(); sagPanelOrtam(); });
 
@@ -328,8 +330,10 @@ async function oturumSil(o) {
 // ---------------- durum / model ----------------
 const DURUM_METNI = { hazir: "hazır", yukleniyor: "yükleniyor", kapali: "kapalı", hata: "hata", bilinmiyor: "…" };
 
-/** OpenRouter seciliyse yerel (llama.cpp) modeller arayuzde gorunmez ve kullanilmaz. */
-const uzakMi = () => durum.ayarlar?.saglayici === "openrouter";
+/** OpenRouter ya da Ollama seciliyse yerel (llama.cpp) modeller arayuzde gorunmez ve kullanilmaz. */
+const uzakMi = () => ["openrouter", "ollama"].includes(durum.ayarlar?.saglayici);
+const SAG_AD = { openrouter: "OpenRouter", ollama: "Ollama" };
+const uzakModel = () => (durum.ayarlar?.saglayici === "ollama" ? durum.ayarlar.ollama_model : durum.ayarlar?.or_model) || "";
 
 async function durumYenile() {
   try {
@@ -344,12 +348,14 @@ async function durumYenile() {
   const aktif = s.yuklenen_model || a.model;
   document.body.classList.toggle("uzak-saglayici", uzakMi());
   if (uzakMi()) {
-    $("#sunucu-nokta").className = `nokta ${a.or_model ? "hazir" : "hata"}`;
+    const um = uzakModel();
+    const sag = SAG_AD[a.saglayici];
+    $("#sunucu-nokta").className = `nokta ${um ? "hazir" : "hata"}`;
     // model adi yalniz mesaj kutusunun altindaki secicide (tekrar etmesin); burada baglanti durumu
-    $("#sunucu-metni").textContent = a.or_model ? "OpenRouter" : "OpenRouter · model seçilmedi";
+    $("#sunucu-metni").textContent = um ? sag : `${sag} · model seçilmedi`;
     const km = projeDurumu.aktif?.koordinator_model; // proje sohbeti bu modelle calisir
-    $("#hap-model-metni").textContent = (km || a.or_model) ? (km || a.or_model).split("/").pop() : "Model seç"; // Claude gibi kisa ad
-    $("#hap-model").title = km ? `Proje koordinatör modeli: ${km}` : a.or_model || "";
+    $("#hap-model-metni").textContent = (km || um) ? (km || um).replace(/^ollama:/, "").split("/").pop() : "Model seç"; // Claude gibi kisa ad
+    $("#hap-model").title = km ? `Proje koordinatör modeli: ${km}` : um ? `${sag}: ${um}` : "";
     const dus0 = durum.bilgi.dusunme_secenekleri.find((d) => d.deger === a.dusunme);
     $("#hap-dusunme-metni").textContent = dus0 ? dus0.kisa : a.dusunme;
     bantGuncelle();
@@ -367,7 +373,6 @@ async function durumYenile() {
   const dus = durum.bilgi.dusunme_secenekleri.find((d) => d.deger === a.dusunme);
   $("#hap-dusunme-metni").textContent = dus ? dus.kisa : a.dusunme;
   $("#klasor-metni").textContent = `Model klasörü: ${a.llm_dizin}`;
-  $("#hap-klasor-metni").textContent = a.llm_dizin.split(/[\\/]/).pop() || a.llm_dizin;
   bantGuncelle();
   bosDurumKartlari();
   agecidiGuncelle();
@@ -389,8 +394,8 @@ function bantGuncelle() {
   const bant = $("#uyari-bandi");
   let html = "";
   const bos = s.bellek?.bos_gb;
-  if (a.saglayici === "openrouter" && a.or_model) {
-    // Uzak model: yerel RAM/dosya/llama.cpp uyarilari ilgisiz; bant onay kartini da ortuyordu
+  if (uzakMi() && uzakModel()) {
+    // Uzak / Ollama model: yerel RAM/dosya/llama.cpp uyarilari ilgisiz; bant onay kartini da ortuyordu
   } else if (!s.motor_var) {
     html = `<span class="vurgu">${ikon("uyari")}llama.cpp bulunamadı</span><span>${kacir(a.llm_dizin)} içinde llama.cpp\\llama-server.exe yok.</span><button class="btn kucuk" data-eylem="ayar">Ayarlar</button>`;
   } else if (p && !p.dosya_var) {
@@ -491,10 +496,15 @@ function dusunmeMenusu(capa, yukari = true) {
   })), { yukari });
 }
 
-function modelMenusu(capa) {
+async function modelMenusu(capa) {
   const a = durum.ayarlar;
-  const ogeler = [{ baslik: uzakMi() ? "Model · OpenRouter" : "Model" }];
-  if (uzakMi()) ogeler.push({ metin: a.or_model || "Model seçilmedi", sag: "uzak", secili: !!a.or_model, eylem: () => ayarlarAc() });
+  const ogeler = [{ baslik: uzakMi() ? `Model · ${SAG_AD[a.saglayici]}` : "Model" }];
+  if (a.saglayici === "ollama") { // Ollama'daki yuklu modeller: tiklayinca secilir
+    let liste = [];
+    try { liste = (await api("/api/ollama/yuklu")).modeller; } catch (e) { bildir(e.message, "hata"); }
+    for (const m of liste) ogeler.push({ metin: m.ad, sag: `${sayi(m.boyut_gb)} GB`, secili: m.ad === a.ollama_model, eylem: () => ayarKaydet({ ollama_model: m.ad }, true) });
+    if (!liste.length) ogeler.push({ metin: "Ollama'da model yok", pasif: true });
+  } else if (uzakMi()) ogeler.push({ metin: a.or_model || "Model seçilmedi", sag: "uzak", secili: !!a.or_model, eylem: () => ayarlarAc() });
   for (const m of uzakMi() ? [] : durum.sunucu.modeller) {
     ogeler.push({
       metin: m.ad, sag: m.dosya_var ? `~${m.ram_gb} GB` : "yok", secili: m.anahtar === a.model, pasif: !m.dosya_var,
@@ -512,7 +522,7 @@ function modelMenusu(capa) {
 function sunucuMenusu(capa, yukari) {
   const s = durum.sunucu;
   if (uzakMi()) {
-    menuAc(capa, [{ baslik: `OpenRouter · ${durum.ayarlar.or_model || "model seçilmedi"}` }, "ayrac",
+    menuAc(capa, [{ baslik: `${SAG_AD[durum.ayarlar.saglayici]} · ${uzakModel() || "model seçilmedi"}` }, "ayrac",
       { metin: "AI Ayarları", ikon: "disli", eylem: () => ayarlarAc() }], { yukari, sagaHizali: !yukari });
     return;
   }
@@ -563,7 +573,10 @@ async function baslat() {
   gorevBildirimIzle();
   await durumYenile();
   sohbetKur({ oturumlarYenile: oturumlariYenile, baslikAyarla, oturumAc });
-  ayarlarKur(hepsiniYenile, () => git({ tur: "modeller" }));
+  ayarlarKur(hepsiniYenile, (sekme) => {
+    git({ tur: "modeller" });
+    if (sekme === "ollama") setTimeout(() => $("#ol-kart")?.scrollIntoView({ behavior: "smooth" }), 300);
+  });
   sayfalarKur();
   projeKur();
   skillerKur(hepsiniYenile);
@@ -594,6 +607,7 @@ async function baslat() {
   ], { sagaHizali: true });
   dikteKur();
   modellerKur(hepsiniYenile);
+  ollamaKur(hepsiniYenile);
 
   $$(".nav-oge").forEach((n) => {
     n.onclick = () => {

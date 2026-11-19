@@ -351,6 +351,22 @@ async def test_adim_butcesi(tmp_path, proje) -> None:
     assert run.kullanim.adim == 3
 
 
+async def test_sure_butcesi_dolunca_sorar_devamda_ayni_sure_eklenir(tmp_path, proje) -> None:
+    model = SahteModel([cagri("proje_listele"), {"content": "bitti"}])
+    runner, depo, *_ = kur(tmp_path, proje, model)
+    run = await runner.baslat("x", butce=Butce(max_sure_sn=10))
+    await runner.duraklat(run.id)
+    run = depo.getir(run.id)
+    run.kullanim.sure_sn = 100  # sure butcesi asilmis gibi
+    depo.kaydet(run)
+    await runner.devam(run.id)
+    run = await bitir(runner, run.id)
+    assert run.durum is RunDurum.duraklatildi and run.sure_doldu and "Sure butcesi" in run.hata
+    await runner.devam(run.id)  # "Devam et": ayni 10 sn eklenir, gorev surer
+    run = depo.getir(run.id)
+    assert run.butce.max_sure_sn >= 110 and not run.sure_doldu
+
+
 async def test_ayni_basarisiz_cagri_tekrar_calistirilmaz(tmp_path, proje) -> None:
     kotu = lambda _m: cagri("proje_dosya_oku", yol="yok.txt")  # noqa: E731
     model = SahteModel([kotu, kotu, kotu])
@@ -544,3 +560,75 @@ def test_buyuk_talimatta_cevap_payi_kuculur_gorev_dusmez(tmp_path, proje) -> Non
     assert 1024 <= run.baglam["cevap"] < 8192
     assert not runner._baglami_hazirla(run, "kelime " * 12000, [])
     assert "talimat" in run.hata and "MCP" in run.hata
+
+
+def test_plan_uzun_sure_guncellenmezse_hatirlatir() -> None:
+    from app.agent.runner import IZLE_PLAN, Adim, PlanAdimi
+
+    run = Run(hedef="x", plan=[PlanAdimi(baslik="a", durum="suruyor")])
+    run.adimlar = [Adim(no=0, arac="plan_guncelle", argumanlar={}, durum=AdimDurum.tamam)] + [
+        Adim(no=i, arac="dosya_oku", argumanlar={"yol": f"{i}.py"}, durum=AdimDurum.tamam)
+        for i in range(1, IZLE_PLAN + 1)
+    ]
+    assert "Plani" in AgentRunner._izleyici(run)
+    run.plan[0].durum = "tamam"  # plan bitmisse hatirlatma yok
+    run.izleyici_son = 0
+    assert AgentRunner._izleyici(run) == ""
+
+
+async def test_calistirilan_yardimci_betik_ozette_yoksa_bir_kez_sorulur(tmp_path, proje) -> None:
+    # canli: ajan dogrula_sunucu.py yazip calistirdi, "temizliyorum" dedi ama dosya kaldi
+    model = SahteModel([
+        cagri("proje_dosya_yaz", yol="dogrula.py", icerik="print(1)\n"),
+        cagri("komut_calistir", komut="python dogrula.py", aciklama="dene"),
+        cagri("gorevi_bitir", ozet="Tamam.", kanit_adimlari=[2]),
+        cagri("gorevi_bitir", ozet="Tamam. dogrula.py kontrol betigi, kalici.", kanit_adimlari=[2]),
+    ])  # fmt: skip
+    runner, *_ = kur(tmp_path, proje, model)
+    run = await bitir(runner, (await runner.baslat("x")).id)
+    assert run.adimlar[2].durum is AdimDurum.hata and "dogrula.py" in run.adimlar[2].sonuc
+    assert run.durum is RunDurum.basarili  # ikinci denemede ozette belirtti
+
+
+async def test_arka_plan_baslatma_kanit_listesinde_bitirmeyi_engellemez(tmp_path, proje) -> None:
+    bekle = "ping -n 4 127.0.0.1 > nul" if sys.platform == "win32" else "sleep 4"
+    model = SahteModel([
+        cagri("komut_calistir", komut=bekle, arka_plan=True, aciklama="arka"),
+        cagri("komut_calistir", komut="python -c \"print(1)\"", aciklama="istek"),
+        cagri("gorevi_bitir", ozet="ok", kanit_adimlari=[1, 2]),
+    ])  # fmt: skip
+    runner, *_ = kur(tmp_path, proje, model)
+    run = await bitir(runner, (await runner.baslat("x")).id)
+    assert run.durum is RunDurum.basarili and run.sonuc.kanit == [2]
+
+
+async def test_maliyet_ve_onbellek_saglayici_kullanimindan_toplanir(tmp_path, proje) -> None:
+    model = SahteModel([cagri("proje_listele"), {"content": "bitti"}])
+    model.son_kullanim = {
+        "prompt_tokens": 1000, "completion_tokens": 50, "cost": 0.0021,
+        "prompt_tokens_details": {"cached_tokens": 800},
+    }  # fmt: skip
+    runner, *_ = kur(tmp_path, proje, model)
+    run = await bitir(runner, (await runner.baslat("x")).id)
+    k = run.kullanim
+    assert k.model_cagrisi >= 2 and k.token == 1050 * k.model_cagrisi
+    assert k.maliyet_usd == pytest.approx(0.0021 * k.model_cagrisi)
+    assert k.onbellek_token == 800 * k.model_cagrisi
+
+
+def test_anthropic_icin_onbellek_isareti() -> None:
+    from app.services.openrouter import OpenRouterLLM, onbellek_isaretle
+
+    m = onbellek_isaretle([
+        {"role": "system", "content": "talimat"},
+        {"role": "assistant", "content": "a"},
+        {"role": "user", "content": "soru"},
+    ])  # fmt: skip
+    assert m[0]["content"][0]["cache_control"] == {"type": "ephemeral"}
+    assert m[2]["content"][0]["text"] == "soru" and m[1]["content"] == "a"
+    g = OpenRouterLLM("k", "anthropic/claude-x")._govde(
+        [{"role": "system", "content": "t"}], "kapali", 9
+    )
+    assert isinstance(g["messages"][0]["content"], list)
+    g = OpenRouterLLM("k", "deepseek/v4")._govde([{"role": "system", "content": "t"}], "kapali", 9)
+    assert g["messages"][0]["content"] == "t"  # kendiliginden onbellekleyen saglayici

@@ -242,11 +242,11 @@ EYLEM_TURLERI: dict[str, re.Pattern] = {
     "silme": _tur("delete", "destroy", "erase", "purge", "wipe", "trash", "discard", "sil",
                   "silin", "kaldır"),
     "gonderme": _tur("send", "reply", "forward", "respond", "notify", "broadcast", "invite",
-                     "comment", "email", "mail", "gönder", "gonder", "yanıtla", "ilet"),
+                     "comment", "pr_yorum", "email", "mail", "gönder", "gonder", "yanıtla", "ilet"),
     "paylasma": _tur("share", "sharing", "permissions?", "collaborators?", "grant", "paylaş",
                      "paylas"),
     "yayinlama": _tur("publish", "post", "tweet", "repost", "release", "go live", "merge", "push",
-                      "pull_request", "yayınla", "yayinla"),
+                      "pull_request", "pr_olustur", "yayınla", "yayinla"),
 }  # fmt: skip
 
 

@@ -526,3 +526,30 @@ async def test_komut_servisi_hepsini_durdurur(py_proje: Path) -> None:
     await s.hepsini_durdur()
     await asyncio.sleep(0.1)
     assert i1.surec.returncode is not None and i2.surec.returncode is not None
+
+
+async def test_is_parcaciginda_kurulan_kayitta_arka_plan_isi_yasar(tmp_path: Path, py_proje: Path):
+    # canli: runner arac kaydini to_thread'de kurdugu icin loop yoktu; arka plan komutu gecici
+    # loop'ta basladi ve loop kapaninca 0 sn'de "durduruldu" oldu (sunucu hic ayakta kalmadi)
+    veri = tmp_path / "veri"
+    veri.mkdir()
+    alan = CalismaAlani(
+        id="c" * 12, kokler=[str(py_proje)], guven=Guven.guvenilir, mod=Mod.otomatik
+    )
+    komutlar = KomutServisi()
+    komutlar.loop = asyncio.get_running_loop()  # uygulama acilisinda atanir
+    kayit = await asyncio.to_thread(
+        AjanAracKaydi, alan, PolitikaMotoru(veri, izolasyon=IzoleSahte), CheckpointDeposu(veri),
+        komutlar,
+    )  # fmt: skip
+    assert kayit.loop is None  # is parcaciginda loop yakalanamiyor (sorunun kosulu)
+    bekle = "ping -n 30 127.0.0.1 > nul" if sys.platform == "win32" else "sleep 30"
+    sonuc = await asyncio.to_thread(
+        kayit.isleyiciler()["komut_calistir"], komut=bekle, arka_plan=True, aciklama="bekle"
+    )
+    await asyncio.sleep(1.5)
+    is_ = komutlar.isler[sonuc["id"]]
+    try:
+        assert komutlar.ozet(is_)["durum"] == "calisiyor"
+    finally:
+        await komutlar.durdur(sonuc["id"])

@@ -6,6 +6,8 @@ import asyncio
 import contextlib
 import json
 import os
+import platform
+import re
 import secrets
 import shutil
 import subprocess
@@ -74,6 +76,7 @@ from app.services.ekler import EkDeposu
 from app.services.hafiza import HafizaDeposu
 from app.services.model_magaza import Indirici, Magaza, ModelKaydi, uyumluluk
 from app.services.model_yonetici import LLMFabrikasi, ModelYonetici
+from app.services.ollama import Ollama, ollama_baglam
 from app.services.oneriler import oneriler as oneriler_hesapla
 from app.services.openrouter import OpenRouterDeposu
 from app.services.oturumlar import Mesaj, OturumDeposu
@@ -269,6 +272,16 @@ class AltOturumIstegi(BaseModel):
     kaynak: str = Field(default="", max_length=64)  # onerinin arac cagrisi id'si
 
 
+class SonrakiOneriIstegi(BaseModel):
+    kullanici: str = Field(default="", max_length=4000)
+    asistan: str = Field(default="", max_length=6000)
+
+
+class GeriSarIstegi(BaseModel):
+    mesaj_id: str = Field(default="", max_length=64)
+    run: str = Field(default="", max_length=64)
+
+
 class OneriRedIstegi(BaseModel):
     kaynak: str = Field(min_length=1, max_length=64)
     karar: str = Field(default="reddedildi", pattern=r"^(reddedildi|is:[0-9a-f]{12})$")
@@ -284,6 +297,10 @@ class ModelIstegi(BaseModel):
 
 class DurdurIstegi(BaseModel):
     harici: bool = False
+
+
+class OllamaIndirIstegi(BaseModel):
+    ad: str = Field(min_length=1, max_length=200)
 
 
 class IndirIstegi(BaseModel):
@@ -335,6 +352,7 @@ def uygulama_olustur(
     magaza: Magaza | None = None,
     kapat: Callable[[], None] | None = None,
     or_transport: Any = None,
+    ollama_transport: Any = None,
     gecit: bool = True,
 ) -> FastAPI:
     kayit = ModelKaydi(veri_dizini)
@@ -343,7 +361,13 @@ def uygulama_olustur(
     oturumlar = OturumDeposu(veri_dizini)
     ekler = EkDeposu(veri_dizini)
     openrouter = OpenRouterDeposu(veri_dizini, transport=or_transport)
-    yonetici = ModelYonetici(ayarlar, fabrika, uzak=openrouter)
+    ollama = Ollama(
+        lambda: ayarlar.oku().ollama_adres,
+        lambda: ollama_baglam(ayarlar.oku().baglam_token),
+        transport=ollama_transport,
+        site_transport=ollama_transport,
+    )
+    yonetici = ModelYonetici(ayarlar, fabrika, uzak=openrouter, ollama=ollama)
     talimatlar = TalimatDeposu(veri_dizini)
     skiller = skill_deposu or SkillDeposu(veri_dizini)
     projeler = WorkspaceDeposu(veri_dizini)
@@ -461,6 +485,15 @@ def uygulama_olustur(
     def model_yetenegi(model: str = "") -> ModelYetenegi:
         """model: projenin koordinator modeli (bos: aktif model). MODELLER disi = uzak."""
         a = ayarlar.oku()
+        model = model or (a.aktif_model if a.saglayici == "ollama" else "")
+        if model.startswith("ollama:"):
+            y = ollama.yetenekler.get(model.removeprefix("ollama:")) or {}
+            return ModelYetenegi(
+                model=model, saglayici="ollama", araclar=y.get("araclar", True),
+                json_cikti=True, goruntu=y.get("goruntu", False),
+                baglam=min(y.get("baglam", 8192), ollama_baglam(a.baglam_token)),
+                dusunme=y.get("dusunme", False), tokenizer="tahmin",
+            )  # fmt: skip
         if model and model not in MODELLER:
             openrouter.eksik_modeli_getir(model)
             return uzak_yetenek(model, openrouter.liste_yolu)
@@ -942,6 +975,7 @@ def uygulama_olustur(
             logger.debug("Baglam isitma atlandi: {}", e)
 
     async def omur(_: FastAPI):
+        komutlar.loop = asyncio.get_running_loop()  # arka plan komutlari bu loop'ta yasar
         a = ayarlar.oku()
         if gecit and a.sunucu_acik:
             await agecidi.baslat(a.sunucu_port)
@@ -978,6 +1012,7 @@ def uygulama_olustur(
         await agecidi.durdur()
         await yonetici.kapat()  # yalniz bizim baslattigimiz model sunucusunu durdurur
         await magaza.kapat()
+        await ollama.kapat()  # yalniz Kairo'nun baslattigi Ollama surecini durdurur
 
     app = FastAPI(title=URUN_ADI, version=__version__, lifespan=omur)
     app.state.ajan_deposu = ajan_deposu
@@ -1445,6 +1480,11 @@ def uygulama_olustur(
         return oturumlar.getir(oturum_id).model_dump()
 
     # ---- oturum catal / temizle / disa aktar (A4.5); temizle hafizaya dokunmaz ----
+    @app.post("/api/oturumlar/{oturum_id}/geri-sar")
+    async def oturum_geri_sar(oturum_id: str, istek: GeriSarIstegi) -> dict:
+        o, metin = oturumlar.geri_sar(oturum_id, istek.mesaj_id, istek.run)
+        return {"oturum": o.model_dump(), "metin": metin}
+
     @app.post("/api/oturumlar/{oturum_id}/catal")
     async def oturum_catal(oturum_id: str) -> dict:
         return oturumlar.catal(oturum_id).model_dump()
@@ -1452,6 +1492,39 @@ def uygulama_olustur(
     @app.post("/api/oturumlar/{oturum_id}/alt")
     async def oturum_alt(oturum_id: str, istek: AltOturumIstegi) -> dict:
         return oturumlar.alt_olustur(oturum_id, istek.baslik, istek.kaynak).model_dump()
+
+    @app.post("/api/sonraki-oneri")
+    async def sonraki_oneri(istek: SonrakiOneriIstegi) -> dict:
+        """Claude Code gibi: tur bitince kullanicinin muhtemel sonraki mesajini tek satir onerir.
+        Girdi kutusunda soluk gorunur, Tab ile alinir. Oneri yoksa bos doner; hata sessizdir."""
+        if not istek.asistan.strip():
+            return {"oneri": ""}
+        istem = (
+            "Asagida bir kullanici ile kodlama asistaninin son konusma turu var. Kullanicinin "
+            "BIR SONRAKI mesajini, kullanicinin agzindan, Turkce, en fazla 70 karakterlik tek "
+            "emir cumlesi olarak tahmin et (or. 'main'e birlestir ve DURUM.md guncelle'). "
+            "Asistanin sundugu acik bir sonraki adim, soru ya da onay bekleyen is varsa onu sec. "
+            "Belirgin bir sonraki adim yoksa bos dize dondur.\n\n"
+            f"KULLANICI: {istek.kullanici[-1500:]}\n\nASISTAN: {istek.asistan[-4000:]}"
+        )
+        try:
+            async with asyncio.timeout(45), yonetici.kullan() as llm:
+                v = await llm.json_cikti(
+                    istem,
+                    {"type": "object", "properties": {"oneri": {"type": "string"}},
+                     "required": ["oneri"]},
+                    ad="sonraki_oneri", max_tokens=80, dusunme="kapali",
+                )  # fmt: skip
+        except Exception as e:  # noqa: BLE001 - oneri istege bagli; sohbeti bozmaz
+            logger.debug("Sonraki oneri alinamadi: {}", e)
+            return {"oneri": ""}
+        oneri = " ".join(str(v.get("oneri") or "").split()).strip(" .\"'")
+        # kucuk modeller istemdeki etiketi tekrarlayabilir ("SONRAKI mesaj: ...", "KULLANICI: ...")
+        oneri = re.sub(r"^[^:]{0,40}(sonraki|kullanici|mesaj)[^:]{0,20}:\s*", "", oneri, flags=re.I)
+        oneri = oneri.strip(" .\"'")
+        if oneri.casefold() == " ".join(istek.kullanici.split()).strip(" .\"'").casefold():
+            oneri = ""  # az once yazdigini tekrar onermek anlamsiz
+        return {"oneri": oneri[:100]}
 
     @app.post("/api/oturumlar/{oturum_id}/oneri-reddet")
     async def oturum_oneri_reddet(oturum_id: str, istek: OneriRedIstegi) -> dict:
@@ -1570,9 +1643,12 @@ def uygulama_olustur(
     async def proje_degisiklikler() -> dict:
         """Sag panel 'Degisiklikler': dal, commit edilmemis +/- ve varsa dalin PR'i."""
         kayit = sohbet.ajan_araclari(sohbet.aktif_alan())
+        makine = {"bilgisayar": platform.node()}  # Claude Code'daki ortam satiri
         if kayit is None:
-            return {"repo": False}
-        ozet = await asyncio.to_thread(kayit.git.git_ozet)
+            return {"repo": False} | makine
+        ozet = await asyncio.to_thread(kayit.git.git_ozet) | makine
+        if ozet.get("klasor"):  # worktree'de .git bir dosyadir (ana depoya isaret eder)
+            ozet["worktree"] = (Path(ozet["klasor"]) / ".git").is_file()
         if ozet["repo"] and ayarlar.oku().ag_acik:
             ozet["pr"] = await asyncio.to_thread(_dal_pr, ozet["klasor"], ozet["dal"])
         return ozet
@@ -2115,6 +2191,62 @@ def uygulama_olustur(
     @app.post("/api/magaza/indirmeler/{indirme_id}/iptal")
     async def magaza_iptal(indirme_id: str) -> dict:
         indirici.iptal(indirme_id)
+        return {"iptal": indirme_id}
+
+    # ---- Ollama: saglayici + model magazasi ----
+    @app.get("/api/ollama/durum")
+    async def ollama_durum() -> dict:
+        return await ollama.durum()
+
+    @app.post("/api/ollama/baslat")
+    async def ollama_baslat() -> dict:
+        return await ollama.baslat()
+
+    @app.get("/api/ollama/yuklu")
+    async def ollama_yuklu() -> dict:
+        return {"sistem": _sistem_bilgisi(), "modeller": await ollama.yuklu()}
+
+    @app.get("/api/ollama/detay")
+    async def ollama_detay(ad: str) -> dict:
+        return await ollama.detay(ad[:200])
+
+    @app.delete("/api/ollama/yuklu")
+    async def ollama_sil(ad: str) -> dict:
+        a = ayarlar.oku()
+        sonuc = await ollama.sil(ad[:200])
+        if a.ollama_model == ad:  # secili model silindi: sessizce baska modele gecilmez
+            ayarlar.guncelle({"ollama_model": ""})
+        return sonuc
+
+    @app.get("/api/ollama/ara")
+    async def ollama_ara(
+        q: str = "", sayfa: int = 1, sira: str = "popular", yetenek: str = ""
+    ) -> dict:
+        v = await ollama.ara(q[:100], sayfa, sira, yetenek)
+        return v | {"sistem": _sistem_bilgisi()}
+
+    @app.get("/api/ollama/etiketler")
+    async def ollama_etiketler(ad: str) -> dict:
+        s = _sistem_bilgisi()
+        bellek = {"toplam_gb": s["toplam_ram_gb"], "bos_gb": s["bos_ram_gb"]}
+        yuklu = {m["ad"] for m in await ollama.yuklu()} if await ollama.surum() else set()
+        return {"etiketler": [
+            e | {"uyumluluk": uyumluluk(e["boyut_gb"], bellek, s["disk_bos_gb"]),
+                 "yuklu": e["tam_ad"] in yuklu or (e["etiket"] == "latest" and ad in yuklu)}
+            for e in await ollama.etiketler(ad[:100])
+        ]}  # fmt: skip
+
+    @app.post("/api/ollama/indir")
+    async def ollama_indir(istek: OllamaIndirIstegi) -> dict:
+        return (await ollama.indir(istek.ad)).ozet()
+
+    @app.get("/api/ollama/indirmeler")
+    async def ollama_indirmeler() -> list[dict]:
+        return [i.ozet() for i in ollama.indirmeler.values()]
+
+    @app.post("/api/ollama/indirmeler/{indirme_id}/iptal")
+    async def ollama_iptal(indirme_id: str) -> dict:
+        ollama.iptal(indirme_id)
         return {"iptal": indirme_id}
 
     # ---- talimatlar ve skill'ler ----
