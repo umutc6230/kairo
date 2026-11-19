@@ -172,6 +172,14 @@ def arg_ayristir(argv: list[str] | None = None) -> argparse.Namespace:
 
 def main(argv: list[str] | None = None) -> int:
     ham = sys.argv[1:] if argv is None else argv
+    if ham[:1] == ["--kum"]:  # AppContainer yardimcisi (izolasyon "kum")
+        from app.agent import kum
+
+        return kum.main(ham[1:])
+    if ham[:1] == ["--kum-kur"]:  # bir kerelik, yonetici: surucu kokune listele izni
+        from app.agent import kum
+
+        return kum.kok_kur()
     if ham[:1] == ["degerlendir"]:  # A13 gercek model degerlendirmesi
         from app import degerlendir
 
