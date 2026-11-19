@@ -59,8 +59,7 @@ export async function dilKur(secilen) {
   try { localStorage.setItem("kairo-dil", secilen); } catch { /* gizli pencere */ }
   if (secilen !== "en" || tam) return;
   try {
-    const r = await fetch("/web/en.json");
-    tam = await r.json();
+    tam = window.KAIRO_EN || (await (await fetch("/web/en.json")).json()); // uzak.html sozlugu gomulu verir
   } catch { return; } // sozluk yoksa Turkce kalir
   sablonlar = sablonDerle(tam);
   document.documentElement.lang = "en";
@@ -78,4 +77,5 @@ export async function dilKur(secilen) {
 }
 
 // Ilk boyamada Turkce gorunmesin diye son secim hemen uygulanir; asil kaynak ayarlardir.
-try { if (localStorage.getItem("kairo-dil") === "en") dilKur("en"); } catch { /* yok */ }
+if (window.KAIRO_EN) dilKur("en");
+else try { if (localStorage.getItem("kairo-dil") === "en") dilKur("en"); } catch { /* yok */ }
