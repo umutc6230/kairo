@@ -1,4 +1,5 @@
 // Giris noktasi: acilis, gezinme, kenar cubugu, durum cubugu, menuler, kisayollar.
+import "./mesaj-serit.js";
 import { uzantiYuzeyleriKur } from "./uzantilar.js";
 import { ikon, ikonlariYerlestir } from "./ikonlar.js";
 import { kacir } from "./md.js";

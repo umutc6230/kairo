@@ -1046,3 +1046,10 @@ a.sp-satir { text-decoration: none; }
 .ol-etiket { gap: 8px; align-items: center; padding: 4px 0; border-top: 1px solid var(--cizgi, rgba(255,255,255,.06)); }
 .ol-etiket > span { display: flex; flex-wrap: wrap; gap: 4px; align-items: center; min-width: 0; }
 .ol-etiket > button { flex: none; }
+/* mesaj gezinme seridi (sohbet solu) */
+.mesaj-serit { position: absolute; left: 10px; top: 50%; transform: translateY(-50%); display: flex; flex-direction: column; gap: 6px; max-height: 60%; overflow: hidden; z-index: 2; }
+.mesaj-serit[hidden] { display: none; }
+.mesaj-serit button { width: 14px; height: 6px; padding: 2px 0; border: 0; background: none; cursor: pointer; }
+.mesaj-serit button::before { content: ""; display: block; width: 8px; height: 2px; border-radius: 1px; background: var(--metin, #eee); opacity: .35; transition: width .15s, opacity .15s; }
+.mesaj-serit button:hover::before, .mesaj-serit button.aktif::before { width: 14px; opacity: 1; }
+.mesaj-serit button:focus-visible { outline: 1px solid var(--metin, #eee); }
