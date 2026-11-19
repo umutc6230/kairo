@@ -20,6 +20,9 @@ inputs:
   mod:
     description: onayli | otomatik
     default: onayli
+  guven:
+    description: sinirli | guvenilir (guvenilir yalniz guvendiginiz hedef ve depo icin)
+    default: sinirli
   kabul:
     description: Kabul kosulu (bos = yok)
     default: ""
@@ -41,7 +44,7 @@ runs:
         python-version: "3.12"
     - name: Kairo kur
       shell: pwsh
-      run: python -m pip install -q -r "${{ github.action_path }}/requirements.txt"
+      run: python -P -m pip install -q -r "${{ github.action_path }}/requirements.txt"
     - name: Ajan
       id: ajan
       shell: pwsh
@@ -52,14 +55,19 @@ runs:
         HEDEF: ${{ inputs.hedef }}
         MODEL: ${{ inputs.model }}
         MOD: ${{ inputs.mod }}
+        GUVEN: ${{ inputs.guven }}
         KABUL: ${{ inputs.kabul }}
         PROJE: ${{ inputs.proje }}
         RAPOR: ${{ inputs.rapor-klasoru }}
       run: |
         New-Item -ItemType Directory -Force $env:RAPOR | Out-Null
+        if ($env:GUVEN -notin @("sinirli", "guvenilir")) { throw "guven: sinirli | guvenilir" }
+        if ($env:MOD -eq "otomatik" -and $env:GUVEN -ne "guvenilir") {
+          throw "mod=otomatik icin guven=guvenilir acikca verilmeli"
+        }
         $ek = @()
         if ($env:KABUL) { $ek += @("--kabul", $env:KABUL) }
-        python -P -m app agent "$env:HEDEF" --proje "$env:PROJE" --guven guvenilir --mod "$env:MOD" `
+        python -P -m app agent "$env:HEDEF" --proje "$env:PROJE" --guven "$env:GUVEN" --mod "$env:MOD" `
           --openrouter-model "$env:MODEL" --json @ek | Tee-Object "$env:RAPOR/olaylar.jsonl"
         $kod = $LASTEXITCODE
         git -C "$env:PROJE" diff | Out-File -Encoding utf8 "$env:RAPOR/degisiklik.diff"
