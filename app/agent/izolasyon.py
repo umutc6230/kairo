@@ -132,5 +132,52 @@ class KonteynerAdaptoru:
         ]  # fmt: skip
 
 
+class KumAdaptoru:
+    """Docker'siz Windows kum havuzu (AppContainer): ag kapali, yalniz proje koku yazilir."""
+
+    ad = "kum"
+
+    def __init__(self) -> None:
+        import os
+
+        from app.agent import kum
+
+        kum.git_sertlestir(os.environ)  # surec ortami: Kairo'nun tum git cagrilari devralir
+        kum.SERT_AKTIF = True
+
+    def durum(self) -> dict:
+        from app.agent import kum
+
+        ok = kum.destekli()
+        return {
+            "ad": self.ad,
+            "izole": ok,
+            "kullanilabilir": ok,
+            "not": (
+                "Windows AppContainer: ag kapali, yalniz proje klasorune yazilir, kullanici "
+                "profili kapali. Kullanici klasorune kurulu araclar calismayabilir. "
+                "`dir`/PowerShell surucu kokunu okuyamazsa bir kez yonetici olarak: "
+                "Kairo.exe --kum-kur <proje klasoru>"
+                if ok
+                else "Windows AppContainer yalniz Windows 8+ uzerinde var."
+            ),
+        }
+
+    @property
+    def izole(self) -> bool:
+        return bool(self.durum()["izole"])
+
+    def sar(self, komut: str, cwd: Path, kok: Path) -> list[str] | None:
+        from app.agent import kum
+
+        if not self.izole:  # kullanilamiyorsa sessizce izolasyonsuz calistirma: REDDET
+            from app.exceptions import UygulamaHatasi
+
+            raise UygulamaHatasi(self.durum()["not"])
+        return kum.argv(kok, cwd, komut)
+
+
 def adaptor_olustur(ad: str, imaj: str) -> IzolasyonAdaptoru:
+    if ad == "kum":
+        return KumAdaptoru()
     return KonteynerAdaptoru(imaj) if ad == "konteyner" else YokAdaptoru()

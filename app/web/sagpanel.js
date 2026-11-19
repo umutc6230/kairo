@@ -89,23 +89,62 @@ let sonBaglam = null;
 export async function baglamYenile() {
   const yazi = $("#sp-baglam");
   if (!yazi) return;
-  if (!durum.oturumId) { yazi.textContent = "-"; $("#sp-baglam-dolu").style.width = "0"; sonBaglam = null; return; }
+  if (!durum.oturumId) { yazi.textContent = "-"; $("#sp-baglam-dolu").style.width = "0"; sonBaglam = null; halkaCiz(null); return; }
   try {
     const b = sonBaglam = await api(`/api/oturumlar/${durum.oturumId}/baglam`);
     yazi.textContent = `%${b.yuzde}`;
     yazi.title = `~${b.kullanilan} / ${b.boyut} token`;
     $("#sp-baglam-dolu").style.width = `${b.yuzde}%`;
     if (!$("#sp-baglam-detay").hidden) baglamDetayCiz();
+    halkaCiz(b);
   } catch { /* sessiz */ }
 }
 
+// Yazma kutusundaki baglam halkasi: sag panel kapaliyken de doluluk gorunur; tiklayinca dokum.
+function halkaCiz(b) {
+  const h = $("#hap-baglam");
+  if (!h) return;
+  h.hidden = !b;
+  if (!b) { baglamPopKapat(); return; }
+  const y = Math.max(0, Math.min(100, b.yuzde));
+  h.querySelector(".bh-dolu").setAttribute("stroke-dasharray", `${y} 100`);
+  h.classList.toggle("dolu-uyari", y >= 70);
+  h.classList.toggle("dolu-kritik", y >= 90);
+  h.title = `Bağlam %${y} dolu (~${TOKEN(b.kullanilan)} / ${TOKEN(b.boyut)} token)`;
+  if (!$("#baglam-pop").hidden) $("#baglam-pop").innerHTML = baglamDetayHtml(b);
+}
+
+function baglamPopKapat() {
+  const p = $("#baglam-pop");
+  if (!p || p.hidden) return;
+  p.hidden = true;
+  $("#hap-baglam")?.setAttribute("aria-expanded", "false");
+}
+
+function baglamPopKur() {
+  const h = $("#hap-baglam");
+  const p = $("#baglam-pop");
+  if (!h || !p) return;
+  h.onclick = (e) => {
+    e.stopPropagation();
+    if (!p.hidden) { baglamPopKapat(); return; }
+    p.innerHTML = baglamDetayHtml(sonBaglam);
+    p.hidden = false;
+    h.setAttribute("aria-expanded", "true");
+  };
+  document.addEventListener("click", (e) => { if (!p.contains(e.target)) baglamPopKapat(); });
+  document.addEventListener("keydown", (e) => { if (e.key === "Escape") baglamPopKapat(); });
+}
+
 function baglamDetayCiz() {
-  const kap = $("#sp-baglam-detay");
-  const b = sonBaglam;
-  if (!b) { kap.innerHTML = '<div class="soluk kucuk">Bir sohbet açınca bağlam dökümü görünür.</div>'; return; }
+  $("#sp-baglam-detay").innerHTML = baglamDetayHtml(sonBaglam);
+}
+
+function baglamDetayHtml(b) {
+  if (!b) return '<div class="soluk kucuk">Bir sohbet açınca bağlam dökümü görünür.</div>';
   const kalemler = b.kalemler || [{ ad: "Mesajlar", tur: "mesaj", token: b.kullanilan, yuzde: b.yuzde }];
   const cubuk = kalemler.map((k) => `<span class="bk-${kacir(k.tur)}" style="width:${Math.min(100, k.yuzde)}%"></span>`).join("");
-  kap.innerHTML = `<div class="bk-ust"><b>%${b.yuzde} kullanıldı</b><span class="soluk">${TOKEN(b.kullanilan)} / ${TOKEN(b.boyut)}</span></div>
+  return `<div class="bk-ust"><b>%${b.yuzde} kullanıldı</b><span class="soluk">${TOKEN(b.kullanilan)} / ${TOKEN(b.boyut)}</span></div>
     <div class="bk-cubuk" role="img" aria-label="Bağlam %${b.yuzde} dolu">${cubuk}</div>
     ${kalemler.map((k) => `<div class="sp-alt-satir"><span class="bk-nokta bk-${kacir(k.tur)}"></span><span class="sp-ad">${kacir(k.ad)}${k.sayi ? ` <span class="soluk">(${k.sayi})</span>` : ""}</span><span class="soluk">${TOKEN(k.token)}</span><span class="bk-yuzde">${k.yuzde}%</span></div>`).join("")}
     <div class="sp-alt-satir"><span class="bk-nokta bk-bos"></span><span class="sp-ad">Boş alan</span><span class="soluk">${TOKEN(b.bos ?? 0)}</span><span class="bk-yuzde">${Math.max(0, 100 - b.yuzde)}%</span></div>
@@ -363,6 +402,7 @@ export async function orLimitYenile() {
 }
 
 export function sagPanelKur({ baglayiciAc, ayarAc, degisiklikAc }) {
+  baglamPopKur();
   $("#sp-ayar").onclick = ayarAc;
   baglayiciAcGeri = baglayiciAc;
   degisiklikAcGeri = degisiklikAc;

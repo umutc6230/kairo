@@ -33,6 +33,7 @@ class Mesaj(BaseModel):
     istatistik: dict = {}
     araclar: list[dict] = []  # sohbette cagrilan araclar (ad, argumanlar, ozet)
     hata: str = ""
+    sabit: bool = False  # kullanici sabitledi (gezinme seridinde vurgulu)
     zaman: str = Field(default_factory=simdi)
 
 
@@ -86,11 +87,31 @@ class OturumDeposu:
             raise Bulunamadi("Sohbet bulunamadi.")
         yol.unlink()
 
-    def catal(self, oturum_id: str) -> Oturum:
-        """Ayni gecmisle YENI oturum (fork); asil oturum degismez."""
+    def catal(self, oturum_id: str, mesaj_id: str = "") -> Oturum:
+        """Ayni gecmisle YENI oturum (fork); asil oturum degismez. mesaj_id verilirse o mesaja
+        kadar (dahil) kopyalanir."""
         asil = self.getir(oturum_id)
-        kopya = Oturum(baslik=f"{asil.baslik} (kopya)"[:120], mesajlar=list(asil.mesajlar))
+        mesajlar = list(asil.mesajlar)
+        if mesaj_id:
+            i = next((n for n, m in enumerate(mesajlar) if m.id == mesaj_id), None)
+            if i is None:
+                raise Bulunamadi("Mesaj bulunamadi.")
+            mesajlar = mesajlar[: i + 1]
+        kopya = Oturum(
+            baslik=f"{asil.baslik} (dal)"[:120] if mesaj_id else f"{asil.baslik} (kopya)"[:120],
+            mesajlar=mesajlar,
+        )
         return self.kaydet(kopya)
+
+    def sabitle(self, oturum_id: str, mesaj_id: str) -> Mesaj:
+        """Mesajin sabit durumunu tersine cevirir."""
+        o = self.getir(oturum_id)
+        m = next((m for m in o.mesajlar if m.id == mesaj_id), None)
+        if m is None:
+            raise Bulunamadi("Mesaj bulunamadi.")
+        m.sabit = not m.sabit
+        self.kaydet(o)
+        return m
 
     def geri_sar(self, oturum_id: str, mesaj_id: str = "", run: str = "") -> tuple[Oturum, str]:
         """Claude Code rewind: secilen kullanici mesaji ve SONRASI silinir; metni geri doner
@@ -173,6 +194,7 @@ class OturumDeposu:
                     "guncelleme": ham.get("guncelleme", ""),
                     "mesaj_sayisi": len(ham.get("mesajlar", [])),
                     "ajan_sayisi": len(ham.get("ajan_runlari", [])),
+                    "son_run": (ham.get("ajan_runlari") or [{}])[-1].get("run", ""),
                     "ust": ham.get("ust", ""),
                     "alan": ham.get("alan", ""),
                 }

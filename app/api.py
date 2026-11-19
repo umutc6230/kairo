@@ -215,7 +215,14 @@ class KararIstegi(BaseModel):
 
 
 DIKTE_MAX_SN = 30  # Gemma 4 ses girisi ~30 sn
-DIKTE_UZAK = "Dikte yalniz yerel Gemma 4 modeliyle calisir; ses buluta gonderilmez."
+DIKTE_UZAK = (
+    "Bulut dikte kapali: ses buluta gonderilmez. Ayarlar > 'Sesli dikte bulutta' acilirsa "
+    "secili OpenRouter modeli (ses destekliyse) kullanilir."
+)
+DIKTE_UZAK_SESSIZ = (
+    "Secili OpenRouter modeli sesi anlamiyor; ses girisli bir model secin "
+    "(or. google/gemini-2.5-flash)."
+)
 DIKTE_SESSIZ = "Secili model sesi anlamiyor; dikte icin Gemma 4 (E4B/12B) secin."
 DIKTE_TALIMATI = "Bu ses kaydini oldugu gibi yaziya dok. Yalniz soylenen metni yaz."
 DIKTE_MAX_BAYT = 16000 * 2 * DIKTE_MAX_SN + 4096  # 16 kHz mono 16 bit WAV
@@ -1429,9 +1436,11 @@ def uygulama_olustur(
         }
 
     # ---- oturumlar ----
+    akistaki: set[str] = set()  # duz sohbet cevabi suren oturumlar (telefon "calisiyor" gosterir)
+
     @app.get("/api/oturumlar")
     async def oturum_liste(q: str = "") -> list[dict]:
-        return oturumlar.liste(q)
+        return [{**o, "akista": o["id"] in akistaki} for o in oturumlar.liste(q)]
 
     @app.post("/api/oturumlar")
     async def oturum_yeni() -> dict:
@@ -1486,8 +1495,12 @@ def uygulama_olustur(
         return {"oturum": o.model_dump(), "metin": metin}
 
     @app.post("/api/oturumlar/{oturum_id}/catal")
-    async def oturum_catal(oturum_id: str) -> dict:
-        return oturumlar.catal(oturum_id).model_dump()
+    async def oturum_catal(oturum_id: str, istek: GeriSarIstegi | None = None) -> dict:
+        return oturumlar.catal(oturum_id, istek.mesaj_id if istek else "").model_dump()
+
+    @app.post("/api/oturumlar/{oturum_id}/mesajlar/{mesaj_id}/sabitle")
+    async def mesaj_sabitle(oturum_id: str, mesaj_id: str) -> dict:
+        return oturumlar.sabitle(oturum_id, mesaj_id).model_dump()
 
     @app.post("/api/oturumlar/{oturum_id}/alt")
     async def oturum_alt(oturum_id: str, istek: AltOturumIstegi) -> dict:
@@ -2062,7 +2075,16 @@ def uygulama_olustur(
     @app.post("/api/oturumlar/{oturum_id}/mesaj")
     async def mesaj(oturum_id: str, istek: MesajIstegi) -> StreamingResponse:
         oturumlar.getir(oturum_id)  # yoksa 404 (akis baslamadan)
-        return sse(sohbet.mesaj_gonder(oturum_id, istek))
+
+        async def izlenen() -> AsyncIterator[dict]:
+            akistaki.add(oturum_id)
+            try:
+                async for olay in sohbet.mesaj_gonder(oturum_id, istek):
+                    yield olay
+            finally:
+                akistaki.discard(oturum_id)
+
+        return sse(izlenen())
 
     # ---- ekler ----
     @app.post("/api/ekler")
@@ -2084,7 +2106,14 @@ def uygulama_olustur(
     def dikte_durumu() -> dict:
         a = ayarlar.oku()
         if a.saglayici == "openrouter" and a.or_model:
-            return {"kullanilabilir": False, "model": a.or_model, "neden": DIKTE_UZAK}
+            if not a.dikte_bulut:
+                return {"kullanilabilir": False, "model": a.or_model, "neden": DIKTE_UZAK}
+            if not (openrouter.model_bilgisi(a.or_model) or {}).get("ses"):
+                return {"kullanilabilir": False, "model": a.or_model, "neden": DIKTE_UZAK_SESSIZ}
+            return {
+                "kullanilabilir": True, "model": a.or_model, "neden": "", "max_sn": DIKTE_MAX_SN,
+                "bulut": True,
+            }  # fmt: skip
         p = MODELLER.get(a.model)
         if p is None or not p.ses:
             return {"kullanilabilir": False, "model": a.model, "neden": DIKTE_SESSIZ}

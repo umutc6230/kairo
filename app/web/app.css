@@ -149,7 +149,19 @@ svg { display: block; }
 .kart-ayrac { height: 1px; background: var(--cizgi2); }
 
 /* ---- yazma alani ---- */
-.yazma-kap { padding: 0 24px 14px; width: 100%; max-width: 1008px; margin: 0 auto; }
+.yazma-kap { padding: 0 24px 14px; width: 100%; max-width: 1008px; margin: 0 auto; position: relative; }
+/* Baglam halkasi (yazma kutusu alt satiri) + dokum acilir paneli */
+.baglam-halka { width: 26px; height: 26px; padding: 4px; border: 0; border-radius: 50%; background: none; color: var(--soluk); cursor: pointer; display: inline-grid; place-items: center; }
+.baglam-halka:hover, .baglam-halka[aria-expanded="true"] { background: var(--yuzey2); }
+.baglam-halka:focus-visible { outline: 2px solid var(--mavi); outline-offset: 1px; }
+.baglam-halka svg { width: 18px; height: 18px; transform: rotate(-90deg); }
+.baglam-halka circle { fill: none; stroke-width: 2.5; }
+.baglam-halka .bh-iz { stroke: var(--cizgi2); }
+.baglam-halka .bh-dolu { stroke: var(--soluk); stroke-linecap: round; transition: stroke-dasharray .3s ease; }
+.baglam-halka.dolu-uyari .bh-dolu { stroke: var(--sari); }
+.baglam-halka.dolu-kritik .bh-dolu { stroke: var(--kirmizi); }
+.baglam-pop { position: absolute; right: 24px; bottom: calc(100% - 6px); width: min(340px, calc(100% - 48px)); z-index: 30; background: var(--yuzey); border: 1px solid var(--cizgi2); border-radius: var(--yaricap); padding: 12px 14px; box-shadow: 0 10px 30px rgb(0 0 0 / .35); font-size: 13px; }
+@media (prefers-reduced-motion: reduce) { .baglam-halka .bh-dolu { transition: none; } }
 .bant { display: flex; align-items: center; gap: 10px; padding: 10px 14px; margin-bottom: 10px; border-radius: var(--yaricap); background: var(--yuzey); font-size: 14px; color: var(--soluk); }
 .bant .vurgu { color: var(--kirmizi); display: inline-flex; gap: 6px; align-items: center; white-space: nowrap; flex-shrink: 0; font-weight: 600; }
 .bant > span:not(.vurgu) { min-width: 0; }
@@ -160,6 +172,9 @@ svg { display: block; }
 .yazma:focus-within { border-color: var(--cok-soluk); }
 .yazma.surukle { border-color: var(--mavi); border-style: dashed; }
 .yazma-satir { display: flex; align-items: flex-end; gap: 6px; }
+/* alta yaslanan 32px dugme, girdinin ilk/son satiriyla ayni hizaya gelsin (satir merkezi alttan ~20.6px) */
+.yazma-satir > .ikon-btn { margin-bottom: 4.5px; }
+.yazma-satir > .gonder { margin-bottom: 3.5px; }
 #girdi { flex: 1; align-self: center; resize: none; border: 0; outline: 0; background: none; padding: 9px 4px; max-height: 260px; overflow-y: hidden; font-size: 15.5px; line-height: 1.5; }
 #girdi::placeholder { color: var(--cok-soluk); }
 .gonder { width: 34px; height: 34px; border-radius: 10px; display: grid; place-items: center; background: var(--metin); color: var(--ana-metin); margin: 2px; }
@@ -206,6 +221,10 @@ svg { display: block; }
 .mesaj-alt .ikon-btn { width: 28px; height: 28px; }
 .mesaj-alt .ikon-btn svg { width: 15px; height: 15px; }
 .mesaj-alt .istat { margin-left: 4px; }
+.mesaj-alt .mesaj-saat { margin: 0 2px 0 4px; font-variant-numeric: tabular-nums; }
+.mesaj-alt .sesli-oku[aria-pressed="true"] { color: var(--vurgu); background: var(--yuzey2); }
+.mesaj-alt .sabitle[aria-pressed="true"] { color: var(--vurgu); }
+.mesaj.kullanici .mesaj-alt { justify-content: flex-end; }
 .hata-kutu { border: 1px solid #f2706b55; background: #f2706b14; color: var(--tehlike-metin); padding: 10px 14px; border-radius: 10px; font-size: 14px; margin-top: 6px; }
 .uyari-kutu { border: 1px solid #f2b24c55; background: #f2b24c12; color: var(--uyari-metin); padding: 8px 12px; border-radius: 10px; font-size: 13.5px; margin: 6px 0; }
 
@@ -353,6 +372,13 @@ pre.duz { white-space: pre-wrap; font-family: var(--mono); font-size: 13px; marg
 .arama-kutu input { flex: 1; background: none; border: 0; outline: 0; font-size: 16px; padding: 6px 0; }
 .arama-sonuc { padding: 9px 12px; border-radius: 9px; cursor: pointer; display: flex; justify-content: space-between; gap: 12px; }
 .arama-sonuc:hover, .arama-sonuc.secili { background: var(--yuzey2); }
+.secim-menu { position: fixed; z-index: 65; display: flex; align-items: center; gap: 2px; padding: 4px; background: var(--yuzey); border: 1px solid var(--cizgi2); border-radius: 10px; box-shadow: 0 8px 28px #0008; animation: belir .1s; }
+.secim-menu[hidden] { display: none; }
+.secim-menu button { display: flex; align-items: center; gap: 6px; padding: 6px 10px; border-radius: 7px; color: var(--metin); font-size: 13px; white-space: nowrap; }
+.secim-menu button + button { border-left: 1px solid var(--cizgi); }
+.secim-menu button:hover { background: var(--yuzey2); }
+.secim-menu button[hidden] { display: none; }
+.secim-menu svg { width: 15px; height: 15px; }
 .menu { position: fixed; z-index: 60; background: var(--yuzey); border: 1px solid var(--cizgi2); border-radius: 12px; padding: 5px; min-width: 220px; box-shadow: 0 12px 40px #0009; animation: belir .1s; }
 .menu-oge { width: 100%; display: flex; align-items: center; gap: 10px; padding: 8px 10px; border-radius: 8px; text-align: left; font-size: 14px; }
 .menu-oge:hover { background: var(--yuzey2); }
@@ -571,6 +597,7 @@ pre.duz { white-space: pre-wrap; font-family: var(--mono); font-size: 13px; marg
   .bos-durum { align-items: stretch; }
   .kart-satir span { min-width: 0; overflow-wrap: anywhere; }
   .yazma-kap { padding: 0 10px 10px; }
+  .baglam-pop { right: 10px; width: calc(100% - 20px); }
   .bant { flex-wrap: wrap; gap: 6px 10px; }
   .bant > span { min-width: 0; overflow-wrap: anywhere; }
   .alt-satir { flex-wrap: wrap; gap: 4px; }
@@ -1021,3 +1048,11 @@ a.sp-satir { text-decoration: none; }
 .ol-etiket { gap: 8px; align-items: center; padding: 4px 0; border-top: 1px solid var(--cizgi, rgba(255,255,255,.06)); }
 .ol-etiket > span { display: flex; flex-wrap: wrap; gap: 4px; align-items: center; min-width: 0; }
 .ol-etiket > button { flex: none; }
+/* mesaj gezinme seridi (sohbet solu) */
+.mesaj-serit { position: absolute; left: 10px; top: 50%; transform: translateY(-50%); display: flex; flex-direction: column; gap: 6px; max-height: 60%; overflow: hidden; z-index: 2; }
+.mesaj-serit[hidden] { display: none; }
+.mesaj-serit button { width: 14px; height: 6px; padding: 2px 0; border: 0; background: none; cursor: pointer; }
+.mesaj-serit button::before { content: ""; display: block; width: 8px; height: 2px; border-radius: 1px; background: var(--metin, #eee); opacity: .35; transition: width .15s, opacity .15s; }
+.mesaj-serit button:hover::before, .mesaj-serit button.aktif::before { width: 14px; opacity: 1; }
+.mesaj-serit button:focus-visible { outline: 1px solid var(--metin, #eee); }
+.mesaj-serit button.sabit::before { background: var(--vurgu); opacity: 1; }
