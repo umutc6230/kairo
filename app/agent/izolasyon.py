@@ -137,6 +137,13 @@ class KumAdaptoru:
 
     ad = "kum"
 
+    def __init__(self) -> None:
+        import os
+
+        from app.agent import kum
+
+        kum.git_sertlestir(os.environ)  # surec ortami: Kairo'nun tum git cagrilari devralir
+
     def durum(self) -> dict:
         from app.agent import kum
 

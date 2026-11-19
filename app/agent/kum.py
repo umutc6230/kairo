@@ -181,15 +181,35 @@ def _ace_ekle(yol: Path, ace: str) -> None:
         ctypes.windll.kernel32.LocalFree(sd)
 
 
+GIT_SERT = {"core.hooksPath": "NUL", "core.fsmonitor": "false"}
+
+
+def git_sertlestir(ortam: dict) -> None:
+    """Kairo'nun KUM DISI git komutlari kum kabinin yazabildigi hook/fsmonitor'u calistirmasin.
+    GIT_CONFIG_* komut satiri onceligindedir: repo .git/config'i (ic ice depolar dahil) ezer."""
+    n = int(ortam.get("GIT_CONFIG_COUNT", "0") or 0)
+    if any(ortam.get(f"GIT_CONFIG_KEY_{i}") == "core.hooksPath" for i in range(n)):
+        return  # zaten sertlestirildi
+    for i, (a, d) in enumerate(GIT_SERT.items(), start=n):
+        ortam[f"GIT_CONFIG_KEY_{i}"], ortam[f"GIT_CONFIG_VALUE_{i}"] = a, d
+    ortam["GIT_CONFIG_COUNT"] = str(n + len(GIT_SERT))
+
+
 def git_kilitle(kok: Path, sid: str) -> None:
     """.git kum kabina SALT OKUNUR: kabin yazdigi hook ya da core.fsmonitor, Kairo'nun kum DISINDA
     calisan git komutlarinda calisip kacis olurdu. Deny ACE paket SID'inde islemedigi (denendi)
     icin .git koktan devralmayi keser, kabin iznini kaldirir ve yalniz okuma verir. .git dosyasi
     (worktree) da kilitlenir: yonlendirilirse git baska klasoru kullanir.
-    shortcut: kum icinde YENI olusturulan .git ancak sonraki calistirmada kilitlenir."""
+    shortcut: kum icinde YENI olusturulan ya da ic ice .git kilitlenmez; onlara karsi git_sertlestir
+    (hook/fsmonitor kapali) korur, filter/diff surucusu gibi diger repo ayarlarina karsi korumaz.
+    """
     g = kok / ".git"
-    if not g.exists():
+    if not os.path.lexists(g):
         return
+    if os.lstat(g).st_file_attributes & 0x400 or kok not in g.resolve().parents:
+        raise OSError(
+            ".git bir baglanti (reparse point) ya da proje disini gosteriyor; kum reddedildi."
+        )
     oku = f"(A;{'OICI' if g.is_dir() else ''};0x1200a9;;;{sid})"
     sddl = _sddl(g)
     if sddl.startswith("D:P") and sddl.count(f";{sid})") == 1 and oku in sddl:

@@ -122,3 +122,38 @@ def test_git_klasorune_yazamaz_silemez_ama_projeye_yazar(kok: Path) -> None:
     _kos(kok, "rmdir /s /q .git")
     assert (kok / ".git" / "config").exists()
     assert _kos(kok, "echo ok> normal.txt").returncode == 0
+
+
+def test_git_sertlestir_repo_hookunu_ezer(tmp_path: Path) -> None:
+    import os
+
+    if subprocess.run(["git", "--version"], capture_output=True).returncode != 0:
+        pytest.skip("git yok")
+    r = tmp_path / "r"
+    subprocess.run(["git", "init", "-q", str(r)], check=True)
+    subprocess.run(["git", "-C", str(r), "config", "core.hooksPath", "kotu-hooks"], check=True)
+    ortam = dict(os.environ)
+    kum.git_sertlestir(ortam)
+    cik = subprocess.run(
+        ["git", "-C", str(r), "config", "core.hooksPath"], capture_output=True, text=True, env=ortam
+    )
+    assert cik.stdout.strip() == "NUL"
+
+
+def test_git_baglanti_ise_reddedilir(kok: Path, tmp_path: Path) -> None:
+    hedef = tmp_path / "baska"
+    hedef.mkdir()
+    r = subprocess.run(
+        ["cmd", "/c", "mklink", "/J", str(kok / ".git"), str(hedef)], capture_output=True
+    )
+    if r.returncode != 0:
+        pytest.skip("junction olusturulamadi")
+    with pytest.raises(OSError, match="reparse"):
+        kum.git_kilitle(kok, "S-1-15-2-1")
+
+
+def test_git_sertlestir_tekrar_eklemez() -> None:
+    o: dict = {}
+    kum.git_sertlestir(o)
+    kum.git_sertlestir(o)
+    assert o["GIT_CONFIG_COUNT"] == "2"
