@@ -43,10 +43,11 @@ def test_sohbet_kapsami_ayni_baglamda_ayni_tur(tmp_path):
     BAGLAM.set("run1")
     oid = _iste(m, alan)
     m.onaylar.karar_ver(oid, True, "sohbet")
-    assert _iste(m, alan, "npm run build") is None  # ayni tur, farkli komut
-    assert _iste(m, alan, "pytest") is None
+    assert _iste(m, alan) is None  # ayni komut, tekrar tekrar
+    assert _iste(m, alan) is None
+    assert _iste(m, alan, "rm -rf src") is not None  # baska komut: kapsam yayilmaz
     BAGLAM.set("run2")
-    assert _iste(m, alan, "pytest") is not None  # baska gorev: tekrar sorar
+    assert _iste(m, alan, "npm  test") is not None  # baska gorev: ayni tur tekrar sorar
 
 
 def test_her_zaman_kurali_her_yerde_ve_kaldirilabilir(tmp_path):
@@ -55,11 +56,12 @@ def test_her_zaman_kurali_her_yerde_ve_kaldirilabilir(tmp_path):
     oid = _iste(m, alan)
     m.onaylar.karar_ver(oid, True, "her_zaman")
     BAGLAM.set("run9")
-    assert _iste(m, alan, "ls") is None
+    assert _iste(m, alan, "npm  test") is None  # bosluk farki ayni komut
+    assert _iste(m, alan, "ls") is not None  # her zaman kurali yalniz o komut
     kurallar = m.onaylar.kurallar()
     assert len(kurallar) == 1
     m.onaylar.kural_sil(kurallar[0]["id"])
-    assert _iste(m, alan, "ls") is not None
+    assert _iste(m, alan) is not None
 
 
 def test_ret_kapsam_vermez_ve_gecersiz_kapsam(tmp_path):

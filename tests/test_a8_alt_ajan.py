@@ -221,3 +221,46 @@ def test_ayni_adli_arac_modele_bir_kez_gider() -> None:
     sonuc = _tekil([s("a", "ilk"), s("b"), s("a", "ikinci")])
     assert [x["function"]["name"] for x in sonuc] == ["a", "b"]
     assert sonuc[0]["function"]["description"] == "ilk"
+
+
+def test_alt_ajan_ebeveynin_izole_kokunu_ve_dalini_alir(tmp_path) -> None:
+    proje = tmp_path / "proje"
+    proje.mkdir()
+    model = AracGozleyen([
+        cagri("alt_ajan", gorev="bak", araclar=["proje_dosya_oku"], max_adim=8),
+        cagri("gorevi_bitir", ozet="yok", kanit_adimlari=[]),
+        cagri("gorevi_bitir", ozet="tamam", kanit_adimlari=[]),
+    ])  # fmt: skip
+    runner, depo, *_ = kur(tmp_path, proje, model)
+
+    async def calistir():
+        run = await runner.baslat("izole is", izole_kur=lambda _id: (str(proje), "ajan/x"))
+        return await bitir(runner, run.id)
+
+    run = asyncio.run(calistir())
+    cocuk = depo.getir(run.cocuklar[0])
+    assert (cocuk.calisma_koku, cocuk.dal) == (str(proje), "ajan/x")
+
+
+def test_calisan_goreve_gelen_mesaj_kaybolmaz(tmp_path) -> None:
+    proje = tmp_path / "proje"
+    proje.mkdir()
+    (proje / "a.txt").write_bytes(b"x\n")
+    gorulen: list = []
+    runner_ref: list = []
+
+    def ilk(_m):
+        r = runner_ref[0]
+        run_id = next(iter(r._gorevler))
+        asyncio.get_running_loop().create_task(r.mesaj(run_id, "YONLENDIRME-42"))
+        return cagri("proje_dosya_oku", yol="a.txt")
+
+    def ikinci(m):
+        gorulen.extend(m)
+        return cagri("gorevi_bitir", ozet="tamam", kanit_adimlari=[1])
+
+    model = AracGozleyen([ilk, ikinci])
+    runner, *_ = kur(tmp_path, proje, model)
+    runner_ref.append(runner)
+    asyncio.run(_calistir(runner, "oku"))
+    assert any("YONLENDIRME-42" in str(x.get("content")) for x in gorulen)

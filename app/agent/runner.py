@@ -539,6 +539,8 @@ class AgentRunner:
         self._iptal: set[str] = set()
         self._duraklat: set[str] = set()
         self._aracta: set[str] = set()
+        # calisan run'a gelen mesajlar: diske yazilsa dongunun bellekteki kaydi ezerdi
+        self._gelen: dict[str, list[str]] = {}
         self._kilit = asyncio.Lock()  # tek yerel model: run'lar sirayla model kullanir
         # Uzak saglayicida (OpenRouter) model cagrilari ve ayni mesajdaki alt ajanlar PARALEL
         # calisir; yerel tek modelde sira korunur (api baglar).
@@ -639,6 +641,9 @@ class AgentRunner:
             run.durum = RunDurum.calisiyor
             self.depo.kaydet(run)
             self._calistir(run_id)
+            return run
+        if self.calisiyor_mu(run_id):  # dongu guvenli sinirda alir
+            self._gelen.setdefault(run_id, []).append(metin.strip()[:4000])
             return run
         run.kuyruk.append(metin.strip()[:4000])
         return self.depo.kaydet(run)
@@ -926,6 +931,7 @@ class AgentRunner:
                 if run_id in self._iptal or run_id in self._duraklat:
                     continue  # bayraklar dongu basinda islenir; model cagrilmaz
                 # 2) kullanici yonlendirmeleri: guvenli sinirda
+                run.kuyruk.extend(self._gelen.pop(run_id, []))
                 while run.kuyruk:
                     m = run.kuyruk.pop(0)
                     run.mesajlar.append(
@@ -1026,6 +1032,7 @@ class AgentRunner:
             run.durum, run.hata = RunDurum.basarisiz, f"Beklenmeyen hata: {e}"
         finally:
             run.kullanim.sure_sn = round(time.monotonic() - bas, 1)
+            run.kuyruk.extend(self._gelen.pop(run_id, []))  # islenemeyen mesaj kaybolmasin
             self.depo.kaydet(run)
             self._iptal.discard(run_id)
             self._duraklat.discard(run_id)
@@ -1496,6 +1503,9 @@ class AgentRunner:
             model=uygulayici or run.model,
             model_sabit=bool(uygulayici) or run.model_sabit,
             parent=run.id,
+            # izole worktree'deki ebeveynin cocugu da ayni kokte/dalda calisir (ana projeye yazmaz)
+            calisma_koku=run.calisma_koku,
+            dal=run.dal,
             ad=re.sub(r"[^\w -]", "", str(g.get("ad") or ""))[:40].strip(),
             izinli_araclar=araclar,
             sahip_dosyalar=dosyalar,
@@ -1658,11 +1668,13 @@ class AgentRunner:
             )})  # fmt: skip
             self.depo.kaydet(run)
             return
-        if run.dal.startswith("is/") and not son_degisiklik:  # is emri degisiklik yapmadan bitti
+        if (
+            run.dal.startswith("is/") and not run.parent and not son_degisiklik
+        ):  # is emri degisiklik yapmadan bitti
             gecerli = []
         run.sonuc = Sonuc(ozet=ozet, kanit=gecerli, dogrulandi=bool(gecerli))
         run.durum = RunDurum.basarili if gecerli else RunDurum.dogrulanmadi
-        if not gecerli and run.dal.startswith("is/") and not son_degisiklik:
+        if not gecerli and run.dal.startswith("is/") and not run.parent and not son_degisiklik:
             run.hata = "Is emri hic dosya degistirmeden bitirildi; sonuc dogrulanmadi."
         elif not gecerli:
             run.hata = (
