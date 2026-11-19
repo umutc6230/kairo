@@ -1,148 +1,207 @@
-# Kairo
+<h1 align="center">Kairo</h1>
 
-Windows için **masaüstü yapay zeka ajanı**. Bilgisayarındaki yerel ve sansürsüz modellerle (llama.cpp)
-ya da OpenRouter üzerindeki bulut modelleriyle çalışır: sohbet eder, proje klasöründe kod yazar,
-komut çalıştırır, web'de araştırır, tarayıcıyı ve masaüstü programlarını kullanır. Arayüz Claude
-Desktop düzenindedir; skill, plugin, hook ve MCP tarafında Claude Code ile uyumludur.
+<p align="center">
+  <strong>A desktop AI agent for Windows that runs on local or cloud models.</strong>
+</p>
 
-**Ürün sahibi: Umut Çelik** · [X](https://x.com/umutc6230) · [GitHub](https://github.com/umutc6230)
+<p align="center">
+  <img alt="Platform" src="https://img.shields.io/badge/platform-Windows%2010%2F11-0078D6?logo=windows&logoColor=white">
+  <img alt="Python" src="https://img.shields.io/badge/python-3.12-3776AB?logo=python&logoColor=white">
+  <img alt="FastAPI" src="https://img.shields.io/badge/FastAPI-0.129-009688?logo=fastapi&logoColor=white">
+  <img alt="llama.cpp" src="https://img.shields.io/badge/llama.cpp-Vulkan-8A2BE2">
+  <img alt="OpenRouter" src="https://img.shields.io/badge/OpenRouter-supported-6467F2">
+  <img alt="Portable" src="https://img.shields.io/badge/install-portable-success">
+  <a href="LICENSE"><img alt="License: MIT" src="https://img.shields.io/badge/license-MIT-yellow.svg"></a>
+</p>
 
-Python 3.12 + FastAPI + pywebview, arayüz vanilla JS. Portable: kurulum ve yönetici izni gerekmez.
+<p align="center">
+  <a href="#features">Features</a> ·
+  <a href="#getting-started">Getting Started</a> ·
+  <a href="#development">Development</a> ·
+  <a href="#security">Security</a>
+</p>
 
-## Özellikler
+---
 
-### Modeller ve sağlayıcılar
-- **Yerel (llama.cpp, Vulkan):** GGUF modeller; RAM ihtiyacı, yetenek ve dosya durumu etiketleri,
-  bağlam boyutu 8K / 16K / 32K, boş RAM yetmezse uyarı.
-- **OpenRouter:** anahtar ekle / doğrula / sil (maskeli, yalnız arka uçta), canlı model listesi
-  (24 saat önbellek, Yenile), arama, "yalnız ücretsiz" filtresi, fiyat / bağlam / araç / görsel
-  rozetleri, gerçek istek biçimiyle Test (süre, token, maliyet).
-- **Model mağazası (Hugging Face):** GGUF ara; bu bilgisayarın RAM ve diskine göre
-  "Çalışır / Zorlanır / Çalışmaz" göstergesi. İndirme kaldığı yerden devam eder, SHA256 ile doğrulanır.
-- **Yerel sunucu (Ollama gibi):** Kairo açıkken modeller diğer uygulamalara sunulur. Ollama uyumlu
-  `http://127.0.0.1:11434` (`/api/tags`, `/api/show`, `/api/chat`, `/api/generate`) ve OpenAI uyumlu
-  `/v1` (`/v1/models`, `/v1/chat/completions`). Pencere olmadan: `Sunucu.bat` / `Sunucu-Durdur.bat`.
-- **Claude Code yerel modelle:** sunucu Anthropic uyumlu uçları da verir (`/v1/messages`,
-  `/v1/messages/count_tokens`); `Claude-Yerel.bat [model]` ile Claude Code bulut ve anahtar olmadan çalışır.
+Kairo is a desktop AI agent for Windows. It works with local, uncensored models on your own machine
+(via llama.cpp) or with cloud models through OpenRouter. It can chat, write code inside a project
+folder, run commands, research the web, and drive both the browser and native desktop applications.
+The interface follows the Claude Desktop layout, and its skills, plugins, hooks and MCP support are
+compatible with Claude Code.
 
-### Sohbet
-- Akan cevap, **Durdur**, cevabın üstünde canlı akan ve sonra katlanan düşünce bloğu, düşünme
-  seviyesi (Kapalı / Dengeli / Derin), geçmiş, arama, yeniden adlandırma, çatallama, dışa aktarma.
-- **Dosya ekleme:** resim (OCR / görsel soru), PDF (metin katmanı ya da sayfa sayfa OCR), ses
-  (wav/mp3, Gemma 4), metin dosyaları. Sürükle-bırak ve yapıştırma. Önceki eklerde bağlam bütçesi.
-- **Sohbet planı** ve **araç grupları:** ardışık araç adımları katlanır satırlarda toplanır
-  ("4 okuma yapıldı"), her adım açılıp incelenebilir.
-- **Slash komutları:** `/compact`, `/cost`, `/todos`, `/export`, `/rewind`, `/resume`, `/rename`,
+Built with Python 3.12, FastAPI and pywebview, with a vanilla JavaScript UI. Kairo is fully portable:
+no installer and no administrator rights required.
+
+**Product Owner: Umut Çelik** · [X](https://x.com/umutc6230) · [GitHub](https://github.com/umutc6230)
+
+> Note: the user interface is currently in Turkish.
+
+## Table of Contents
+
+- [Features](#features)
+- [Requirements](#requirements)
+- [Getting Started](#getting-started)
+- [Development](#development)
+- [Security](#security)
+- [License](#license)
+- [Third-Party Notices](#third-party-notices)
+
+## Features
+
+### Models and providers
+- **Local (llama.cpp, Vulkan):** GGUF models with RAM requirement, capability and file-status labels;
+  8K / 16K / 32K context sizes; a warning when free RAM is insufficient.
+- **OpenRouter:** add / validate / delete API keys (masked, kept on the backend only), live model
+  list (24-hour cache with Refresh), search, "free only" filter, price / context / tools / vision
+  badges, and a Test button that uses the real request format (latency, tokens, cost).
+- **Model store (Hugging Face):** search GGUF models with a "Runs / Struggles / Won't run" indicator
+  based on this machine's RAM and disk. Downloads resume where they stopped and are verified with SHA256.
+- **Local server (Ollama-style):** while Kairo is running, its models are available to other apps.
+  Ollama-compatible at `http://127.0.0.1:11434` (`/api/tags`, `/api/show`, `/api/chat`,
+  `/api/generate`) and OpenAI-compatible under `/v1` (`/v1/models`, `/v1/chat/completions`).
+  Headless mode: `Sunucu.bat` / `Sunucu-Durdur.bat`.
+- **Claude Code with a local model:** the server also exposes Anthropic-compatible endpoints
+  (`/v1/messages`, `/v1/messages/count_tokens`); `Claude-Yerel.bat [model]` runs Claude Code with
+  no cloud and no API key.
+
+### Chat
+- Streaming responses, **Stop**, a live thinking block that collapses when done, thinking levels
+  (Off / Balanced / Deep), history, search, rename, fork and export.
+- **Attachments:** images (OCR / visual Q&A), PDFs (text layer or page-by-page OCR), audio
+  (wav/mp3, Gemma 4) and text files. Drag-and-drop and paste. Context budget for earlier attachments.
+- **Chat plan** and **tool groups:** consecutive tool steps collapse into a single row
+  ("4 reads done"), and every step can be expanded and inspected.
+- **Slash commands:** `/compact`, `/cost`, `/todos`, `/export`, `/rewind`, `/resume`, `/rename`,
   `/init`, `/loop`, `/add-dir`, `/bashes`, `/usage`, `/output-style`, `/diff`, `/review`,
-  `/security-review`; `.claude/commands` altındaki özel komutlar. `/` ve `@`
-  tamamlama, `!komut` ve `#not` kısayolları.
-- **Yan sohbet paneli** (Ctrl+;), **sesle dikte** (yerel Gemma 4), **hafıza** (kaynaklı, düzenlenebilir,
-  içe / dışa aktarma), boş ekranda proaktif öneriler.
+  `/security-review`, plus custom commands from `.claude/commands`. `/` and `@` completion,
+  `!command` and `#note` shortcuts.
+- **Side chat panel** (Ctrl+;), **voice dictation** (local Gemma 4), **memory** (sourced, editable,
+  import / export) and proactive suggestions on the empty screen.
 
-### Ajan
-- **Proje / çalışma alanı:** klasör seç, son projeler, çok köklü çalışma alanı.
-- **İzin modları:** Planla / Onaylı / Otomatik ve **Tam yetki**. Onay kapsamı tek sefer, sohbet
-  ya da her zaman; tam yetkide bile riskli eylemler (ödeme, silme, gönderme, yayınlama, disk
-  biçimlendirme, `git push --force`) sorulur. Hassas dosyalar (`.env`, ssh anahtarı, parola) okunmaz.
-- **Araçlar:** dosya oku / listele / ara, yama ve yazma (hash + atomik yazım + checkpoint), terminal
-  (arka plan işleri, durdur), git durum / diff / dal / commit, LSP tanım / referans / tanı.
-- **Geri alma:** dosya ve hunk bazlı checkpoint; `reset --hard` kullanılmaz.
-- **Kalıcı görev döngüsü:** adım / süre / token bütçesi, duraklat / devam / iptal, çalışırken
-  yönlendirme, çökme sonrası kurtarma, kanıtsız "başarılı" yok. Canlı adım akışı ve terminal çıktısı.
-- **Alt ajanlar ve iş emirleri:** uzak sağlayıcıda paralel alt ajan, izole `git worktree` dalları,
-  takım panosu, tipli iş akışları.
-- **Kod incelemesi:** `git diff` üzerinden kanıtlı bulgular (önem, dosya:satır, doğrulama önerisi).
-- **İzolasyon (isteğe bağlı):** komutlar Podman / Docker konteynerinde, ağ kapalı.
+### Agent
+- **Projects / workspaces:** pick a folder, recent projects, multi-root workspaces.
+- **Permission modes:** Plan / Ask / Auto and **Full access**. Approval scope can be once, per chat
+  or always. Even in full access, risky actions (payments, deletion, sending, publishing, disk
+  formatting, `git push --force`) still ask. Sensitive files (`.env`, SSH keys, passwords) are never read.
+- **Tools:** read / list / search files, patch and write (hash check + atomic write + checkpoint),
+  terminal (background jobs, stop), git status / diff / branch / commit, LSP definition / references / diagnostics.
+- **Undo:** file- and hunk-level checkpoints; `reset --hard` is never used.
+- **Persistent task loop:** step / time / token budgets, pause / resume / cancel, steering while
+  running, crash recovery, and no "success" without evidence. Live step stream and terminal output.
+- **Sub-agents and work orders:** parallel sub-agents on remote providers, isolated `git worktree`
+  branches, a team board and typed workflows.
+- **Code review:** evidence-based findings from `git diff` (severity, file:line, verification hint).
+- **Isolation (optional):** run commands inside a Podman / Docker container with networking disabled.
 
-### Kalıcı ajanlar ve otomasyon
-- **Ajanlar:** ad, talimat, klasör, model ve hafızası olan kalıcı ajanlar; iş kuyruğu, ajanlar arası
-  mesaj, konuşma kaydı.
-- **CLI ajanları:** Claude Code, Codex ve Antigravity CLI'ları ajan sağlayıcısı olarak sürülür.
-- **Rutinler:** zamanlanmış görevler (şablonlar, bir kez / tekrar, bitiş koşulu, yap ya da bildir).
-- **Telegram ve webhook:** izinli sohbetten ajana iş verme; webhook olayı ajanın kuyruğuna düşer.
-- **Etkinlik (denetim) penceresi**, Windows bildirimleri, bilgisayarı uyanık tutma.
+### Persistent agents and automation
+- **Agents:** long-lived agents with a name, instructions, folder, model and memory; job queue,
+  agent-to-agent messaging and conversation logs.
+- **CLI agents:** drive the Claude Code, Codex and Antigravity CLIs as agent providers.
+- **Routines:** scheduled tasks (templates, one-off / recurring, end conditions, act or notify).
+- **Telegram and webhooks:** assign work to an agent from an allowed chat; webhook events land in the agent's queue.
+- **Activity (audit) window**, Windows notifications, and keep-awake.
 
-### Web, tarayıcı ve masaüstü
-- **Web araması ve sayfa okuma** (DuckDuckGo; Exa ve Parallel bağlayıcıları).
-- **Tarayıcı kontrolü:** izole profil, erişilebilirlik ağacı, ekran görüntüsü.
-- **Bilgisayar kullanımı:** Windows UI Automation ile programları kullanma; eylemden önce pencere
-  ve eleman vurgusu. Güvenlik pencereleri (UAC, oturum açma) kontrol edilmez.
-- **Görsel ve video üretimi:** `gorsel_uret` (OpenRouter ya da Codex CLI), `video_uret`
-  (OpenRouter, ücretli, onaylı).
+### Web, browser and desktop
+- **Web search and page reading** (DuckDuckGo; Exa and Parallel connectors).
+- **Browser control:** isolated profile, accessibility tree, screenshots.
+- **Computer use:** operate native apps through Windows UI Automation, with window and element
+  highlighting before each action. Security dialogs (UAC, sign-in) are never controlled.
+- **Image and video generation:** `gorsel_uret` (OpenRouter or Codex CLI) and `video_uret`
+  (OpenRouter, paid, requires approval).
 
-### Skill, plugin ve MCP
-- **Talimatlar:** `~/.claude/CLAUDE.md` ve `@import`'ları ile proje `KAIRO.md` / `AGENTS.md` her sohbete eklenir.
-- **Skill'ler:** `~/.claude/skills` otomatik bulunur, uygun skill modelle seçilir; ajan kendi
-  skill'ini kaydedip sürümleyebilir (`skill_kaydet`). Yerleşik belge skill'leri: `docx`, `pdf`.
-- **Claude Code plugin uyumu:** `.claude-plugin/plugin.json`, skills, commands, agents, `hooks.json`,
-  `.mcp.json`, marketplace ve git kaynağı; kurulu Claude Code plugin'lerini içe aktarma.
-- **Hook'lar:** sürümlü olaylar; güvenlik hook'u başarısızsa işlem engellenir.
-- **MCP:** stdio ve streamable HTTP, OAuth girişi (keşif + dinamik kayıt + PKCE), 25 resmi uzak
-  sunuculuk dizin, Claude Code / Claude Desktop ayarlarından içe aktarma, GitHub bağlantısı (`gh`).
-- **Araçları ihtiyaca göre yükleme:** MCP şemaları ertelenir, model `arac_bul` ile bulduğunu yükler
-  (ölçüm: 128 araçlı kurulumda mesaj başı ~51K token -> ~17K).
-- **Araç paketleri:** REA, Craft Anything, agent-desktop; sürümü ve özeti sabit, veri klasörüne kurulur.
-- **Uzantılar:** ayrı süreçte çalışan, sandbox panelli uzantı sistemi.
+### Skills, plugins and MCP
+- **Instructions:** `~/.claude/CLAUDE.md` with its `@import`s, plus project `KAIRO.md` / `AGENTS.md`, are added to every chat.
+- **Skills:** `~/.claude/skills` is discovered automatically and the model picks the right skill;
+  the agent can save and version its own skills (`skill_kaydet`). Built-in document skills: `docx`, `pdf`.
+- **Claude Code plugin compatibility:** `.claude-plugin/plugin.json`, skills, commands, agents,
+  `hooks.json`, `.mcp.json`, marketplaces and git sources; import installed Claude Code plugins.
+- **Hooks:** versioned events; if a security hook fails, the action is blocked.
+- **MCP:** stdio and streamable HTTP, OAuth sign-in (discovery + dynamic registration + PKCE), a
+  directory of 25 official remote servers, import from Claude Code / Claude Desktop settings, and
+  GitHub integration (`gh`).
+- **On-demand tool loading:** MCP schemas are deferred and the model loads what it needs via
+  `arac_bul` (measured: ~51K -> ~17K tokens per message on a 128-tool setup).
+- **Tool packs:** REA, Craft Anything, agent-desktop; pinned version and digest, installed into the data folder.
+- **Extensions:** an extension system running in a separate process with sandboxed panels.
 
-### Arayüz
-- Üst çubukta **Terminal** (Ctrl+`), **Değişiklikler** (git diff) ve **Tarayıcı** panelleri; sağ
-  panelde ortam, bağlam yüzdesi, bağlayıcılar, thread'ler ve dosya ağacı; alt durum çubuğu.
-- Koyu / açık / sistem teması, yazı boyutu, sohbet genişliği, azaltılmış hareket desteği,
-  klavye ve ekran okuyucu erişilebilirliği.
-- Sistem tepsisi, genel hızlı açma kısayolu, başlangıçta açma (isteğe bağlı).
+### Interface
+- **Terminal** (Ctrl+\`), **Changes** (git diff) and **Browser** panels in the top bar; a right panel
+  with environment, context usage, connectors, threads and file tree; a bottom status bar.
+- Dark / light / system theme, font size, chat width, reduced-motion support, keyboard and
+  screen-reader accessibility.
+- System tray, global quick-launch shortcut, optional launch at startup.
 
-### Model test araçları
-- **Karşılaştır:** aynı soru seçilen modellere; cevap, yükleme süresi, token/sn yan yana.
-- **OCR testi**, **Araç testi** ve **Test paketi** (mantık, araç çağırma, JSON, Türkçe OCR, sansürsüzlük).
+### Model testing tools
+- **Compare:** send the same prompt to several models and see answers, load time and tokens/sec side by side.
+- **OCR test**, **Tool test** and a **Test suite** (reasoning, tool calling, JSON, Turkish OCR, refusal behavior).
 
-## Gereksinimler
-- Windows 10/11 (WebView2 hazır gelir), Python 3.12 (kaynaktan çalıştırmak için).
-- Yalnız OpenRouter kullanılacaksa model dosyası gerekmez; bir OpenRouter anahtarı yeter.
-- Yerel model için model klasörü: `llama.cpp\llama-server.exe` (Vulkan) + `models\*.gguf`. Hazır profiller:
-  - `deepseek-heretic`: DeepSeek-V4-Pro Qwen3.5 9B heretic (i1-Q4_K_M, ~6.2 GB)
-  - `gemma4-12b-heretic`: Gemma 4 12B heretic QAT Q4_0 (~7.8 GB, ses girişi var)
-  - `gemma4-e4b-heretic`: Gemma 4 E4B ultra-uncensored heretic (i1-Q4_K_M, ~5.9 GB, ses girişi var)
-- Dahili GPU'lu bilgisayarda model sistem RAM'ini kullanır: modelin boyutundan ~1-2 GB fazla boş RAM gerekir.
-- İsteğe bağlı: Git, `gh`, Node.js (bazı araç paketleri), Podman / Docker (izolasyon),
-  Claude Code / Codex CLI (CLI ajanları).
+## Requirements
 
-## Çalıştırma
-**Portable (önerilen):** `Baslat.bat` ya da `Kairo.exe`. Klasör istenen yere kopyalanır. Ayarlar,
-sohbetler ve ekler klasörün içindeki `data\` altında durur; registry ya da AppData yazılmaz
-(başlangıçta açma seçilirse yalnız bir kısayol). Kaldırmak için klasörü silmek yeterli.
+- Windows 10/11 (WebView2 is preinstalled). Python 3.12 to run from source.
+- For OpenRouter only, no model files are needed; an OpenRouter API key is enough.
+- For local models, a model folder containing `llama.cpp\llama-server.exe` (Vulkan) and `models\*.gguf`.
+  Bundled profiles:
 
-Model klasörü şu sırayla aranır: `YEREL_LLM_DIZIN` ortam değişkeni, uygulama klasörünün içindeki ya
-da yanındaki `llm`, kullanıcı klasöründeki `Projects\llm`. Bulunamazsa Ayarlar > Model klasörü.
+  | Profile | Model | Size |
+  |---|---|---|
+  | `deepseek-heretic` | DeepSeek-V4-Pro Qwen3.5 9B heretic (i1-Q4_K_M) | ~6.2 GB |
+  | `gemma4-12b-heretic` | Gemma 4 12B heretic QAT Q4_0, audio input | ~7.8 GB |
+  | `gemma4-e4b-heretic` | Gemma 4 E4B ultra-uncensored heretic (i1-Q4_K_M), audio input | ~5.9 GB |
 
-**Kaynaktan:**
+- On machines with integrated graphics the model uses system RAM: plan for ~1-2 GB of free RAM
+  above the model size.
+- Optional: Git, `gh`, Node.js (some tool packs), Podman / Docker (isolation),
+  Claude Code / Codex CLI (CLI agents).
+
+## Getting Started
+
+### Portable (recommended)
+
+Run `Baslat.bat` or `Kairo.exe`. The folder can be copied anywhere. Settings, chats and attachments
+live in the `data\` folder inside it; nothing is written to the registry or AppData (apart from a
+single shortcut if launch at startup is enabled). To uninstall, delete the folder.
+
+The model folder is searched in this order: the `YEREL_LLM_DIZIN` environment variable, an `llm`
+folder inside or next to the app folder, then `Projects\llm` in the user folder. If none is found,
+set it under Settings > Model folder.
+
+### From source
+
 ```bat
 pip install -r requirements.txt
-baslat.bat                 :: pencere
-python -m app --tarayici   :: varsayılan tarayıcıda
+baslat.bat                 :: desktop window
+python -m app --tarayici   :: open in the default browser
 python -m app --version
 ```
-Kaynaktan çalışırken veri `data\` (proje kökü). `YAS_VERI_DIZINI` ortam değişkeniyle değiştirilebilir.
-Yalnız Windows'ta çalışır (llama-server.exe, WebView2 ve UI Automation Windows'a özel).
 
-## Geliştirme
+When running from source, data is stored in `data\` at the project root; override it with the
+`YAS_VERI_DIZINI` environment variable. Kairo is Windows-only (llama-server.exe, WebView2 and
+UI Automation are Windows-specific).
+
+## Development
+
 ```bat
 pip install -r requirements-dev.txt
 ruff format . && ruff check .
 pytest --cov
-paketleme\derle.bat     :: temiz venv'de PyInstaller -> dist\Kairo\ (portable klasör)
+paketleme\derle.bat     :: PyInstaller in a clean venv -> dist\Kairo\ (portable folder)
 ```
-Yaklaşık 800 test; model çağrıları sahte sunucuyla, ağa çıkmadan çalışır.
 
-## Güvenlik notları
-- Sunucu yalnız `127.0.0.1`'e bağlanır; Host / Origin kontrolü ve oturum anahtarı vardır. Dışarıya açmayın.
-- API anahtarları yalnız arka uçta, `data\` altında tutulur; arayüze ve loglara maskeli gider.
-- **Tam yetki** modu ajanın dosya yazmasına, komut çalıştırmasına ve programları kullanmasına onaysız
-  izin verir. Yalnız güvendiğiniz işlerde açın.
-- Sansürsüz modeller içerik filtresi uygulamaz; kullanım sorumluluğu kullanıcıdadır.
+The suite has roughly 800 tests; model calls run against a fake server without network access.
 
-## Lisans
-[MIT](LICENSE) (c) 2026 Umut Çelik. Yerleşik skill'ler ve üçüncü taraf bileşenler kendi lisanslarına tabidir.
+## Security
 
-## Üçüncü taraf
-Tasarım fikirleri ve yerleşik skill'ler için `NOTICE-openbot.md`, `NOTICE-dsh-superagent.md` ve
-`app/skills/NOTICE.txt` dosyalarına bakın.
+- The server binds to `127.0.0.1` only, with Host / Origin checks and a session token. Do not expose it to the network.
+- API keys stay on the backend under `data\` and are masked in the UI and logs.
+- **Full access** mode lets the agent write files, run commands and operate applications without
+  approval. Enable it only for tasks you trust.
+- Uncensored models apply no content filtering; responsibility for their use lies with the user.
+
+## License
+
+[MIT](LICENSE) (c) 2026 Umut Çelik. Built-in skills and third-party components are subject to their own licenses.
+
+## Third-Party Notices
+
+See `NOTICE-openbot.md`, `NOTICE-dsh-superagent.md` and `app/skills/NOTICE.txt` for design
+inspirations and built-in skills.
