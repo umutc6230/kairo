@@ -14,7 +14,7 @@ export const EK_SEKMELER = `<button class="sekme" data-sekme="gorunum">Görünü
 export const EK_PANELLER = `
 <div class="modal-govde" data-panel="gorunum" hidden>
   ${satir("Dil / Language", "Arayüz dili. Değişince pencere yenilenir.", sec("dil", [["tr", "Türkçe"], ["en", "English"]]))}
-  ${satir("Tema","Sistem, Windows'un açık/koyu ayarını izler.", sec("tema", [["sistem", "Sistem"], ["acik", "Açık", "Light"], ["koyu", "Koyu"]]))}
+  ${satir("Tema","Sistem, Windows'un açık/koyu ayarını izler.", sec("tema", [["sistem", "Sistem"], ["acik", "Açık", "Light"], ["koyu", "Koyu"], ["onedark", "One Dark"], ["dracula", "Dracula"], ["tokyonight", "Tokyo Night"]]))}
   ${satir("Yazı boyutu", "", sec("yazi_boyutu", [["kucuk", "Küçük"], ["orta", "Orta"], ["buyuk", "Büyük"]]))}
   ${satir("Sohbet genişliği", "", sec("sohbet_genisligi", [["dar", "Dar"], ["genis", "Geniş"]]))}
   ${satir("Hareket", "Azalt seçilirse animasyonlar kapanır.", sec("hareket", [["sistem", "Sistem"], ["azalt", "Azalt"]]))}

@@ -115,7 +115,7 @@ class KullaniciAyarlari(BaseModel):
     otomatik_inceleme: bool = True  # gorev dosya yazdiysa bitince model inceler (Chimera)
     # ---- Claude Desktop ayar karsiliklari ----
     dil: Literal["tr", "en"] = "tr"  # arayuz dili (app/web/i18n.js + en.json)
-    tema: Literal["sistem", "acik", "koyu"] = "koyu"
+    tema: Literal["sistem", "acik", "koyu", "onedark", "dracula", "tokyonight"] = "koyu"
     yazi_boyutu: Literal["kucuk", "orta", "buyuk"] = "orta"
     sohbet_genisligi: Literal["dar", "genis"] = "dar"
     hareket: Literal["sistem", "azalt"] = "sistem"

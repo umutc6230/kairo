@@ -322,7 +322,6 @@ let dosyaListesiAcik = null; // null: az dosyada acik, coksa kapali; kullanici s
 function sagPanelCiz(r) {
   const p = document.getElementById("sag-panel-gorev");
   if (!p) return;
-  const b = r.baglam || {};
   const degisen = r.adimlar.filter((a) => a.checkpoint && YAZAN.has(a.arac));
   // ayni dosyaya birden cok yazim tek satir (son checkpoint'in diff'i acilir)
   const benzersiz = new Map();
@@ -330,13 +329,12 @@ function sagPanelCiz(r) {
     const k = a.dosya || a.argumanlar?.yol || a.arac;
     benzersiz.set(k, { a, n: (benzersiz.get(k)?.n || 0) + 1 });
   }
+  // Baglam ustteki "Bağlam" bolumunde zaten var; bos Plan/Dosya bolumleri gosterilmez
   p.innerHTML = `
-    ${b.baglam ? `<div class="sp-baslik">Bağlam <span class="soluk">%${kacir(b.dolu_yuzde)}</span></div>
-      <div class="butce-cubuk" role="progressbar" aria-label="Bağlam doluluğu" aria-valuenow="${kacir(b.dolu_yuzde)}"><span style="width:${Math.min(100, b.dolu_yuzde)}%"></span></div>` : ""}
-    <div class="sp-baslik">Plan</div>
-    <ul class="plan-liste">${(r.plan || []).map((x) => `<li class="plan-${kacir(planDurum(r, x.durum))}">${kacir(x.baslik)}</li>`).join("") || '<li class="soluk">-</li>'}</ul>
-    <details class="sp-dosya-kap" ${dosyaListesiAcik ?? benzersiz.size <= 5 ? "open" : ""}><summary class="sp-baslik">Değişen dosyalar <span class="soluk">(${benzersiz.size})</span></summary>
-    <ul class="sp-dosyalar">${[...benzersiz.values()].map(({ a, n }) => `<li><button class="bag" data-diff="${kacir(a.checkpoint)}"><span data-ikon="dosya"></span>${kacir(a.dosya || a.argumanlar?.yol || a.arac)}${n > 1 ? ` <span class="soluk kucuk">×${n}</span>` : ""}</button></li>`).join("") || '<li class="soluk">-</li>'}</ul></details>
+    ${(r.plan || []).length ? `<div class="sp-baslik">Plan</div>
+    <ul class="plan-liste">${r.plan.map((x) => `<li class="plan-${kacir(planDurum(r, x.durum))}">${kacir(x.baslik)}</li>`).join("")}</ul>` : ""}
+    ${benzersiz.size ? `<details class="sp-dosya-kap" ${dosyaListesiAcik ?? benzersiz.size <= 5 ? "open" : ""}><summary class="sp-baslik">Değişen dosyalar <span class="soluk">${benzersiz.size}</span></summary>
+    <ul class="sp-dosyalar">${[...benzersiz.values()].map(({ a, n }) => `<li><button class="bag" data-diff="${kacir(a.checkpoint)}"><span data-ikon="dosya"></span>${kacir(a.dosya || a.argumanlar?.yol || a.arac)}${n > 1 ? ` <span class="soluk kucuk">×${n}</span>` : ""}</button></li>`).join("")}</ul></details>` : ""}
     <div class="sp-baslik">Bütçe</div>
     ${cubuk("Adım", r.kullanim.adim, r.butce.max_adim)}
     ${cubuk("Süre", r.kullanim.sure_sn, r.butce.max_sure_sn, " sn")}
