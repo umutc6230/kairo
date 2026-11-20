@@ -1,6 +1,7 @@
 // Sohbet gorunumu: mesajlar, dusunce blogu, yazma alani, ekler, akis ve durdurma.
 import { sohbetteGorevGoster } from "./gorevler.js";
 import { threadKarti } from "./superajan.js";
+import { arayuzKarti, onizlemeKarti } from "./gorsel_kartlar.js";
 import { masaustuBildirimi } from "./ayarlar2.js";
 import { girdiYardimKur, oneriTusu } from "./girdi.js";
 import { anahtarCoz, anahtarYapistir, maskele } from "./gizli.js";
@@ -537,6 +538,13 @@ function asistanMesaji() {
         if (this.sayac) this.dusunceBitir();
         return altOturumKarti(o, d.querySelector(".arac-adimlari"));
       }
+      if (o.ad === "arayuz_goster") { // Claude gibi: sohbette sandbox'li mini arayuz karti
+        if (this.sayac) this.dusunceBitir();
+        if (!d.querySelector(`.arayuz-kart[data-id="${CSS.escape(o.id)}"]`)) arayuzKarti(o, d.querySelector(".arac-adimlari"));
+        const g = el(`<div class="arac-adim" data-id="${kacir(o.id)}" hidden><span class="ozet"></span><pre class="arac-sonuc"></pre></div>`);
+        d.querySelector(".arac-adimlari").append(g);
+        return g;
+      }
       if (o.ad === "plan_guncelle") {
         if (this.sayac) this.dusunceBitir();
         this.planCiz(o.argumanlar?.adimlar);
@@ -568,6 +576,10 @@ function asistanMesaji() {
       if (o.ad === "plan_guncelle") {
         try { this.planCiz(JSON.parse(o.sonuc).plan); } catch { /* hata/kesik: arguman cizimi kalir */ }
         return;
+      }
+      if (o.ad === "arayuz_goster" && o.durum !== "hata") return; // kart cagrida cizildi
+      if (o.ad === "onizleme_baslat" && o.durum !== "hata" && !d.querySelector(`.onizleme-kart[data-id="${CSS.escape(o.id)}"]`)) {
+        onizlemeKarti(o, d.querySelector(".arac-adimlari"));
       }
       const ozet = a.querySelector(".ozet");
       const hataVar = o.durum === "hata" || (o.ozet || "").startsWith("hata");

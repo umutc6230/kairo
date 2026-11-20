@@ -4,6 +4,7 @@ import { modelSil } from "./modeller.js";
 import { uzantiKomutlariniYukle, uzantiSekmesiKur } from "./uzantilar.js";
 import { aracPaketleriCiz, baglayiciIceAktarCiz, EK_PANELLER, EK_SEKMELER, ekSekmeKur, githubBaglan } from "./ayarlar2.js";
 import { ikon, ikonlariYerlestir } from "./ikonlar.js";
+import { goreceliZaman, gorevDurumlari, oturumDurumu } from "./oturum_durumu.js";
 import { kacir } from "./md.js";
 import { $, $$, api, baglayiciDurumu, bildir, durum, ekAvatar, el, menuAc, modal, onayla, sayi, sor } from "./ortak.js";
 
@@ -120,8 +121,10 @@ export function ayarlarAc(sekme = "ai") {
         <label class="anahtar"><input type="checkbox" id="ay-araclar" ${a.sohbet_araclari ? "checked" : ""}><span></span></label></div>
       <div class="anahtar-satir"><div><div>İnternet erişimi</div><div class="ayar-not">Açıkken model web'de arama yapabilir ve sayfa okuyabilir (<code>web_ara</code>, <code>web_getir</code>). Tam yetki kapalıyken her istek onay ister; yerel ağ adresleri okunmaz. Kurum politikası kapattıysa açılamaz.</div></div>
         <label class="anahtar"><input type="checkbox" id="ay-ag" ${a.ag_acik ? "checked" : ""}><span></span></label></div>
-      <div class="anahtar-satir"><div><div>Sesli dikte bulutta</div><div class="ayar-not">Sağlayıcı OpenRouter iken mikrofon kaydın seçili OpenRouter modeline (ses girişi destekliyorsa, ör. Gemini) gönderilip yazıya dökülür. Kapalıyken ses bilgisayardan çıkmaz; dikte yalnız yerel Gemma 4 ile çalışır. Gönderimde sağlayıcıdan veri toplamaması istenir.</div></div>
+      <div class="anahtar-satir"><div><div>Sesli dikte bulutta</div><div class="ayar-not">Açıkken mikrofon kaydın aşağıdaki ayrı dikte modeline (OpenRouter, ses girişli) gönderilip yazıya dökülür; sohbette hangi model seçili olursa olsun çalışır. Kapalıyken ses bilgisayardan çıkmaz; dikte yalnız yerel Gemma 4 ile çalışır. Gönderimde sağlayıcıdan veri toplamaması istenir.</div></div>
         <label class="anahtar"><input type="checkbox" id="ay-dikte-bulut" ${a.dikte_bulut ? "checked" : ""}><span></span></label></div>
+      <div class="anahtar-satir"><div><div>Dikte modeli</div><div class="ayar-not">OpenRouter model kimliği, ses girişi desteklemeli (ör. google/gemini-2.5-flash).</div></div>
+        <input class="alan" id="ay-dikte-model" style="max-width:240px" value="${kacir(a.dikte_model || "")}"></div>
       <div class="anahtar-satir"><div><div>Tarayıcı kontrolü</div><div class="ayar-not">Ajan ayrı bir tarayıcı profiliyle (senin Chrome profilin, çerezlerin ve şifrelerin değil) sayfa açabilir, form doldurabilir, tıklayabilir, ekran görüntüsü alabilir. Dış sitelerde her tıklama ve yazma ayrıca onay ister. Acil durdurma: sohbette <code>/browser kapat</code>.</div></div>
         <label class="anahtar"><input type="checkbox" id="ay-tarayici" ${a.tarayici_acik ? "checked" : ""}><span></span></label></div>
       <div class="anahtar-satir"><div><div>Bilgisayar kullanımı (tüm programlar)</div><div class="ayar-not">Açıkken ajan bilgisayardaki tüm program pencerelerini görebilir, tıklayabilir ve yazabilir. Tam yetki kapalıyken her eylem onay ister. Yönetici onayı (UAC), kilit ekranı, Windows Güvenliği ve parola pencereleri hiçbir zaman kontrol edilmez. Acil durdurma: sohbette <code>/masaustu durdur</code>.</div></div>
@@ -861,6 +864,7 @@ export function ayarlarAc(sekme = "ai") {
   alanKaydet("#ay-araclar", "sohbet_araclari");
   alanKaydet("#ay-ag", "ag_acik");
   $("#ay-dikte-bulut", govde).onchange = async (e) => { await kaydet({ dikte_bulut: e.target.checked }); dikteDurumuYenile(); };
+  $("#ay-dikte-model", govde).onchange = async (e) => { await kaydet({ dikte_model: e.target.value.trim() }); dikteDurumuYenile(); };
   // Tam yetki: acarken tek seferlik onay (openbot ilk acilis onayi gibi); kapatmak serbest
   $("#ay-tam-yetki", govde).onchange = async (e) => {
     const g = e.target;
@@ -1003,23 +1007,54 @@ export async function sunucuDurdur(harici) {
   yenile();
 }
 
-export function aramaAc(oturumAc) {
-  const kutu = el(`<div><div class="arama-kutu">${ikon("ara")}<input placeholder="Sohbetlerde ara..." id="ar-girdi"></div><div id="ar-sonuc" style="padding-top:8px"></div></div>`);
-  const m = modal({ baslik: "Ara", icerik: kutu });
+// Ctrl+K oturum degistirici: bos aramada Calisiyor / Onay bekliyor / Son gruplari; ok tuslari + Enter
+export function aramaAc(oturumAc, projeAdi = () => "", aktifId = "") {
+  const kutu = el(`<div class="degistirici"><div class="arama-kutu">${ikon("ara")}<input placeholder="Sohbete geç ya da ara..." id="ar-girdi" aria-label="Sohbet ara"></div>
+    <div id="ar-sonuc" role="listbox"></div><div class="degistirici-alt soluk kucuk"><span>↑↓ seç</span><span>Enter aç</span><span>Esc kapat</span></div></div>`);
+  const m = modal({ baslik: "Sohbete geç", icerik: kutu });
   const girdi = $("#ar-girdi", kutu);
   let zaman;
+  let secili = 0;
+  const sec = (i) => {
+    const s = [...kutu.querySelectorAll(".arama-sonuc")];
+    if (!s.length) return;
+    secili = (i + s.length) % s.length;
+    s.forEach((x, j) => { x.classList.toggle("secili", j === secili); x.setAttribute("aria-selected", String(j === secili)); });
+    s[secili].scrollIntoView({ block: "nearest" });
+  };
+  const satir = (o, d) => {
+    const proje = o.alan ? projeAdi(o.alan) : "";
+    const s = el(`<div class="arama-sonuc" role="option"><span class="ds-nokta ${d ? `ds-${d}` : ""}" aria-hidden="true"></span><span class="ds-ad">${kacir(o.baslik)}</span>
+      ${proje ? `<span class="soluk kucuk ds-proje">${kacir(proje)}</span>` : ""}<span class="soluk kucuk ds-zaman">${o.id === aktifId ? "Şu an" : kacir(goreceliZaman(o.guncelleme))}</span></div>`);
+    s.onclick = () => { m.kapat(); oturumAc(o.id); };
+    return s;
+  };
   const ara = async () => {
-    const liste = await api(`/api/oturumlar?q=${encodeURIComponent(girdi.value)}`).catch(() => []);
+    const q = girdi.value.trim();
+    const [liste, harita] = await Promise.all([api(`/api/oturumlar?q=${encodeURIComponent(q)}`).catch(() => []), gorevDurumlari()]);
     const kap = $("#ar-sonuc", kutu);
-    kap.innerHTML = liste.length ? "" : `<div class="ayar-not" style="padding:12px">Sonuç yok.</div>`;
-    liste.slice(0, 40).forEach((o) => {
-      const s = el(`<div class="arama-sonuc"><span>${kacir(o.baslik)}</span><span class="soluk kucuk">${kacir(o.guncelleme.slice(0, 16).replace("T", " "))}</span></div>`);
-      s.onclick = () => { m.kapat(); oturumAc(o.id); };
-      kap.append(s);
-    });
+    kap.innerHTML = "";
+    const gorunur = liste.filter((o) => o.mesaj_sayisi || o.ajan_sayisi || o.id === aktifId)
+      .sort((a, b) => (b.guncelleme || "").localeCompare(a.guncelleme || ""));
+    if (!gorunur.length) { kap.innerHTML = '<div class="ayar-not" style="padding:12px">Sonuç yok.</div>'; return; }
+    const gruplar = q ? [["", gorunur.slice(0, 40)]] : (() => {
+      const d = (o) => oturumDurumu(o, harita);
+      return [["Çalışıyor", gorunur.filter((o) => d(o) === "calisiyor")], ["Onay bekliyor", gorunur.filter((o) => d(o) === "onay")],
+        ["Son", gorunur.filter((o) => !["calisiyor", "onay"].includes(d(o))).slice(0, 15)]];
+    })();
+    for (const [ad, ogeler] of gruplar) {
+      if (!ogeler.length) continue;
+      if (ad) kap.append(el(`<div class="ds-grup soluk kucuk">${kacir(ad)}</div>`));
+      ogeler.forEach((o) => kap.append(satir(o, oturumDurumu(o, harita))));
+    }
+    sec(0);
   };
   girdi.oninput = () => { clearTimeout(zaman); zaman = setTimeout(ara, 150); };
-  girdi.onkeydown = (e) => { if (e.key === "Enter") $("#ar-sonuc .arama-sonuc", kutu)?.click(); };
+  girdi.onkeydown = (e) => {
+    if (e.key === "ArrowDown") { e.preventDefault(); sec(secili + 1); }
+    else if (e.key === "ArrowUp") { e.preventDefault(); sec(secili - 1); }
+    else if (e.key === "Enter") { e.preventDefault(); kutu.querySelectorAll(".arama-sonuc")[secili]?.click(); }
+  };
   ara();
   setTimeout(() => girdi.focus(), 10);
 }

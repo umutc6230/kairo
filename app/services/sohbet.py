@@ -24,6 +24,7 @@ from app.agent.policy import Istek, PolitikaMotoru, YanEtki
 from app.agent.terminal import KomutServisi
 from app.agent.workspaces import CalismaAlani, Guven, Mod, WorkspaceDeposu
 from app.exceptions import Bulunamadi, SesDesteklenmiyor, UygulamaHatasi, YerelLLMHatasi
+from app.services import onizleme_araclari as oniz
 from app.services import skiller as skl
 from app.services.ekler import Ek, EkDeposu
 from app.services.model_yonetici import ModelYonetici
@@ -972,6 +973,15 @@ class SohbetServisi:
             isleyiciler["plan_guncelle"] = plan_isleyici
             araclar.append(ALT_OTURUM_ARACI)  # yalniz oneri; kullanici karttan onaylar
             isleyiciler["alt_oturum_oner"] = alt_oturum_isleyici
+            # sohbet ici mini arayuz ve dev sunucu onizlemesi (sema yer kaplar: yalniz istekte)
+            istek_kucuk = (istek_metni or "").lower()
+            oniz_isleyiciler = oniz.isleyiciler(isleyiciler)
+            if re.search(oniz.ARAYUZ_DESENI, istek_kucuk):
+                araclar.append(oniz.ARAYUZ_ARACI)
+                isleyiciler["arayuz_goster"] = oniz_isleyiciler["arayuz_goster"]
+            if "komut_calistir" in isleyiciler and re.search(oniz.ONIZLEME_DESENI, istek_kucuk):
+                araclar.append(oniz.ONIZLEME_ARACI)
+                isleyiciler["onizleme_baslat"] = oniz_isleyiciler["onizleme_baslat"]
             if self.ajan_olusturucu is not None and self.politika is not None:
                 araclar.append(AJAN_OLUSTUR_ARACI)
                 isleyiciler["ajan_olustur"] = self._ajan_olustur_isleyici(alan)

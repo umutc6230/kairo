@@ -166,8 +166,12 @@ HAFIZA_ARACI = {
     "type": "function",
     "function": {
         "name": "hafizaya_ekle",
-        "description": "Sonraki oturumlarda isine yarayacak KALICI bir proje bilgisini kaydeder "
-        "(or. 'testler pytest -q ile calisir'). Sir, gecici durum ya da tahmin yazma.",
+        "description": "Sonraki oturumlarda isine yarayacak KALICI bir bilgiyi kaydeder. SU "
+        "DURUMLARDA HEMEN CAGIR: calistir/test/derleme komutunu bulunca, bir hatanin kalici "
+        "cozumunu bulunca, kullanici bir tercih/kural soyleyince ('hep sunu yap', 'bunu "
+        "kullanma'), proje yapisi/onemli dosya yeri ogrenince, bir yol/arac kisitina "
+        "takilip calisan yolu bulunca. Kisa, tek cumle, kendi basina anlasilir yaz. Sir, "
+        "gecici durum ya da tahmin yazma.",
         "parameters": {
             "type": "object",
             "properties": {
@@ -182,6 +186,13 @@ HAFIZA_ARACI = {
         },
     },
 }  # fmt: skip
+
+HAFIZA_TALIMATI = (
+    "\n\n## Kalici hafiza\nOtomatik ogrenme acik. Gorev boyunca kalici ve tekrar kullanilabilir "
+    "bir bilgi ogrendiginde (komut, cozum, kullanici tercihi, proje yapisi, arac kisiti) "
+    "`hafizaya_ekle` ile hemen kaydet; gorevi bitirmeden once de bu gorevde ogrendigin en az "
+    "bir kalici bilgi var mi diye bak. Zaten hafizada olani tekrar yazma."
+)
 
 HAFIZA_YARGI_ARACI = {
     "type": "function",
@@ -217,11 +228,11 @@ class KararIstegi(BaseModel):
 DIKTE_MAX_SN = 30  # Gemma 4 ses girisi ~30 sn
 DIKTE_UZAK = (
     "Bulut dikte kapali: ses buluta gonderilmez. Ayarlar > 'Sesli dikte bulutta' acilirsa "
-    "secili OpenRouter modeli (ses destekliyse) kullanilir."
+    "ayri dikte modeli (OpenRouter) kullanilir."
 )
 DIKTE_UZAK_SESSIZ = (
-    "Secili OpenRouter modeli sesi anlamiyor; ses girisli bir model secin "
-    "(or. google/gemini-2.5-flash)."
+    "Dikte modeli sesi anlamiyor ya da listede yok; Ayarlar'da ses girisli bir dikte modeli "
+    "yazin (or. google/gemini-2.5-flash)."
 )
 DIKTE_SESSIZ = "Secili model sesi anlamiyor; dikte icin Gemma 4 (E4B/12B) secin."
 DIKTE_TALIMATI = "Bu ses kaydini oldugu gibi yaziya dok. Yalniz soylenen metni yaz."
@@ -450,6 +461,7 @@ def uygulama_olustur(
         sistem, araclar_, isleyiciler, _ = sohbet.baglam_hazirla(a, hedef, [], ajan_gorevi=True)
         if a.otomatik_ogrenme:  # kullanici actiysa ajan kalici not ekleyebilir (dusuk guven)
             araclar_ = [*araclar_, HAFIZA_ARACI]
+            sistem += HAFIZA_TALIMATI
 
             def hafizaya_ekle(metin: str, dayanak: list | None = None) -> dict:
                 try:
@@ -2105,15 +2117,17 @@ def uygulama_olustur(
     # ---- ses dikte (A5.7): YALNIZ yerel ses destekli model; buluta ses gonderilmez ----
     def dikte_durumu() -> dict:
         a = ayarlar.oku()
-        if a.saglayici == "openrouter" and a.or_model:
-            if not a.dikte_bulut:
-                return {"kullanilabilir": False, "model": a.or_model, "neden": DIKTE_UZAK}
-            if not (openrouter.model_bilgisi(a.or_model) or {}).get("ses"):
-                return {"kullanilabilir": False, "model": a.or_model, "neden": DIKTE_UZAK_SESSIZ}
+        # bulut dikte + anahtar: ayri dikte modeli (sohbet saglayicisindan bagimsiz)
+        if a.dikte_bulut and openrouter.anahtar():
+            m = a.dikte_model or a.or_model
+            if not (openrouter.model_bilgisi(m) or {}).get("ses"):
+                return {"kullanilabilir": False, "model": m, "neden": DIKTE_UZAK_SESSIZ}
             return {
-                "kullanilabilir": True, "model": a.or_model, "neden": "", "max_sn": DIKTE_MAX_SN,
+                "kullanilabilir": True, "model": m, "neden": "", "max_sn": DIKTE_MAX_SN,
                 "bulut": True,
             }  # fmt: skip
+        if a.saglayici == "openrouter" and a.or_model:
+            return {"kullanilabilir": False, "model": a.or_model, "neden": DIKTE_UZAK}
         p = MODELLER.get(a.model)
         if p is None or not p.ses:
             return {"kullanilabilir": False, "model": a.model, "neden": DIKTE_SESSIZ}

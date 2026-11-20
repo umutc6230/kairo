@@ -380,25 +380,27 @@ async function degisikliklerYenile() {
 
 const DOLAR = (x) => `$${Number(x).toFixed(Math.abs(Number(x)) < 10 ? 2 : 0)}`;
 
-// Durum cubugu: OpenRouter kalan limiti/bakiyesi (anahtar sunucuda; buraya yalniz tutarlar gelir)
+// Kenar cubugu kullanim kutusu: OpenRouter kalan limiti/bakiyesi (anahtar sunucuda; buraya yalniz tutarlar gelir)
 export async function orLimitYenile() {
-  const b = $("#dc-or-limit");
-  if (!b) return;
-  if (durum.ayarlar?.saglayici !== "openrouter") { b.hidden = true; return; }
+  const gizle = () => { const k = $("#kenar-kullanim"); if (k) k.hidden = true; };
+  if (durum.ayarlar?.saglayici !== "openrouter") { gizle(); return; }
   try {
     const l = await api("/api/openrouter/limit");
-    if (!l.var) { b.hidden = true; return; }
-    const kalan = l.kalan ?? l.bakiye;
-    const parca = [l.kalan != null ? `Anahtar limiti: ${DOLAR(l.kalan)} / ${DOLAR(l.limit)}` : "Anahtar limiti: yok (sınırsız)"];
-    if (l.bakiye != null) parca.push(`Hesap bakiyesi: ${DOLAR(l.bakiye)}`);
-    if (l.kullanim != null) parca.push(`Kullanılan: ${DOLAR(l.kullanim)}`);
-    if (l.ucretsiz) parca.push("Ücretsiz katman");
-    if (l.uyari) parca.push(l.uyari);
-    b.textContent = kalan != null ? `OpenRouter: ${DOLAR(kalan)} kalan` : "OpenRouter: limitsiz";
-    b.title = parca.join(" · ");
-    b.classList.toggle("az", kalan != null && kalan < 1);
-    b.hidden = false;
-  } catch { b.hidden = true; }
+    if (!l.var) { gizle(); return; }
+    kenarKullanimCiz(l, l.kalan ?? l.bakiye);
+  } catch { gizle(); }
+}
+
+// Paradev gibi kenar cubugu alti kullanim kutusu: kalan, limit doluluk cubugu, hesap bakiyesi
+function kenarKullanimCiz(l, kalan) {
+  const k = $("#kenar-kullanim");
+  if (!k) return;
+  const yuzde = l.limit ? Math.min(100, Math.round((100 * (l.kullanim || 0)) / l.limit)) : null;
+  k.innerHTML = `<div class="kk-ust"><b>OpenRouter</b>${l.ucretsiz ? '<span class="rozet">ücretsiz</span>' : ""}<span class="kk-kalan ${kalan != null && kalan < 1 ? "az" : ""}">${kalan != null ? `${DOLAR(kalan)} kalan` : "limitsiz"}</span></div>
+    ${yuzde != null ? `<div class="kk-satir"><span class="soluk">Anahtar limiti</span><div class="kk-cubuk" role="progressbar" aria-label="Anahtar limiti kullanımı" aria-valuenow="${yuzde}" aria-valuemin="0" aria-valuemax="100"><span style="width:${yuzde}%"></span></div><span class="soluk">%${yuzde}</span></div>` : ""}
+    ${l.bakiye != null ? `<div class="kk-satir"><span class="soluk">Hesap bakiyesi</span><span class="kk-bosluk"></span><span>${DOLAR(l.bakiye)}</span></div>` : ""}
+    ${l.uyari ? `<div class="soluk kucuk">${kacir(l.uyari)}</div>` : ""}`;
+  k.hidden = false;
 }
 
 export function sagPanelKur({ baglayiciAc, ayarAc, degisiklikAc }) {
@@ -421,15 +423,13 @@ export function sagPanelKur({ baglayiciAc, ayarAc, degisiklikAc }) {
   paneliAyarla(localStorage.getItem(PANEL_ANAHTAR) !== "0");
   $("#btn-sag-panel").onclick = () => paneliAyarla($("#sag-panel").hidden);
   $("#btn-dosyalar").onclick = () => dosyaPaneliAyarla($("#dosya-panel").hidden);
-  $("#sp-dosya-kapat").onclick = () => dosyaPaneliAyarla(false);
-  $("#sp-dosya-yenile").onclick = dosyaAgaciniYenile;
+  $("#sp-dosya-kapat").onclick = () => dosyaPaneliAyarla(false);  $("#sp-dosya-yenile").onclick = dosyaAgaciniYenile;
   dosyaPaneliAyarla(localStorage.getItem(DOSYA_ANAHTAR) === "1");
   setInterval(islerYenile, 4000);
   setInterval(threadlerYenile, 5000);
-  threadlerYenile();
   setTimeout(orLimitYenile, 1500); // ayarlar yuklendikten sonra
   setInterval(orLimitYenile, 60000);
-  $("#dc-or-limit").onclick = async () => { await orLimitYenile(); bildir($("#dc-or-limit").title, "bilgi", 5000); };
+  threadlerYenile();
   $("#sp-baglayici-baslik").onclick = (e) => {
     const acik = $("#sp-baglayici-detay").hidden;
     detayAcKapa(e.currentTarget, $("#sp-baglayici-detay"), acik);

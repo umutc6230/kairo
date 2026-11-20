@@ -3,6 +3,7 @@
 import { ikon, ikonlariYerlestir } from "./ikonlar.js";
 import { kacir, md } from "./md.js";
 import { diffGoster, reviewYap } from "./inceleme.js";
+import { arayuzKarti, onizlemeKarti } from "./gorsel_kartlar.js";
 import { $, $$, api, bildir, durum, el, modal, onayla, sayi } from "./ortak.js";
 import { masaustuBildirimi } from "./ayarlar2.js";
 
@@ -178,6 +179,27 @@ function ccGrup(adimlar, sonGrupCalisiyor) {
   </li>`;
 }
 
+// Mini arayuz / onizleme kartlari: akis her guncellemede innerHTML ile yeniden yazilir; iframe
+// yeniden yuklenmesin diye kart bir kez uretilir ve ayni eleman yer tutucuya geri konur.
+const GORSEL_ARACLAR = new Set(["arayuz_goster", "onizleme_baslat"]);
+const gorselOnbellek = new Map(); // "runId:no" -> kart elemani
+function gorselYerleriDoldur(kap, r) {
+  for (const yer of kap.querySelectorAll(".gorsel-yer")) {
+    const a = r.adimlar.find((x) => String(x.no) === yer.dataset.gorsel);
+    if (!a) continue;
+    const anahtar = `${r.id}:${a.no}`;
+    let kart = gorselOnbellek.get(anahtar);
+    if (!kart) {
+      const o = { id: anahtar, argumanlar: a.argumanlar, sonuc: a.sonuc };
+      const gecici = document.createElement("div");
+      kart = a.arac === "arayuz_goster" ? arayuzKarti(o, gecici) : onizlemeKarti(o, gecici);
+      if (!kart) continue;
+      gorselOnbellek.set(anahtar, kart);
+    }
+    yer.append(kart);
+  }
+}
+
 function ccAkis(adimlar, calisiyor) {
   const parcalar = [];
   let grup = [];
@@ -189,6 +211,11 @@ function ccAkis(adimlar, calisiyor) {
     if (a.aciklama) {
       kapat();
       parcalar.push(`<li class="ajan-aciklama">${md(a.aciklama)}</li>`);
+    }
+    if (GORSEL_ARACLAR.has(a.arac) && a.durum === "tamam") { // kart: grubun disinda, yerinde kalir
+      kapat();
+      parcalar.push(`<li class="gorsel-yer" data-gorsel="${kacir(a.no)}"></li>`);
+      continue;
     }
     // plan/bitis adimi grupta gorunmez ama modelin cumlesi (ornegin ilk "once sunu yapayim") kalir
     if (a.arac !== "plan_guncelle" && a.arac !== "gorevi_bitir") grup.push(a);
@@ -260,6 +287,16 @@ function bekleyenKartlari(r) {
   return parcalar.join("");
 }
 
+// Paradev gibi: ajan bir seye takilinca akista soluk tek satir ("Onay bekleniyor: ...")
+function beklemeSatiri(r) {
+  const adim = [...r.adimlar].reverse().find((a) => ["onay_bekliyor", "cevap_bekliyor"].includes(a.durum));
+  const metin = r.durum === "duraklatildi" ? "Duraklatıldı; devam etmek için Devam'a bas."
+    : adim?.durum === "cevap_bekliyor" ? "Cevabın bekleniyor."
+      : adim ? `Onay bekleniyor: ${adimBasligi(adim)}`
+        : r.durum === "onay_bekliyor" ? "Onay bekleniyor." : "";
+  return metin ? `<div class="bekleme-satiri" role="status">${kacir(metin)}</div>` : "";
+}
+
 // Claude Code Desktop gibi: sohbette sade akis (adim satirlari, onay kartlari, sonuc);
 // plan, baglam, butce ve degisen dosyalar SAG PANELDE.
 function sohbetCiz(r) {
@@ -280,6 +317,7 @@ function sohbetCiz(r) {
     ${planHtml}
     <ol class="adim-liste sade">${akis}</ol>
     ${notlar.map((g) => `<div class="ajan-not md">${md(g)}</div>`).join("")}
+    ${beklemeSatiri(r)}
     ${calisiyor ? `<div class="baykus-canli" data-mod="${r.durum === "calisiyor" ? "calisiyor" : "bekliyor"}" style="--bk-gecikme:-${(Date.now() / 1000 % 3600).toFixed(2)}s"><span class="baykus-kap">${ikon("logo")}</span><span class="baykus-etiket">${r.durum === "calisiyor" ? "Çalışıyor…" : "Onay bekliyor…"}</span></div>` : ""}
     ${bekleyenKartlari(r)}
     ${r.hata ? `<div class="uyari-kutu kucuk">${kacir(r.hata)}</div>` : ""}
@@ -289,6 +327,7 @@ function sohbetCiz(r) {
       <div class="satir"><input class="alan" data-entegre-test placeholder="Birleştirmeden önce test komutu (isteğe bağlı)" style="flex:1">
       <button class="btn ana" data-entegre>Ana dala birleştir</button><button class="btn tehlike" data-at>Değişiklikleri at</button></div>` : ""}</div>` : ""}
     <div class="ajan-kontrol">${rozet(r.durum)}${kontroller(r)}</div>`;
+  gorselYerleriDoldur(kap, r);
   const ent = kap.querySelector("[data-entegre]");
   if (ent) {
     ent.onclick = async () => {
