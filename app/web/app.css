@@ -139,7 +139,7 @@ svg { display: block; }
 @keyframes nabiz { 0%, 100% { opacity: 1; transform: scale(1); } 50% { opacity: .35; transform: scale(.7); } }
 @keyframes parilti { from { background-position: 150% 0; } to { background-position: -50% 0; } }
 .grup-baslik svg { width: 14px; height: 14px; transition: transform .15s; }
-.grup.kapali .grup-baslik svg { transform: rotate(-90deg); }
+.grup.kapali .grup-baslik [data-ikon="asagi"] svg { transform: rotate(-90deg); } /* yalniz ok doner, uyari/klasor ikonu degil */
 .grup.kapali .grup-ogeler { display: none; }
 .oturum { position: relative; display: flex; align-items: center; padding: 4px 10px; line-height: 1.3; border-radius: 9px; cursor: pointer; font-size: 14.5px; }
 .oturum span.ad { flex: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; -webkit-mask-image: linear-gradient(90deg, #000 85%, transparent); }
