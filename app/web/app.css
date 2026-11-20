@@ -1159,7 +1159,6 @@ a.sp-satir { text-decoration: none; }
 .proje-grup .oturum { font-size: 13.5px; padding: 6px 8px; }
 
 /* ---- sohbet mini haritasi ---- */
-#g-sohbet { position: relative; }
 .mini-harita { position: absolute; left: 10px; top: 24px; bottom: 140px; width: 14px; z-index: 2; }
 .mm-cizgi { position: absolute; left: 0; width: 10px; height: 2px; padding: 0; border: 0; border-radius: 1px; background: var(--cizgi2); cursor: pointer; transition: width .12s, background .12s; }
 .mm-cizgi::before { content: ""; position: absolute; inset: -4px -2px; }

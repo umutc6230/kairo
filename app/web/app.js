@@ -193,7 +193,20 @@ document.addEventListener("oturumlar-degisti", () => { oturumlariYenile(); sagPa
 
 let gorevHaritasi = new Map(); // run id -> durum (kenar cubugu durum ikonlari)
 // durum ikonlari guncel kalsin (baska yerden baslayan gorev, onaya dusen ajan); gizliyken istek yok
-setInterval(() => { if (!document.hidden && durum.oturumlar) oturumlariYenile(); }, 8000);
+// Yalniz bir sey degistiyse cizilir: her seferinde cizmek acik menuyu/hover'i bozuyordu
+let sonImza = "";
+setInterval(async () => {
+  if (document.hidden || !durum.oturumlar) return;
+  try {
+    const [liste, harita] = await Promise.all([api("/api/oturumlar"), gorevDurumlari()]);
+    const imza = JSON.stringify(liste.map((o) => [o.id, o.baslik, o.guncelleme, oturumDurumu(o, harita)]));
+    if (imza === sonImza) return;
+    sonImza = imza;
+    durum.oturumlar = liste;
+    gorevHaritasi = harita;
+    oturumListesiCiz();
+  } catch { /* sessiz */ }
+}, 8000);
 async function oturumlariYenile() {
   try {
     [durum.oturumlar, gorevHaritasi] = await Promise.all([api("/api/oturumlar"), gorevDurumlari()]);
