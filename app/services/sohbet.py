@@ -25,6 +25,7 @@ from app.agent.terminal import KomutServisi
 from app.agent.workspaces import CalismaAlani, Guven, Mod, WorkspaceDeposu
 from app.exceptions import Bulunamadi, SesDesteklenmiyor, UygulamaHatasi, YerelLLMHatasi
 from app.services import onizleme_araclari as oniz
+from app.services import sirlar
 from app.services import skiller as skl
 from app.services.ekler import Ek, EkDeposu
 from app.services.model_yonetici import ModelYonetici
@@ -548,6 +549,7 @@ async def arac_calistir(
                 sonuc = {"hata": f"{type(e).__name__}: {e}"}
     gorsel = sonuc.pop("_gorsel", None) if isinstance(sonuc, dict) else None
     metin, kesildi = sonuc_kisalt(sonuc)
+    metin = sirlar.maskele(metin)  # kasadaki anahtar ciktida gecerse modele gitmez
     kayit = {
         "id": cagri["id"],
         "ad": ad,
@@ -1092,6 +1094,7 @@ class SohbetServisi:
             isleyiciler = uzanti_kancali(self.uzantilar, isleyiciler)
         if not ayar.sohbet_araclari and alan.id == VARSAYILAN_ALAN_ID:
             return sistem, [], {}, otomatik  # kullanici sohbette araclari kapatti
+        sistem += sirlar.talimat()
         # MCP semalari baglami dolduruyordu (128 arac ~34K token): ihtiyaca gore yuklenir
         ertele(araclar, isleyiciler, {a.get("ad", "") for m in onceki for a in m.araclar})
         return sistem, araclar, isleyiciler, otomatik

@@ -27,6 +27,7 @@ from pydantic import BaseModel, Field
 from app.agent.dosyalar import ortam_allowlist
 from app.agent.izolasyon import IzolasyonAdaptoru, YokAdaptoru
 from app.exceptions import Bulunamadi, UygulamaHatasi
+from app.services import sirlar
 
 # A13: ajanin baslattigi komut hangi gorevin? Runner arac cagrisindan once ayarlar
 # (asyncio.to_thread baglami kopyalar); iptal o gorevin surec agaclarini hemen kapatir.
@@ -216,7 +217,7 @@ class KomutServisi:
             "stdin": subprocess.PIPE if arka_plan else subprocess.DEVNULL,
             "stdout": subprocess.PIPE,
             "stderr": subprocess.STDOUT,
-            "env": ortam_allowlist(),
+            "env": {**ortam_allowlist(), **sirlar.ortam()},  # kasa: kullanicinin verdigi anahtarlar
             "creationflags": subprocess.CREATE_NO_WINDOW if sys.platform == "win32" else 0,
         }
         try:
@@ -299,7 +300,9 @@ class KomutServisi:
         return self.ozet(is_)
 
     def ozet(self, is_: KomutIsi, tam: bool = False) -> dict:
-        cikti, kesildi = _kirp(is_.cikti(), MAX_CIKTI_KARAKTER if not tam else 10**9)
+        cikti, kesildi = _kirp(
+            sirlar.maskele(is_.cikti()), MAX_CIKTI_KARAKTER if not tam else 10**9
+        )
         return {
             **is_.durum.model_dump(mode="json"),
             "cikti": cikti,

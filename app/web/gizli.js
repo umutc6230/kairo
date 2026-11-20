@@ -1,5 +1,7 @@
 // Mesaj kutusuna yapistirilan API anahtarlari: kutuda ve sohbet balonunda maskeli gorunur,
-// gonderirken gercek deger yerine konur (istek davranisi degismez).
+// gonderirken sir kasasina alinir (bkz. anahtarCoz).
+import { api } from "./ortak.js";
+
 const ANAHTAR = /\b(sk-or-v1-[A-Za-z0-9]{20,}|sk-(?:ant-|proj-)?[A-Za-z0-9_-]{20,}|gh[pousr]_[A-Za-z0-9]{30,}|github_pat_[A-Za-z0-9_]{30,}|xox[abpr]-[A-Za-z0-9-]{10,}|AKIA[0-9A-Z]{16}|AIza[0-9A-Za-z_-]{35}|ck_[A-Za-z0-9]{20,}|\d{8,10}:[A-Za-z0-9_-]{35})\b/g;
 const saklanan = new Map(); // yer tutucu -> gercek anahtar
 
@@ -25,9 +27,15 @@ export function anahtarYapistir(e, alan) {
   return true;
 }
 
-/** Gonderim: yer tutuculari gercek anahtarla degistirir. */
-export function anahtarCoz(metin) {
+/** Gonderim: slash komutunda gercek deger; sohbette anahtar sifreli kasaya girer, mesaja
+ * yalniz adi ($GITHUB_TOKEN) gider. Model degeri hic gormez; komutlarda ortam degiskenidir. */
+export async function anahtarCoz(metin) {
   let s = metin;
-  for (const [t, k] of saklanan) s = s.split(t).join(k);
+  const komut = s.startsWith("/");
+  for (const [t, k] of saklanan) {
+    if (!s.includes(t)) continue;
+    const yerine = komut ? k : "$" + (await api("/api/sirlar", { method: "POST", govde: { deger: k } })).ad;
+    s = s.split(t).join(yerine);
+  }
   return s;
 }

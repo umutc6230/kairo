@@ -762,7 +762,13 @@ export function yeniSohbetEkrani({ girdiyiKoru = false } = {}) {
 export async function gonder() {
   oneriTemizle();
   const girdi = $("#girdi");
-  const metin = anahtarCoz(girdi.value.trim()); // maskeli yer tutucu -> gercek anahtar
+  let metin;
+  try {
+    metin = await anahtarCoz(girdi.value.trim()); // anahtar kasaya, mesaja yalniz adi
+  } catch (e) {
+    bildir(`Anahtar kasaya kaydedilemedi, mesaj gönderilmedi: ${e.message}`, "hata");
+    return;
+  }
   if (komutMu(metin, (istem) => { $("#girdi").value = istem; gonder(); })) { // yerel slash komut: modele mesaj olarak gitmez
     girdi.value = "";
     boyutla();

@@ -65,7 +65,7 @@ from app.exceptions import (
 from app.services import cc_plugin as ccp
 from app.services import ekler as ekler_modulu
 from app.services import masaustu_ayar as mda
-from app.services import sistem
+from app.services import sirlar, sistem
 from app.services import skiller as skl
 from app.services.agecidi import AgGecidi, agecidi_uygulamasi
 from app.services.arac_paketleri import AracPaketleri
@@ -429,6 +429,7 @@ def uygulama_olustur(
     pluginler = PluginDeposu(veri_dizini)
     skiller.proje_kaynaklari = lambda: [*proje_skill_kaynaklari(), *pluginler.skill_kaynaklari()]
     hafiza = HafizaDeposu(veri_dizini)
+    sirlar.KASA = sirlar.SirKasasi(veri_dizini)
     hooklar = HookDeposu(veri_dizini)
     mcp = McpYoneticisi(veri_dizini)
     uzantilar = UzantiYoneticisi(veri_dizini)
@@ -3072,6 +3073,23 @@ def uygulama_olustur(
             mda.bildirim, str(veri.get("baslik", URUN_ADI)), str(veri.get("metin", ""))
         )
         return {"gonderildi": ok}
+
+    @app.get("/api/sirlar")
+    async def sir_listesi() -> dict:
+        """Yalniz adlar; deger hicbir uctan geri okunmaz."""
+        return {"adlar": sirlar.KASA.adlar()}
+
+    @app.post("/api/sirlar")
+    async def sir_ekle(istek: dict) -> dict:
+        ad = await asyncio.to_thread(
+            sirlar.KASA.ekle, str(istek.get("deger", "")), str(istek.get("ad", ""))
+        )
+        return {"ad": ad}
+
+    @app.delete("/api/sirlar/{ad}")
+    async def sir_sil(ad: str) -> dict:
+        await asyncio.to_thread(sirlar.KASA.sil, ad)
+        return {"silindi": ad}
 
     @app.post("/api/dosya/goster")
     async def dosya_goster(istek: dict) -> dict:
