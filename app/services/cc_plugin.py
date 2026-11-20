@@ -95,6 +95,40 @@ def _yollar(kok: Path, deger: Any, varsayilan: str) -> list[Path]:
     return [p for p in yollar if p.resolve().is_relative_to(k)]
 
 
+def ajan_profili(dosya: Path) -> dict:
+    fm, govde = _fm(dosya.read_text(encoding="utf-8", errors="replace"))
+
+    def adlar(alan: str) -> list[str] | None:
+        if alan not in fm:
+            return None
+        deger = fm[alan]
+        if isinstance(deger, str):
+            deger = deger.split(",")
+        if not isinstance(deger, list):
+            return []
+        return [s.strip() for s in deger if isinstance(s, str) and s.strip()]
+
+    def araclar(alan: str) -> list[str] | None:
+        adlar_ = adlar(alan)
+        if adlar_ is None:
+            return None
+        return [b for a in adlar_ for b in ARAC_ESLESME.get(a, [a])]
+
+    return {
+        "ad": str(fm.get("name") or dosya.stem),
+        "aciklama": str(fm.get("description", ""))[:500],
+        "araclar": araclar("tools"),
+        "yasak_araclar": araclar("disallowedTools") or [],
+        "model": str(fm.get("model") or ""),
+        "effort": str(fm.get("effort") or ""),
+        "izin": str(fm.get("permissionMode") or ""),
+        "isolation": str(fm.get("isolation") or ""),
+        "skills": adlar("skills") or [],
+        "mcp": adlar("mcpServers"),
+        "govde": govde,
+    }
+
+
 def bilesenler(kok: Path) -> dict:
     """Plugin klasorundeki tum Claude Code bilesenlerini cikarir (hicbir sey calistirmaz)."""
     m = ham_manifest(kok) or {}
@@ -119,15 +153,7 @@ def bilesenler(kok: Path) -> dict:
             })  # fmt: skip
     for d in _yollar(kok, m.get("agents"), "agents"):
         for f in sorted(d.glob("*.md")) if d.is_dir() else []:
-            fm, govde = _fm(f.read_text(encoding="utf-8", errors="replace"))
-            araclar = fm.get("tools")
-            if isinstance(araclar, str):
-                araclar = [x.strip() for x in araclar.split(",")]
-            sonuc["ajanlar"].append({
-                "ad": str(fm.get("name") or f.stem), "aciklama": str(fm.get("description", ""))[:500],
-                "araclar": [b for a in (araclar or []) for b in ARAC_ESLESME.get(str(a), [])],
-                "govde": govde,
-            })  # fmt: skip
+            sonuc["ajanlar"].append(ajan_profili(f))
     hooks = m.get("hooks")
     if isinstance(hooks, str | list) or hooks is None:
         for p in _yollar(kok, hooks, "hooks/hooks.json"):

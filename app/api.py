@@ -17,6 +17,7 @@ import uuid
 import webbrowser
 from collections.abc import AsyncIterator, Callable
 from contextlib import asynccontextmanager
+from contextvars import ContextVar
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any, Literal
@@ -51,7 +52,7 @@ from app.agent.takim import TakimPanosu
 from app.agent.tarayici import Tarayici, playwright_var
 from app.agent.terminal import KomutServisi
 from app.agent.webhook import WebhookDeposu, WebhookHatasi, hedef_olustur
-from app.agent.workspaces import Guven, Mod, WorkspaceDeposu
+from app.agent.workspaces import CalismaAlani, Guven, Mod, WorkspaceDeposu
 from app.agent.yetenek import ModelYetenegi, dogrula, uzak_yetenek, yerel_yetenek
 from app.agent.zamanlayici import Tetik, Zamanlayici
 from app.config import web_dizini
@@ -420,8 +421,10 @@ def uygulama_olustur(
         komutlar,
     )
 
+    skill_alani: ContextVar[CalismaAlani | None] = ContextVar("skill_alani", default=None)
+
     def proje_skill_kaynaklari() -> list[tuple[str, Path]]:
-        alan = sohbet.aktif_alan()
+        alan = skill_alani.get() or sohbet.aktif_alan()
         # kisisel klasorler proje degil; guvenilmeyen repo skill/talimat ekleyemez
         if alan.id == VARSAYILAN_ALAN_ID or not alan.talimat_okunur_mu():
             return []
@@ -460,14 +463,16 @@ def uygulama_olustur(
     sohbet.hafiza = hafiza
 
     def ajan_baglami(
-        hedef: str, model_secimi: str | None = None
+        hedef: str, model_secimi: str | None = None, *,
+        alan: CalismaAlani | None = None, mcp_sunuculari: set[str] | None = None,
     ) -> tuple[str, list, dict, str | None]:
-        alan = sohbet.aktif_alan()
+        alan = alan or sohbet.aktif_alan()
         if sohbet.ajan_araclari(alan) is None:
             raise UygulamaHatasi("Ajan araclari hazir degil.")
         a = ayarlar.oku()
         sistem, araclar_, isleyiciler, skill_adi = sohbet.baglam_hazirla(
-            a, hedef, [], model_secimi, ajan_gorevi=True
+            a, hedef, [], model_secimi, ajan_gorevi=True, alan=alan,
+            mcp_sunuculari=mcp_sunuculari,
         )
         if a.otomatik_ogrenme:  # kullanici actiysa ajan kalici not ekleyebilir (dusuk guven)
             araclar_ = [*araclar_, HAFIZA_ARACI]
@@ -558,18 +563,36 @@ def uygulama_olustur(
                     secim = await sohbet.skill_sec(llm, ayar, run.hedef, [], genis=True)
             except Exception as e:  # noqa: BLE001 - secim hatasi gorevi durdurmaz
                 logger.debug("Gorev skill secimi basarisiz: {}", e)
-        sistem, araclar_, isleyiciler, skill_adi = await asyncio.to_thread(
-            ajan_baglami, run.hedef, secim
-        )
-        run.skill_adi = skill_adi or ""
+        alan = projeler.getir(run.proje_id) if run.proje_id else sohbet.aktif_alan()
+        degisiklik: dict = {}
         if run.calisma_koku:
-            # Izole gorev araclari yalniz worktree kokunde calisir.
-            alan = sohbet.aktif_alan().model_copy(
-                update={"kokler": [run.calisma_koku], "ek_klasorler": []}
+            degisiklik.update(kokler=[run.calisma_koku], ek_klasorler=[])
+        if run.profil_izni == "plan" and alan.mod is not Mod.sohbet:
+            degisiklik["mod"] = Mod.planla
+        elif run.profil_izni == "ask" and alan.mod is Mod.otomatik:
+            degisiklik["mod"] = Mod.onayli
+        alan = alan.model_copy(update=degisiklik)
+        mcp_sunuculari = set(run.profil_mcp) if run.profil_mcp is not None else None
+        if run.bagimsiz_worktree:
+            # Paylasilan stdio sunucusu aktif projenin yerel roots listesini kullanir.
+            mcp_sunuculari = (mcp_sunuculari or set()) & {s.ad for s in mcp.tum() if s.url}
+        jeton = skill_alani.set(alan)
+        try:
+            sistem, araclar_, isleyiciler, skill_adi = await asyncio.to_thread(
+                ajan_baglami, run.hedef, secim, alan=alan, mcp_sunuculari=mcp_sunuculari
             )
-            kayit = sohbet.ajan_araclari(alan)
-            isleyiciler = {**isleyiciler, **kayit.isleyiciler()}
-        return sistem, araclar_, isleyiciler
+            run.skill_adi = skill_adi or ""
+            if ayar.skiller_acik:
+                for ad in run.profil_skilleri:
+                    try:
+                        skill = skiller.getir(ad, set(ayar.kapali_skiller))
+                        if not skill.hata:
+                            sistem += "\n\n" + skl.otomatik_metin(skill)
+                    except Bulunamadi:
+                        logger.debug("Alt ajan skill'i etkin degil: {}", ad)
+            return sistem, araclar_, isleyiciler
+        finally:
+            skill_alani.reset(jeton)
 
     ajan = AgentRunner(
         run_deposu,
@@ -583,6 +606,7 @@ def uygulama_olustur(
         ),
     )
     ajan.gorev_baglami = gorev_baglami
+    ajan.profil_yetenegi = model_yetenegi
     ajan.kok = lambda: next(iter(sohbet.aktif_alan().kokler), "")
     ajan.paralel_model = lambda: ayarlar.oku().saglayici == "openrouter"
     ajan.uygulayici_model = lambda: sohbet.aktif_alan().uygulayici_model
@@ -596,6 +620,7 @@ def uygulama_olustur(
             "model_sabit": bool(ozel),
             "model_rol": rol,
             "uygulayici_model": alan.uygulayici_model if rol == "koordinator" else "",
+            "proje_id": alan.id if alan.id != VARSAYILAN_ALAN_ID else "",
         }
 
     # ---- kalici ajanlar (openbot tasarimindan): kimlik + kuyruk + ajanlar arasi mesaj ----
@@ -1018,7 +1043,31 @@ def uygulama_olustur(
 
     ajan.takim = TakimPanosu(veri_dizini)
     ajan.uzantilar = uzantilar
-    ajan.ajan_profilleri = pluginler.ajan_profilleri
+    def ajan_profilleri(run: Run) -> dict:
+        profiller = pluginler.ajan_profilleri()
+        alan = projeler.getir(run.proje_id) if run.proje_id else sohbet.aktif_alan()
+        dizinler = [Path.home() / ".claude" / "agents"]
+        if alan.talimat_okunur_mu():
+            dizinler.extend(Path(kok) / ".claude" / "agents" for kok in alan.kokler)
+        for dizin in dizinler:
+            for dosya in sorted(dizin.glob("*.md")):
+                try:
+                    profil = ccp.ajan_profili(dosya)
+                except (OSError, ValueError):
+                    continue
+                profiller[profil["ad"]] = profil
+        return profiller
+
+    ajan.ajan_profilleri = ajan_profilleri
+
+    def alt_worktree_kur(run: Run, cocuk_id: str) -> tuple[str, str]:
+        alan = projeler.getir(run.proje_id) if run.proje_id else sohbet.aktif_alan()
+        if not alan.kokler or alan.id == VARSAYILAN_ALAN_ID:
+            raise UygulamaHatasi("Alt ajan worktree'si icin Git projesi acin.")
+        yol, dal = wt.olustur(Path(alan.kokler[0]), veri_dizini / "worktrees", cocuk_id, "alt-ajan")
+        return str(yol), dal
+
+    ajan.alt_worktree_kur = alt_worktree_kur
     isitmalar: set[asyncio.Task] = set()
     agecidi = AgGecidi(agecidi_uygulamasi(yonetici, ayarlar, kapat))
     magaza = magaza or Magaza()
@@ -3036,7 +3085,7 @@ def uygulama_olustur(
     async def gorev_worktree_isle(run_id: str, istek: EntegreIstegi | None = None) -> dict:
         async with worktree_kilidi:
             r = run_deposu.getir(run_id)
-            if not r.calisma_koku or not r.dal or r.parent:
+            if not r.calisma_koku or not r.dal or (r.parent and not r.bagimsiz_worktree):
                 raise UygulamaHatasi("Bu gorevin bagimsiz worktree'si yok.")
             if r.durum not in BITMIS_RUN:
                 raise UygulamaHatasi("Once gorev bitmeli.")
@@ -3046,6 +3095,8 @@ def uygulama_olustur(
             if not yol.is_dir():
                 return {"durum": "kapali"}
             proje = Path(sohbet.aktif_alan().kokler[0])
+            if r.proje_id:
+                proje = Path(projeler.getir(r.proje_id).kokler[0])
             await asyncio.to_thread(wt.worktree_dogrula, proje, yol, r.dal)
             if istek is None:
                 sonuc = await asyncio.to_thread(wt.at, proje, yol, r.dal)

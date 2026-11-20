@@ -115,3 +115,34 @@ async def test_worktree_kapanisi_ve_ayni_sohbette_sonraki_gorev(
     assert yeni.status_code == 200, yeni.text
     assert yeni.json()["onceki"] == run.id
     assert yeni.json()["worktree_durumu"] == "acik"
+
+async def test_alt_ajan_bagimsiz_worktree_skill_ve_merge(app, istemci, repo, skill_klasoru) -> None:
+    from app.agent.runner import Run, RunDurum
+
+    skill = skill_klasoru / "alt-rapor"
+    skill.mkdir()
+    (skill / "SKILL.md").write_text(
+        "---\nname: alt-rapor\ndescription: Rapor becerisi\n---\nBELIRGIN_RAPOR_TALIMATI",
+        encoding="utf-8",
+    )
+    p = (await istemci.post("/api/projeler", json={"yol": str(repo)})).json()
+    await istemci.post(f"/api/projeler/{p['id']}/etkin")
+    runner = app.state.ajan_runner
+    lider = Run(hedef="incele", proje_id=p["id"])
+    alt = Run(
+        hedef="rapor", proje_id=lider.proje_id, parent=lider.id,
+        bagimsiz_worktree=True, profil_skilleri=["alt-rapor"], profil_mcp=[],
+        durum=RunDurum.basarili,
+    )
+    alt.calisma_koku, alt.dal = runner.alt_worktree_kur(lider, alt.id)
+    yol = Path(alt.calisma_koku)
+    assert yol != repo and alt.dal.startswith("alt-ajan/")
+    sistem, _, araclar = await runner.gorev_baglami(alt)
+    assert "BELIRGIN_RAPOR_TALIMATI" in sistem
+    assert not any(ad.startswith("mcp__") for ad in araclar)
+    (yol / "a.txt").write_text("alt ajan")
+    assert _oku(repo / "a.txt") == "bir"
+    runner.depo.kaydet(alt)
+    sonuc = await istemci.post(f"/api/gorevler/{alt.id}/entegre", json={})
+    assert sonuc.status_code == 200 and sonuc.json()["durum"] == "birlestirildi"
+    assert _oku(repo / "a.txt") == "alt ajan"
