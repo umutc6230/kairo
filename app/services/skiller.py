@@ -77,6 +77,7 @@ class Skill:
     hash: str = ""  # SKILL.md icerik hash'i (degisiklik/kaynak takibi)
     hata: str = ""  # bozuk frontmatter vb.: skill listelenir ama YUKLENMEZ
     scriptler: tuple[str, ...] = ()  # manifestte ILAN edilen calistirilabilir dosyalar (A6.2)
+    her_zaman: bool = False  # frontmatter `always: true`: her istekte sisteme yuklenir
 
     def ozet(self) -> dict:
         return {
@@ -232,6 +233,7 @@ def _skill_oku(dosya: Path, kaynak: str, klasor: Path | None) -> Skill | None:
         hash=hashlib.sha256(ham).hexdigest()[:16],
         hata=hata,
         scriptler=_scriptler(meta.get("scripts")) if klasor else (),
+        her_zaman=str(meta.get("always", "")).lower() == "true",
     )
 
 

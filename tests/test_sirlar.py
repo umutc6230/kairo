@@ -70,3 +70,13 @@ async def test_api_degeri_geri_vermez(istemci) -> None:
     liste = (await istemci.get("/api/sirlar")).text
     assert "GITHUB_TOKEN" in liste and DEGER not in liste
     assert (await istemci.delete("/api/sirlar/GITHUB_TOKEN")).status_code == 200
+
+
+def test_guvenlik_taramasi_skill_her_zaman_yuklenir(tmp_path: Path) -> None:
+    """Yerlesik guvenlik taramasi skill'i always: true ile kesfedilir (her istekte sisteme)."""
+    from app.config import yerlesik_skill_dizini
+    from app.services.skiller import SkillDeposu
+
+    depo = SkillDeposu(tmp_path, [("yerlesik", yerlesik_skill_dizini())])
+    s = next(s for s in depo.kesfet() if s.ad == "guvenlik-taramasi")
+    assert s.her_zaman and not s.hata
