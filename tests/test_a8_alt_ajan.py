@@ -305,3 +305,51 @@ def test_model_router_rapor_yazimini_uygulayiciya_devreder(tmp_path) -> None:
     assert depo.getir(run.cocuklar[0]).model == run.adimlar[1].devredilen_model == "deepseek/model"
     assert istenen == ["qwen/model"] * 2 + ["deepseek/model"] * 3 + ["qwen/model"] * 2
     assert run.sonuc.ozet.endswith("x" * 2500)
+
+def test_profile_model_effort_and_permissions(tmp_path) -> None:
+    from app.services.cc_plugin import ajan_profili
+
+    proje = tmp_path / "proje"
+    proje.mkdir()
+    (proje / "a.txt").write_text("x")
+    tanim = tmp_path / "review.md"
+    tanim.write_text(
+        "---\nname: review\nmodel: test/reviewer\neffort: high\npermissionMode: plan\n"
+        "isolation: worktree\nskills: [review-skill]\nmcpServers: [docs]\n"
+        "tools: [Read, Write, Bash]\ndisallowedTools: [Bash]\n---\nReview only.\n"
+    )
+    profil = ajan_profili(tanim)
+    model = AracGozleyen([
+        cagri("alt_ajan", gorev="incele", profil="review",
+              araclar=["proje_dosya_oku", "proje_dosya_yaz", "komut_calistir"]),
+        cagri("proje_dosya_oku", yol="a.txt"),
+        cagri("gorevi_bitir", ozet="ok", kanit_adimlari=[1]),
+        cagri("gorevi_bitir", ozet="tamam", kanit_adimlari=[1]),
+    ])  # fmt: skip
+    runner, depo, *_ = kur(tmp_path, proje, model)
+    runner.ajan_profilleri = lambda _: {"review": profil}
+    runner.alt_worktree_kur = lambda _run, _id: (str(proje), "alt-ajan/ornek")
+    modeller = []
+
+    @asynccontextmanager
+    async def llm(ad=None):
+        modeller.append(ad)
+        yield model
+
+    runner.llm = llm
+    eski_sohbet = model.sohbet
+    effort = []
+
+    async def sohbet(mesajlar, **kwargs):
+        effort.append(kwargs.get("dusunme"))
+        return await eski_sohbet(mesajlar, **kwargs)
+
+    model.sohbet = sohbet
+    run = asyncio.run(_calistir(runner, "incele"))
+    alt = depo.getir(run.cocuklar[0])
+    assert alt.bagimsiz_worktree and alt.dal == "alt-ajan/ornek"
+    assert alt.profil_skilleri == ["review-skill"] and alt.profil_mcp == ["docs"]
+    assert "proje_dosya_oku" in model.araclar[1]
+    assert not model.araclar[1] & {"proje_dosya_yaz", "komut_calistir"}
+    assert modeller == [None, "test/reviewer", "test/reviewer", None]
+    assert effort == [None, "derin", "derin", None]

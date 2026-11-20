@@ -829,11 +829,14 @@ class SohbetServisi:
         onceki: list[Mesaj],
         model_secimi: str | None = None,
         ajan_gorevi: bool = False,
+        *,
+        alan: CalismaAlani | None = None,
+        mcp_sunuculari: set[str] | None = None,
     ) -> tuple[str, list, dict, str | None]:
         """(sistem metni, araclar, isleyiciler, otomatik yuklenen skill adi).
         Sira onbellek icin: SABIT kisim once (arac notu, talimatlar, sistem istemi), mesaja gore
         DEGISEN skill listesi en sonda; llama-server sabit oneki onbellekten kullanir."""
-        alan = self.aktif_alan()
+        alan = alan or self.aktif_alan()
         araclar: list = list(SOHBET_ARACLARI) if ayar.sohbet_araclari else []
         # Isleyiciler AKTIF PROJENIN kokleriyle baglanir: model arguman olarak kapsamı genisletemez
         isleyiciler: dict = DosyaAraclari(alan.izinli_kokler).isleyiciler()
@@ -885,7 +888,9 @@ class SohbetServisi:
                     alan,
                 )
 
-            mcp_sema, mcp_isl = self.mcp.semalar_ve_isleyiciler(mcp_izin)
+            mcp_sema, mcp_isl = self.mcp.semalar_ve_isleyiciler(
+                mcp_izin, sunucular=mcp_sunuculari
+            )
             araclar += mcp_sema
             isleyiciler |= mcp_isl
         if self.uzantilar is not None and self.politika is not None:  # A7.6 uzanti araclari

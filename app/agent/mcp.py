@@ -693,13 +693,19 @@ class McpYoneticisi:
                 sonuc[s.ad] = {"durum": "bagli", "arac": len(b.araclar)}
         return sonuc
 
-    def semalar_ve_isleyiciler(self, izin_uygula) -> tuple[list[dict], dict]:
+    def semalar_ve_isleyiciler(
+        self, izin_uygula, *, sunucular: set[str] | None = None
+    ) -> tuple[list[dict], dict]:
         """Aktif sunucularin araclari. Baglanamayan sunucu atlanir (sohbeti dusurmez).
         izin_uygula(arac_adi, salt_okunur, ozet) PolitikaMotoru kararini uygular."""
         semalar: list[dict] = []
         isleyiciler: dict = {}
         hazir = self._paralel_hazirla(
-            [s for s in self.tum() if s.aktif and not s.eksik_degiskenler]
+            [
+                s for s in self.tum()
+                if s.aktif and not s.eksik_degiskenler
+                and (sunucular is None or s.ad in sunucular)
+            ]
         )
         for s, b in hazir:
             if tembel_mi(s, b.araclar):

@@ -239,6 +239,13 @@ class Run(BaseModel):
     # proje koordinator/uygulayici modeli: aktif model degisse de bu modelle calisir
     model_sabit: bool = False
     model_rol: str = ""
+    proje_id: str = ""
+    profil_adi: str = ""
+    profil_effort: str = ""
+    profil_izni: str = ""
+    profil_skilleri: list[str] = []
+    profil_mcp: list[str] | None = None
+    bagimsiz_worktree: bool = False
     uygulayici_model: str = ""  # ana gorev baslarken sabitlenir
     son_model: str = ""  # son basarili model cagrisi
     durum: RunDurum = RunDurum.calisiyor
@@ -554,6 +561,7 @@ class AgentRunner:
         self.onay_durumu = onay_durumu or (lambda _id: "bekliyor")
         self.bekleme = bekleme
         self.yetenek = yetenek
+        self.profil_yetenegi: Callable[[str], ModelYetenegi] | None = None
         self.hafiza = hafiza or (lambda: "")
         self.hooks = hooks
         self.gorev_baglami: Callable[[Run], Awaitable[tuple]] | None = None
@@ -567,7 +575,8 @@ class AgentRunner:
         self.ajan_araclari: Callable[[Any], tuple[list, dict]] | None = None
         self.takim: Any = None  # TakimPanosu (api baglar)
         self.uzantilar: Any = None  # UzantiYoneticisi (api baglar)
-        self.ajan_profilleri: Callable[[], dict] = lambda: {}  # plugin agents/*.md
+        self.alt_worktree_kur: Callable[[Run, str], tuple[str, str]] | None = None
+        self.ajan_profilleri: Callable[[Run], dict] = lambda _run: {}  # plugin agents/*.md
         self._gorevler: dict[str, asyncio.Task] = {}
         self._iptal: set[str] = set()
         self._duraklat: set[str] = set()
@@ -601,6 +610,7 @@ class AgentRunner:
         model_sabit: bool = False,
         model_rol: str = "",
         uygulayici_model: str = "",
+        proje_id: str = "",
     ) -> Run:
         if self.yetenek is not None:  # aracsiz modelle gorev baslamaz (acik hata)
             dogrula(self.yetenek(), araclar_gerekli=True)
@@ -610,7 +620,7 @@ class AgentRunner:
             hedef=hedef.strip(), kabul=kabul or [], butce=butce or Butce(), model=model,
             etkilesimli=etkilesimli, ajan_id=ajan_id, ek_sistem=ek_sistem,
             calisma_koku=calisma_koku, model_sabit=model_sabit, model_rol=model_rol,
-            uygulayici_model=uygulayici_model,
+            uygulayici_model=uygulayici_model, proje_id=proje_id,
         )  # fmt: skip
         kabul_metni = "\n".join(f"- {k}" for k in run.kabul) or "- (belirtilmedi: hedefi kanitla)"
         gorev_metni = f"GOREV: {run.hedef}\n\nKABUL KOSULLARI:\n{kabul_metni}"
@@ -911,6 +921,13 @@ class AgentRunner:
                 izinli = (
                     set(run.izinli_araclar) | META | {t["function"]["name"] for t in TAKIM_SEMALARI}
                 )
+                if run.profil_izni == "plan":
+                    izinli &= KOORDINATOR_OKUMA | META
+                if run.profil_mcp is not None:
+                    onekler = tuple(f"mcp__{ad}__" for ad in run.profil_mcp)
+                    izinli = {
+                        ad for ad in izinli if not ad.startswith("mcp__") or ad.startswith(onekler)
+                    }
                 adaylar = [*semalar, *getattr(bul, "bekleyen", []), *yuklenen]
                 semalar = [s for s in adaylar if s["function"]["name"] in izinli]
                 yuklenen = []  # alt ajan aramaz; izinli MCP araclari dogrudan verildi
@@ -920,7 +937,7 @@ class AgentRunner:
                     if k in izinli
                 }
             else:
-                profiller = self.ajan_profilleri()
+                profiller = self.ajan_profilleri(run)
                 arac = ALT_AJAN_ARACI
                 if profiller:  # Claude Code plugin ajanlari: 'profil' ile secilir
                     liste = "; ".join(f"{k}: {v['aciklama'][:120]}" for k, v in profiller.items())
@@ -1136,13 +1153,15 @@ class AgentRunner:
             )
         return a
 
-    def _baglam(self) -> int:
+    def _baglam(self, run: Run) -> int:
+        if self.profil_yetenegi and run.profil_adi and run.model_sabit and run.model:
+            return self.profil_yetenegi(run.model).baglam
         return self.yetenek().baglam if self.yetenek else VARSAYILAN_BAGLAM
 
     def _baglami_hazirla(self, run: Run, sistem: str, semalar: list[dict]) -> bool:
         """Butceyi hesaplar; gerekirse ozetler, sonra eski arac sonuclarini kisaltir.
         Hala sigmiyorsa istegi KORLEMESINE gondermez: gorev basarisiz olur (A0.6, A4.1)."""
-        baglam = self.yetenek().baglam if self.yetenek else VARSAYILAN_BAGLAM
+        baglam = self._baglam(run)
         sabit = tahmini_token(sistem) + tahmini_token(json.dumps(semalar, ensure_ascii=False))
         # talimat + araclar buyukse cevap payi kuculur (min 1K): mesajlara en az 4K kalsin
         cevap = cevap_tokeni(baglam)
@@ -1198,7 +1217,8 @@ class AgentRunner:
                         secim = await llm.sohbet(
                             gonderilen,
                             tools=semalar,
-                            max_tokens=run.baglam.get("cevap") or cevap_tokeni(self._baglam()),
+                            **({"dusunme": run.profil_effort} if run.profil_effort else {}),
+                            max_tokens=run.baglam.get("cevap") or cevap_tokeni(self._baglam(run)),
                         )
                         run.son_model = getattr(llm, "model", "") or ""
                         kullanim = getattr(llm, "son_kullanim", None)
@@ -1528,17 +1548,29 @@ class AgentRunner:
         g = a.argumanlar
         gorev = str(g.get("gorev") or "").strip()
         araclar = [str(x) for x in g.get("araclar") or []][:30]
-        profil = self.ajan_profilleri().get(str(g.get("profil") or ""))
-        if profil:  # profil talimati + (verilmediyse) profilin arac listesi
+        profil_adi = str(g.get("profil") or "")
+        profil = (self.ajan_profilleri(run).get(profil_adi) or {}) if profil_adi else {}
+        if profil_adi and not profil:
+            a.durum = AdimDurum.hata
+            self._arac_mesaji(run, a, {"hata": f"Alt ajan profili bulunamadi: {profil_adi}"})
+            self.depo.kaydet(run)
+            return
+        if profil:
             ayrac = "\n\n---\nGOREV: "
             gorev = f"{profil['govde'][:6000]}{ayrac}{gorev}" if gorev else ""
-            araclar = araclar or profil["araclar"] or ["proje_dosya_oku", "proje_ara", "proje_glob"]
+        profil_araclari = profil.get("araclar")
+        if profil_araclari is not None:
+            araclar = [ad for ad in (araclar or profil_araclari) if ad in profil_araclari]
+        elif profil and not araclar:
+            araclar = ["proje_dosya_oku", "proje_ara", "proje_glob"]
+        yasaklar = set(profil.get("yasak_araclar", []))
+        araclar = [ad for ad in araclar if ad not in yasaklar]
         dosyalar = [str(x) for x in g.get("dosyalar") or []][:50]
         # paralel kardesler kalan butceyi PAYLASIR (toplam ebeveyni asmaz)
         ebeveyn_kalan = (run.butce.max_adim - run.kullanim.adim) if run.butce.max_adim else 10**6
         kalan_adim = ebeveyn_kalan // max(1, int(g.get("_pay") or 1))
         hata = ""
-        if not gorev or not araclar:
+        if not gorev or (not araclar and not profil):
             hata = "alt_ajan icin gorev ve en az bir arac gerekli."
         elif kalan_adim < 2:
             hata = "Alt ajana verilecek butce kalmadi."
@@ -1553,9 +1585,26 @@ class AgentRunner:
         # 25 arastirma alt ajanlarina yetmiyordu (karsilastirma: 2/4 alt ajan butcede durdu)
         istenen = max(int(g.get("max_adim") or 50), ALT_AJAN_MIN_ADIM)
         uygulayici = "" if run.ajan_id else (run.uygulayici_model or self.uygulayici_model())
+        profil_modeli = profil.get("model", "")
+        if profil_modeli and profil_modeli != "inherit":
+            uygulayici = profil_modeli
+        effort = {
+            "low": "kapali", "medium": "dengeli", "high": "derin",
+            "xhigh": "derin", "max": "derin",
+        }.get(profil.get("effort"), "")
+        izin = {
+            "plan": "plan", "default": "ask", "dontAsk": "plan",
+            "onayli": "ask", "planla": "plan",
+        }.get(profil.get("izin"), "")
         cocuk = Run(
             hedef=gorev,
             model=uygulayici or run.model,
+            proje_id=run.proje_id,
+            profil_adi=profil_adi,
+            profil_effort=effort,
+            profil_izni=izin,
+            profil_skilleri=profil.get("skills", []),
+            profil_mcp=profil.get("mcp"),
             model_sabit=bool(uygulayici) or run.model_sabit,
             model_rol="uygulayici",
             parent=run.id,
@@ -1573,6 +1622,19 @@ class AgentRunner:
                 max_ilerlemesiz=run.butce.max_ilerlemesiz,
             ),
         )
+        if profil.get("isolation") == "worktree":
+            try:
+                if self.alt_worktree_kur is None:
+                    raise UygulamaHatasi("Alt ajan worktree destegi etkin degil.")
+                cocuk.calisma_koku, cocuk.dal = await asyncio.to_thread(
+                    self.alt_worktree_kur, run, cocuk.id
+                )
+                cocuk.bagimsiz_worktree = True
+            except UygulamaHatasi as e:
+                a.durum = AdimDurum.hata
+                self._arac_mesaji(run, a, {"hata": str(e)})
+                self.depo.kaydet(run)
+                return
         sahiplik = ", ".join(dosyalar) or "yok (salt okunur)"
         cocuk.mesajlar = [{"role": "user", "content": (
             f"GOREV (alt ajan, ebeveyn {run.id}): {gorev}\n\nKULLANABILECEGIN ARACLAR: "

@@ -460,10 +460,36 @@ async function altAjanlariCiz(idler) {
   kap.classList.remove("soluk", "kucuk");
   kap.innerHTML = cocuklar.filter(Boolean).map((c) => `<div class="alt-ajan">
     <div>${rozet(c.durum)} ${kacir(c.hedef.slice(0, 70))}</div>
-    ${modelEtiketi(c.son_model, c.model_rol)}
+    ${modelEtiketi(c.son_model || c.model, c.model_rol)}
+    ${c.profil_adi ? `<div class="soluk kucuk"><span>Profil</span> · ${kacir(c.profil_adi)}</div>` : ""}
+    ${c.profil_skilleri?.length ? `<div class="soluk kucuk">Skill · ${kacir(c.profil_skilleri.join(", "))}</div>` : ""}
+    ${c.bagimsiz_worktree ? `<div class="soluk kucuk">${kacir(c.dal)}</div>` : ""}
+    ${c.bagimsiz_worktree && c.worktree_durumu === "acik" && BITMIS.has(c.durum) ? `<div class="dugme-sira">
+      ${["basarili", "dogrulanmadi"].includes(c.durum) ? `<button class="btn kucuk" data-alt-worktree="entegre" data-id="${kacir(c.id)}">Ana dala birleştir</button>` : ""}
+      <button class="btn kucuk tehlike" data-alt-worktree="at" data-id="${kacir(c.id)}">Değişiklikleri at</button>
+    </div>` : ""}
     <div class="soluk kucuk">Yazabilir: ${kacir(c.sahip_dosyalar.join(", ") || "hiçbir dosya")}</div>
     <div class="soluk kucuk">Araçlar: ${kacir(c.izinli_araclar.join(", "))}</div>
     <div class="soluk kucuk">Adım ${kacir(c.kullanim.adim)}${c.butce.max_adim ? `/${kacir(c.butce.max_adim)}` : ""}${c.sonuc?.ozet ? ` · ${kacir(c.sonuc.ozet.slice(0, 80))}` : ""}</div></div>`).join("");
+  $$("[data-alt-worktree]", kap).forEach((b) => {
+    b.onclick = async () => {
+      const islem = b.dataset.altWorktree;
+      const onay = islem === "at"
+        ? await onayla("Değişiklikleri at", "Alt ajanın ayrı dalı silinsin mi?", { evet: "At", tehlike: true })
+        : await onayla("Ana dala birleştir", "Alt ajanın ayrı dalı birleştirilsin mi?", { evet: "Birleştir" });
+      if (!onay) return;
+      b.disabled = true;
+      try {
+        const r = await api(`/api/gorevler/${b.dataset.id}/${islem}`, { method: "POST", govde: {} });
+        const mesaj = {
+          birlestirildi: "Ana dala birleştirildi.", atildi: "Değişiklikler atıldı.",
+          kapali: "Çalışma dalı zaten kapalı.", degisiklik_yok: "Birleştirilecek değişiklik yok.",
+        }[r.durum];
+        bildir(mesaj || r.not || r.durum, mesaj ? "basari" : "uyari");
+        await altAjanlariCiz(idler);
+      } catch (e) { bildir(e.message, "hata"); } finally { b.disabled = false; }
+    };
+  });
 }
 
 function detayCiz(r) {

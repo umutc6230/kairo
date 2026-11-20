@@ -137,6 +137,41 @@ no installer and no administrator rights required.
 - **Compare:** send the same prompt to several models and see answers, load time and tokens/sec side by side.
 - **OCR test**, **Tool test** and a **Test suite** (reasoning, tool calling, JSON, Turkish OCR, refusal behavior).
 
+### Subagent profiles
+
+Save a Markdown profile in `~/.claude/agents/` or in a trusted project's
+`.claude/agents/`. Enabled plugins can also supply profiles. Mention the
+profile name when assigning a task.
+
+```yaml
+---
+name: reviewer
+description: Review the proposed change without editing files
+model: deepseek/deepseek-v4.1-flash-1017
+effort: medium
+permissionMode: plan
+tools: [Read, Grep, Glob]
+skills: [application-deep-review]
+mcpServers: []
+isolation: worktree
+---
+Review the diff and report findings with file and line references.
+```
+
+Use an installed or provider-qualified model ID, or `inherit` to use normal
+project routing. Effort maps to the provider's available thinking settings.
+`tools` and `disallowedTools` narrow the delegated tool list.
+`permissionMode: plan` limits the agent to known read-only tools. `default`
+or `onayli` can tighten automatic execution to approval mode. A profile
+cannot grant permissions beyond the current project policy.
+
+List registered MCP server names in `mcpServers`; an empty list disables MCP.
+Inline server definitions are ignored. For a dedicated worktree, only explicitly
+named HTTP MCP servers are eligible because stdio servers share local roots.
+MCP tools must also be delegated by exact tool name. Dedicated worktrees start
+from the project checkout's committed HEAD. The task sidebar exposes
+merge and discard after the child finishes, each with user confirmation.
+
 ## Requirements
 
 - Windows 10/11 (WebView2 is preinstalled). Python 3.12 to run from source.
