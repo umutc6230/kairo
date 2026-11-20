@@ -264,3 +264,44 @@ def test_calisan_goreve_gelen_mesaj_kaybolmaz(tmp_path) -> None:
     runner_ref.append(runner)
     asyncio.run(_calistir(runner, "oku"))
     assert any("YONLENDIRME-42" in str(x.get("content")) for x in gorulen)
+
+def test_model_router_rapor_yazimini_uygulayiciya_devreder(tmp_path) -> None:
+    proje = tmp_path / "proje"
+    proje.mkdir()
+    model = AracGozleyen([
+        cagri("proje_dosya_yaz", yol="yanlis.md", icerik="lider yazamaz"),
+        cagri("alt_ajan", gorev="Markdown raporunu yaz ve oku",
+              araclar=["proje_dosya_yaz", "proje_dosya_oku"], dosyalar=["inceleme.md"]),
+        cagri("proje_dosya_yaz", yol="inceleme.md", icerik="# Inceleme\n\n## Bulgular"),
+        cagri("proje_dosya_oku", yol="inceleme.md"),
+        cagri("gorevi_bitir", ozet="inceleme.md yazildi", kanit_adimlari=[2]),
+        cagri("proje_dosya_oku", yol="inceleme.md"),
+        cagri("gorevi_bitir", ozet="inceleme.md\n" + "x" * 2500, kanit_adimlari=[3]),
+    ])  # fmt: skip
+    runner, depo, *_ = kur(tmp_path, proje, model)
+    istenen = []
+
+    @asynccontextmanager
+    async def llm(m=None):
+        istenen.append(m)
+        yield model
+
+    runner.llm = llm
+    runner.uygulayici_model = lambda: "baska/model"
+
+    async def calistir():
+        run = await runner.baslat(
+            "Detayli inceleme raporu yaz", model="qwen/model", model_sabit=True,
+            model_rol="koordinator", uygulayici_model="deepseek/model",
+        )
+        return await bitir(runner, run.id)
+
+    run = asyncio.run(calistir())
+    assert run.durum is RunDurum.basarili, run.hata
+    assert "proje_dosya_yaz" not in model.araclar[0]
+    assert "proje_dosya_yaz" in model.araclar[2]
+    assert not (proje / "yanlis.md").exists()
+    assert (proje / "inceleme.md").read_text() == "# Inceleme\n\n## Bulgular"
+    assert depo.getir(run.cocuklar[0]).model == run.adimlar[1].devredilen_model == "deepseek/model"
+    assert istenen == ["qwen/model"] * 2 + ["deepseek/model"] * 3 + ["qwen/model"] * 2
+    assert run.sonuc.ozet.endswith("x" * 2500)

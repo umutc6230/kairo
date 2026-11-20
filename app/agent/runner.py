@@ -205,6 +205,7 @@ class Adim(BaseModel):
     hash: str = ""
     checkpoint: str = ""  # yazma adiminin checkpoint kimligi (diff / geri alma ekrani)
     model: str = ""  # arac cagrisi ureten istemcinin modeli
+    devredilen_model: str = ""  # alt gorev icin secilen uygulayici
     aciklama: str = ""  # modelin bu cagridan once yazdigi "ne ve neden" cumlesi (arayuzde)
     zaman: str = Field(default_factory=lambda: datetime.now().isoformat(timespec="seconds"))
 
@@ -238,6 +239,7 @@ class Run(BaseModel):
     # proje koordinator/uygulayici modeli: aktif model degisse de bu modelle calisir
     model_sabit: bool = False
     model_rol: str = ""
+    uygulayici_model: str = ""  # ana gorev baslarken sabitlenir
     son_model: str = ""  # son basarili model cagrisi
     durum: RunDurum = RunDurum.calisiyor
     butce: Butce = Field(default_factory=Butce)
@@ -379,6 +381,28 @@ ALT_AJAN_ARACI = _f(
 )
 ALT_AJAN_MIN_ADIM = 15
 YAZAN_ARACLAR = DEGISTIREN
+
+KOORDINATOR_OKUMA = {
+    "proje_dosya_oku", "proje_listele", "proje_glob", "proje_ara",
+    "dosya_oku", "klasor_listele", "dosya_ara", "notebook_oku",
+    "git_durum", "git_diff", "git_gecmis", "github_issue_oku", "hesapla",
+    "skill_ara", "skill_kullan",
+}
+KOORDINATOR_TALIMATI = (
+    "ROL: KOORDINATOR. Baglami oku, karar ver, plani ve kabul olcutlerini yaz. "
+    "Dosya degisikligi, komut ve test icin alt_ajan ile uygulayiciya is ver. "
+    "Hedefi, gerekli araclari, yazilabilir goreli dosyalari ve dogrulama adimlarini belirt. "
+    "Alt ajanin sonucunu ve git farkini incele; gerekirse somut duzeltmeyi tekrar devret. "
+    "Salt inceleme ve karar icin devir gerekmez. Rapor dosyasi uretmek bir uygulama isidir."
+)
+RAPOR_TALIMATI = (
+    "Kullanici detayli inceleme veya rapor istediginde, yazma izni varsa Markdown (.md) "
+    "dosyasi olustur. Konuya uygun baslik, ozet, kapsam, kanitli bulgular ve sonuc kullan. "
+    "Varsa test sonucunu ve dosya/satir referanslarini ekle. Kullanici yol vermediyse "
+    "konuyu anlatan bir dosya adi sec ve mevcut dosyayi ezme. Olusan dosyayi okuyup "
+    "dogrula ve nihai cevapta yolunu belirt. Yazma izni yoksa raporu sohbette sun, "
+    "dosya olusturdugunu soyleme."
+)
 
 SISTEM = """Sen kullanicinin bilgisayarinda calisan asistan ajansin (Claude Code gibi): dosya,
 komut, kod, web, GitHub ve baglayicilarla istenen isi ARACLARLA kendin yaparsin.
@@ -572,6 +596,7 @@ class AgentRunner:
         calisma_koku: str = "",
         model_sabit: bool = False,
         model_rol: str = "",
+        uygulayici_model: str = "",
     ) -> Run:
         if self.yetenek is not None:  # aracsiz modelle gorev baslamaz (acik hata)
             dogrula(self.yetenek(), araclar_gerekli=True)
@@ -581,6 +606,7 @@ class AgentRunner:
             hedef=hedef.strip(), kabul=kabul or [], butce=butce or Butce(), model=model,
             etkilesimli=etkilesimli, ajan_id=ajan_id, ek_sistem=ek_sistem,
             calisma_koku=calisma_koku, model_sabit=model_sabit, model_rol=model_rol,
+            uygulayici_model=uygulayici_model,
         )  # fmt: skip
         kabul_metni = "\n".join(f"- {k}" for k in run.kabul) or "- (belirtilmedi: hedefi kanitla)"
         gorev_metni = f"GOREV: {run.hedef}\n\nKABUL KOSULLARI:\n{kabul_metni}"
@@ -900,6 +926,20 @@ class AgentRunner:
                 semalar = [*semalar, arac]
                 if run.etkilesimli:
                     semalar = [*semalar, SORU_ARACI]
+                if run.model_rol == "koordinator" and run.uygulayici_model:
+                    uygulama_araclari = sorted(set(isleyiciler) - KOORDINATOR_OKUMA - {ARAC_BUL})
+                    isleyiciler = {k: f for k, f in isleyiciler.items() if k in KOORDINATOR_OKUMA}
+                    izinli = KOORDINATOR_OKUMA | META | {"alt_ajan", "soru_sor"}
+                    semalar = [t for t in semalar if t["function"]["name"] in izinli]
+                    yuklenen = []
+                    bul = None
+                    sistem += (
+                        f"\n\n{KOORDINATOR_TALIMATI}\n"
+                        f"Uygulayici modeli: {run.uygulayici_model}."
+                    )
+                    if uygulama_araclari:
+                        arac_listesi = ", ".join(uygulama_araclari)
+                        sistem += f"\nAlt ajana verilebilecek araclar: {arac_listesi}"
             run.durum = RunDurum.calisiyor
             self.depo.kaydet(run)
             while True:
@@ -1137,7 +1177,7 @@ class AgentRunner:
     async def _model(self, run: Run, sistem: str, semalar: list[dict]) -> dict | None:
         from app.services.yerel_llm import ModelCevapHatasi, SunucuKapali
 
-        sistem_metni = f"{SISTEM}\n\n{sistem}".strip()
+        sistem_metni = f"{SISTEM}\n\n{RAPOR_TALIMATI}\n\n{sistem}".strip()
         if not self._baglami_hazirla(run, sistem_metni, semalar):
             return None
         gonderilen = [{"role": "system", "content": sistem_metni}, *run.mesajlar]
@@ -1508,7 +1548,7 @@ class AgentRunner:
         # model cok dusuk butce isteyebiliyor (canli: 5); alt sinir 8, ust sinir ebeveynin kalani
         # 25 arastirma alt ajanlarina yetmiyordu (karsilastirma: 2/4 alt ajan butcede durdu)
         istenen = max(int(g.get("max_adim") or 50), ALT_AJAN_MIN_ADIM)
-        uygulayici = "" if run.ajan_id else self.uygulayici_model()
+        uygulayici = "" if run.ajan_id else (run.uygulayici_model or self.uygulayici_model())
         cocuk = Run(
             hedef=gorev,
             model=uygulayici or run.model,
@@ -1540,6 +1580,7 @@ class AgentRunner:
         )}]  # fmt: skip
         self.depo.kaydet(cocuk)
         run.cocuklar.append(cocuk.id)
+        a.devredilen_model = uygulayici
         run.guncellemeler.append(f"Alt ajan baslatildi: {gorev[:80]}")
         a.durum = AdimDurum.niyet
         self.depo.kaydet(run)
@@ -1551,8 +1592,10 @@ class AgentRunner:
             run.kullanim.token += c.kullanim.token
             run.kullanim.maliyet_usd = round(run.kullanim.maliyet_usd + c.kullanim.maliyet_usd, 6)
             run.kullanim.onbellek_token += c.kullanim.onbellek_token
+        a.devredilen_model = c.son_model or a.devredilen_model
         sonuc = {
             "alt_ajan": c.id,
+            "model": c.son_model,
             "durum": str(c.durum),
             "ozet": c.sonuc.ozet or c.hata,
             "dogrulandi": c.sonuc.dogrulandi,
@@ -1625,7 +1668,7 @@ class AgentRunner:
         """Kanit kontrolu: referans verilen adim basarili gercek bir arac adimi olmali ve SON
         dosya degisikliginden SONRA atilmis olmali (degisiklik oncesi okuma son durumu kanitlamaz).
         """
-        ozet = str(a.argumanlar.get("ozet") or "")[:2000]
+        ozet = sirlar.maskele(str(a.argumanlar.get("ozet") or ""))
         numaralar = [n for n in a.argumanlar.get("kanit_adimlari") or [] if isinstance(n, int)]
         adimlar = {x.no: x for x in run.adimlar}
         son_degisiklik = max(
