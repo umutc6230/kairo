@@ -738,6 +738,8 @@ body.uzak-saglayici [data-yalniz-yerel] { display: none !important; }
 .baykus-etiket { background: linear-gradient(90deg, var(--cok-soluk) 0%, var(--metin) 50%, var(--cok-soluk) 100%); background-size: 200% 100%;
   -webkit-background-clip: text; background-clip: text; color: transparent; animation: parilti 1.8s linear infinite; }
 
+.baykus-etiket { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
 /* asamalar */
 .baykus-canli[data-mod="bekliyor"] { --bk-tur: 7s; }
 .baykus-canli[data-mod="dusunuyor"] { --bk-tur: 8s; }
@@ -877,6 +879,9 @@ a.sp-satir { text-decoration: none; }
 /* ---- Sohbet adim akisi Claude Code gibi: katlanir grup + adim basligi + komut/cikti kutusu ---- */
 .adim-liste.sade { gap: 2px; }
 .cc-grup { list-style: none; }
+.izleyici-not { display: flex; align-items: flex-start; gap: 8px; }
+.izleyici-not > span { flex-shrink: 0; }
+.izleyici-not > span svg { width: 16px; height: 16px; vertical-align: middle; }
 .cc-grup-baslik, .cc-baslik { display: flex; align-items: center; gap: 8px; width: 100%; background: none; border: 0; color: var(--soluk); font: inherit; font-size: 13.5px; padding: 4px 6px; border-radius: 6px; cursor: pointer; text-align: left; }
 .cc-grup-baslik:hover, .cc-baslik:hover, .cc-grup-baslik:focus-visible, .cc-baslik:focus-visible { color: var(--metin); background: var(--yuzey2); }
 .cc-ok { display: inline-block; flex-shrink: 0; transition: transform .15s; font-size: 15px; line-height: 1; }

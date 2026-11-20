@@ -793,7 +793,9 @@ class SohbetServisi:
         """Ayni oturuma eszamanli mesajlarda oku-ekle-yaz yarisini onler (A0.8)."""
         return self._kilitler.setdefault(oturum_id, asyncio.Lock())
 
-    async def skill_sec(self, llm, ayar, istek_metni: str, onceki: list[Mesaj]) -> str | None:
+    async def skill_sec(
+        self, llm, ayar, istek_metni: str, onceki: list[Mesaj], *, genis: bool = False
+    ) -> str | None:
         """Skill'i model secer (anlamdan); None = karar verilemedi, kelime yontemine dus.
         "" = model 'hicbiri' dedi."""
         if not ayar.skiller_acik or not istek_metni.strip():
@@ -802,7 +804,9 @@ class SohbetServisi:
         etkin = [s for s in self.skiller.kesfet() if s.ad not in kapali]
         sorgu = " ".join([istek_metni] + [m.metin for m in onceki[-4:] if m.rol == "kullanici"])
         try:
-            s = await asyncio.wait_for(skl.model_ile_sec(llm, etkin, istek_metni, sorgu), 45)
+            s = await asyncio.wait_for(
+                skl.model_ile_sec(llm, etkin, istek_metni, sorgu, genis=genis), 45
+            )
         except Exception as e:  # noqa: BLE001 - secim yardimci; sohbet durmaz
             logger.debug("Model skill secimi basarisiz: {}", e)
             return None
@@ -958,7 +962,7 @@ class SohbetServisi:
                 else:  # 8K: yer yok, yalniz mesaja en uygunlar (degisken)
                     skill_metni = skl.sistem_metni(skl.uygun_skiller(etkin, sorgu))
                 if model_secimi is not None:  # model karar verdi ("" = hicbiri)
-                    secilen = next((s for s in etkin if s.ad == model_secimi), None)
+                    secilen = next((s for s in etkin if s.ad == model_secimi and not s.hata), None)
                 else:
                     secilen = skl.otomatik_skill(etkin, istek_metni or sorgu)
                 if secilen:

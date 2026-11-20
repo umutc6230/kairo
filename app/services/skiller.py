@@ -518,10 +518,18 @@ def secim_coz(cevap: str, adaylar: list[Skill]) -> Skill | None:
     return adaylar[i - 1] if 1 <= i <= len(adaylar) else None
 
 
-async def model_ile_sec(llm, skiller: list[Skill], mesaj: str, sorgu: str) -> Skill | None:
+async def model_ile_sec(
+    llm, skiller: list[Skill], mesaj: str, sorgu: str, *, genis: bool = False
+) -> Skill | None:
     """Kelime eslesmesi yalniz aday listesini daraltir; karari model verir (anlamdan).
     Aday yoksa model cagrilmaz. Hata olursa cagiran kelime yontemine duser."""
-    adaylar = [s for _, s in puanla([s for s in skiller if not s.hata], sorgu)][:MODEL_ADAY]
+    saglam = [s for s in skiller if not s.hata]
+    adaylar = [s for _, s in puanla(saglam, sorgu)]
+    if genis:  # farkli dildeki aciklamalar kelime eslesmesi olmadan da incelenebilsin
+        eslesen = {s.ad for s in adaylar}
+        adaylar = [*adaylar, *(s for s in saglam if s.ad not in eslesen)][:40]
+    else:
+        adaylar = adaylar[:MODEL_ADAY]
     if not adaylar:
         return None
     cevap = await llm.metin(secim_istemi(adaylar, mesaj), max_tokens=8, dusunme="kapali")

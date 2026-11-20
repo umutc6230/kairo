@@ -140,7 +140,40 @@ function adimBasligi(a) {
   return `${a.arac} ${argOzet(a)}`.trim();
 }
 
-function ccAdim(a) {
+function gorevEtkinligi(r) {
+  if (r.durum !== "calisiyor") return { etiket: DURUM_TR[r.durum]?.[0] || r.durum };
+  const adim = r.adimlar.findLast((a) => a.durum === "niyet")
+    || r.adimlar.find((a) => a.durum === "sirada");
+  if (adim?.arac === "gorevi_bitir") return { etiket: "Sonuç hazırlanıyor…" };
+  if (adim?.arac === "plan_guncelle") return { etiket: "Plan güncelleniyor…" };
+  if (adim) {
+    const tur = adimTuru(adim);
+    const etiket = {
+      oku: "Dosya okunuyor", yaz: "Dosya düzenleniyor", ara: "Arama yapılıyor",
+      komut: "Komut çalıştırılıyor", diger: "Araç kullanılıyor",
+    }[tur];
+    const g = adim.argumanlar || {};
+    const ayrinti = g.yol || g.desen || (tur === "komut" ? g.komut || g.command || g.metin : null);
+    return { etiket, ayrinti: ayrinti || adim.arac };
+  }
+  const plan = r.plan?.find((a) => a.durum === "suruyor");
+  if (plan) return { etiket: "Plan adımı", ayrinti: plan.baslik };
+  return { etiket: r.adimlar.length ? "Sonraki adım hazırlanıyor…" : "İstek değerlendiriliyor…" };
+}
+
+function modelEtiketi(model, rol) {
+  if (!model) return "";
+  const ad = { koordinator: "Koordinatör", uygulayici: "Uygulayıcı" }[rol] || "Model";
+  return `<span class="soluk kucuk" title="${kacir(model)}"><span>${ad}</span> · ${kacir(model)}</span>`;
+}
+
+function ajanNotu(metin) {
+  const izleyici = /^\[(?:Izleyici|İzleyici)\]\s*/i;
+  if (!izleyici.test(metin)) return `<div class="ajan-not md">${md(metin)}</div>`;
+  return `<div class="ajan-not izleyici-not"><span class="soluk" role="img" aria-label="İzleyici" title="İzleyici">${ikon("bilgi")}</span><div class="md">${md(metin.replace(izleyici, ""))}</div></div>`;
+}
+
+function ccAdim(a, rol) {
   const g = a.argumanlar || {};
   // calisan adim acik baslar (ne yapildigi gorunsun); kullanici tiklarsa varsayilanin tersi
   const acik = SURUYOR.has(a.durum) !== acikAdimlar.has(a.no);
@@ -153,6 +186,7 @@ function ccAdim(a) {
       <span class="cc-ad">${kacir(adimBasligi(a))}</span>${durumRozet}${kod}<span class="cc-ok" aria-hidden="true">›</span>
     </button>
     ${acik ? `<div class="cc-kutu">
+      ${modelEtiketi(a.model, rol)}
       ${giris ? `<pre class="cc-giris">${kacir(giris)}</pre>` : ""}
       ${a.sonuc ? `<pre class="cc-cikti">${kacir(sonucMetni(a))}</pre>` : ""}
       ${a.checkpoint ? `<button class="btn kucuk" data-diff="${kacir(a.checkpoint)}"><span data-ikon="dosya"></span>Diff ve geri alma</button>` : ""}
@@ -160,7 +194,7 @@ function ccAdim(a) {
   </li>`;
 }
 
-function ccGrup(adimlar, sonGrupCalisiyor) {
+function ccGrup(adimlar, sonGrupCalisiyor, rol) {
   const sayac = new Map();
   for (const a of adimlar) sayac.set(adimTuru(a), (sayac.get(adimTuru(a)) || 0) + 1);
   const ozet = [...sayac].map(([t, n]) => `${n} ${TUR_AD[t]}`).join(", ");
@@ -175,7 +209,7 @@ function ccGrup(adimlar, sonGrupCalisiyor) {
     <button class="cc-grup-baslik" aria-expanded="${acik}" data-grup="${anahtar}">
       <span>${kacir(ozet)}</span>${suruyor ? '<span class="parilti kucuk">sürüyor</span>' : ""}${hata ? '<span class="rozet kirmizi">hata</span>' : ""}<span class="cc-ok" aria-hidden="true">›</span>
     </button>
-    ${acik ? `<ol class="cc-liste">${adimlar.map(ccAdim).join("")}</ol>` : ""}
+    ${acik ? `<ol class="cc-liste">${adimlar.map((a) => ccAdim(a, rol)).join("")}</ol>` : ""}
   </li>`;
 }
 
@@ -200,11 +234,11 @@ function gorselYerleriDoldur(kap, r) {
   }
 }
 
-function ccAkis(adimlar, calisiyor) {
+function ccAkis(adimlar, calisiyor, rol) {
   const parcalar = [];
   let grup = [];
   const kapat = (son = false) => {
-    if (grup.length) parcalar.push(ccGrup(grup, son && calisiyor));
+    if (grup.length) parcalar.push(ccGrup(grup, son && calisiyor, rol));
     grup = [];
   };
   for (const a of adimlar) {
@@ -298,7 +332,7 @@ function beklemeSatiri(r) {
 }
 
 // Claude Code Desktop gibi: sohbette sade akis (adim satirlari, onay kartlari, sonuc);
-// plan, baglam, butce ve degisen dosyalar SAG PANELDE.
+// Plan sohbet icinde; baglam, butce ve degisen dosyalar sag panelde.
 function sohbetCiz(r) {
   const kap = detayKabi();
   const basari = r.durum === "basarili" && r.sonuc?.dogrulandi;
@@ -308,17 +342,22 @@ function sohbetCiz(r) {
     .filter((g) => !g.startsWith("Kullanici:") && !g.startsWith("Onay bekleniyor") && ![...aciklamalar].some((x) => x.startsWith(g.slice(0, 200)))))]
     .slice(-2);
   const calisiyor = !BITMIS.has(r.durum);
-  const akis = ccAkis(r.adimlar, calisiyor);
+  const etkinlik = calisiyor ? gorevEtkinligi(r) : null;
+  const yazmaKutusuDurdurur = izleyiciler.get(kap)?.durumBildir && r.durum === "calisiyor";
+  const akis = ccAkis(r.adimlar, calisiyor, r.model_rol);
   // Claude Code gibi: gorev listesi cevabin icinde, adimlar ilerledikce isaretlenir
   const plan = r.plan || [];
-  const planHtml = plan.length ? `<div class="sohbet-plan"><div class="sohbet-plan-baslik soluk kucuk">Plan · ${plan.filter((p) => p.durum === "tamam").length}/${plan.length}</div>
+  const planModeli = r.adimlar.findLast((a) => a.arac === "plan_guncelle" && a.durum === "tamam")?.model;
+  const planHtml = plan.length ? `<div class="sohbet-plan"><div class="sohbet-plan-baslik soluk kucuk">Plan · ${plan.filter((p) => p.durum === "tamam").length}/${plan.length}${planModeli ? ` · ${modelEtiketi(planModeli, r.model_rol)}` : ""}</div>
     <ul class="plan-liste">${plan.map((p) => `<li class="plan-${kacir(planDurum(r, p.durum))}">${kacir(p.baslik || "")}</li>`).join("")}</ul></div>` : "";
   kap.innerHTML = `
+    ${r.skill_adi ? `<div class="soluk kucuk">Kullanılan skill: <b>${kacir(r.skill_adi)}</b></div>` : ""}
+    ${modelEtiketi(r.son_model, r.model_rol)}
     ${planHtml}
     <ol class="adim-liste sade">${akis}</ol>
-    ${notlar.map((g) => `<div class="ajan-not md">${md(g)}</div>`).join("")}
+    ${notlar.map(ajanNotu).join("")}
     ${beklemeSatiri(r)}
-    ${calisiyor ? `<div class="baykus-canli" data-mod="${r.durum === "calisiyor" ? "calisiyor" : "bekliyor"}" style="--bk-gecikme:-${(Date.now() / 1000 % 3600).toFixed(2)}s"><span class="baykus-kap">${ikon("logo")}</span><span class="baykus-etiket">${r.durum === "calisiyor" ? "Çalışıyor…" : "Onay bekliyor…"}</span></div>` : ""}
+    ${calisiyor ? `<div class="baykus-canli" data-mod="${r.durum === "calisiyor" ? "calisiyor" : "bekliyor"}" style="--bk-gecikme:-${(Date.now() / 1000 % 3600).toFixed(2)}s"><span class="baykus-kap">${ikon("logo")}</span><span class="baykus-etiket"><span>${kacir(etkinlik.etiket)}</span>${etkinlik.ayrinti ? ` · <span title="${kacir(etkinlik.ayrinti)}">${kacir(etkinlik.ayrinti)}</span>` : ""}</span></div>` : ""}
     ${bekleyenKartlari(r)}
     ${r.hata ? `<div class="uyari-kutu kucuk">${kacir(r.hata)}</div>` : ""}
     ${r.sonuc?.ozet ? `<div class="ajan-sonuc ajan-rapor"><div class="rapor-baslik">${basari ? '<span data-ikon="tik" class="yesil-ikon" aria-label="doğrulandı"></span> Tamamlandı' : "Sonuç"}${r.sonuc.kanit?.length ? ` <span class="soluk kucuk">(kanıt: adım ${kacir(r.sonuc.kanit.join(", "))})</span>` : ' <span class="rozet sari" title="Ajan, son dosya değişikliğinden sonra başarılı bir araç adımını kanıt olarak göstermedi. Cevap yanlış demek değil; otomatik kontrol edilmedi demek.">doğrulanmadı</span>'}<button class="ikon-btn" title="Cevabı kopyala" aria-label="Cevabı kopyala" data-kopya data-ikon="kopyala"></button></div><div class="md">${md(r.sonuc.ozet)}</div></div>` : ""}
@@ -326,7 +365,7 @@ function sohbetCiz(r) {
     ${r.calisma_koku && r.dal ? `<div class="ajan-izole soluk kucuk">Ayrı dalda çalıştı: <code>${kacir(r.dal)}</code>${["basarili", "dogrulanmadi"].includes(r.durum) ? `
       <div class="satir"><input class="alan" data-entegre-test placeholder="Birleştirmeden önce test komutu (isteğe bağlı)" style="flex:1">
       <button class="btn ana" data-entegre>Ana dala birleştir</button><button class="btn tehlike" data-at>Değişiklikleri at</button></div>` : ""}</div>` : ""}
-    <div class="ajan-kontrol">${rozet(r.durum)}${kontroller(r)}</div>`;
+    ${yazmaKutusuDurdurur ? "" : `<div class="ajan-kontrol">${rozet(r.durum)}${kontroller(r)}</div>`}`;
   gorselYerleriDoldur(kap, r);
   const ent = kap.querySelector("[data-entegre]");
   if (ent) {
@@ -368,10 +407,7 @@ function sagPanelCiz(r) {
     const k = a.dosya || a.argumanlar?.yol || a.arac;
     benzersiz.set(k, { a, n: (benzersiz.get(k)?.n || 0) + 1 });
   }
-  // Baglam ustteki "Bağlam" bolumunde zaten var; bos Plan/Dosya bolumleri gosterilmez
   p.innerHTML = `
-    ${(r.plan || []).length ? `<div class="sp-baslik">Plan</div>
-    <ul class="plan-liste">${r.plan.map((x) => `<li class="plan-${kacir(planDurum(r, x.durum))}">${kacir(x.baslik)}</li>`).join("")}</ul>` : ""}
     ${benzersiz.size ? `<details class="sp-dosya-kap" ${dosyaListesiAcik ?? benzersiz.size <= 5 ? "open" : ""}><summary class="sp-baslik">Değişen dosyalar <span class="soluk">${benzersiz.size}</span></summary>
     <ul class="sp-dosyalar">${[...benzersiz.values()].map(({ a, n }) => `<li><button class="bag" data-diff="${kacir(a.checkpoint)}"><span data-ikon="dosya"></span>${kacir(a.dosya || a.argumanlar?.yol || a.arac)}${n > 1 ? ` <span class="soluk kucuk">×${n}</span>` : ""}</button></li>`).join("")}</ul></details>` : ""}
     <div class="sp-baslik">Bütçe</div>
@@ -407,6 +443,7 @@ async function altAjanlariCiz(idler) {
   kap.classList.remove("soluk", "kucuk");
   kap.innerHTML = cocuklar.filter(Boolean).map((c) => `<div class="alt-ajan">
     <div>${rozet(c.durum)} ${kacir(c.hedef.slice(0, 70))}</div>
+    ${modelEtiketi(c.son_model, c.model_rol)}
     <div class="soluk kucuk">Yazabilir: ${kacir(c.sahip_dosyalar.join(", ") || "hiçbir dosya")}</div>
     <div class="soluk kucuk">Araçlar: ${kacir(c.izinli_araclar.join(", "))}</div>
     <div class="soluk kucuk">Adım ${kacir(c.kullanim.adim)}${c.butce.max_adim ? `/${kacir(c.butce.max_adim)}` : ""}${c.sonuc?.ozet ? ` · ${kacir(c.sonuc.ozet.slice(0, 80))}` : ""}</div></div>`).join("");
@@ -435,7 +472,7 @@ function detayCiz(r) {
         <div class="kart"><div class="kart-baslik"><b>Bütçe</b></div>
           ${cubuk("Adım", r.kullanim.adim, r.butce.max_adim)}
           ${cubuk("Süre", r.kullanim.sure_sn, r.butce.max_sure_sn, " sn")}
-          ${cubuk("Token", r.kullanim.token, r.butce.max_token)}
+          ${maliyetSatiri(r.kullanim)}
           ${b.baglam ? `<div class="soluk kucuk">Bağlam: sistem ${kacir(b.sistem)} · araçlar ${kacir(b.araclar)} · mesaj ${kacir(b.mesajlar)} · kanıt ${kacir(b.kanit)} · cevap ${kacir(b.cevap)} = ${kacir(b.toplam)} / ${kacir(b.baglam)} (%${kacir(b.dolu_yuzde)})${r.ozet_sayisi ? ` · ${kacir(r.ozet_sayisi)} kez özetlendi` : ""}</div>` : ""}</div>
         <div class="kart"><div class="kart-baslik"><b>Güncellemeler</b></div>
           <ul class="guncelleme-liste">${(r.guncellemeler || []).slice(-12).map((g) => `<li>${kacir(g)}</li>`).join("") || '<li class="soluk">-</li>'}</ul>
@@ -445,6 +482,11 @@ function detayCiz(r) {
     </div>`;
   ikonlariYerlestir(kap);
   baglantilar(r);
+}
+
+export async function goreviIptalEt(id) {
+  if (!(await onayla("Görevi iptal et", "Çalışan görev durdurulsun mu? Yapılan dosya değişiklikleri geri alınmaz (checkpoint'ten ayrıca geri alabilirsiniz).", { evet: "İptal et", tehlike: true }))) return;
+  return api(`/api/gorevler/${id}/iptal`, { method: "POST" });
 }
 
 function baglantilar(r) {
@@ -457,7 +499,7 @@ function baglantilar(r) {
   };
   $$("[data-islem]", kap).forEach((b) => {
     b.onclick = sarmala(async () => {
-      if (b.dataset.islem === "iptal" && !(await onayla("Görevi iptal et", "Çalışan görev durdurulsun mu? Yapılan dosya değişiklikleri geri alınmaz (checkpoint'ten ayrıca geri alabilirsiniz).", { evet: "İptal et", tehlike: true }))) return;
+      if (b.dataset.islem === "iptal") return goreviIptalEt(r.id);
       await api(`/api/gorevler/${r.id}/${b.dataset.islem}`, { method: "POST" });
     });
   });
@@ -677,9 +719,9 @@ export function gorevlerKur() {
 }
 
 /** Claude Code gibi: gorev SOHBETIN ICINDE canli cizilir (adimlar, onay, diff, kontroller). */
-export function sohbetteGorevGoster(kap, id) {
+export function sohbetteGorevGoster(kap, id, durumBildir) {
   clearInterval(izleyiciler.get(kap)?.zamanlayici); // ayni kutu yeniden baglanirsa eskisini birak
-  const v = { kap, id, acik: new Set(), imza: "", zamanlayici: null };
+  const v = { kap, id, durumBildir, acik: new Set(), imza: "", zamanlayici: null };
   izleyiciler.set(kap, v);
   izleyiciYenile(v);
   v.zamanlayici = setInterval(() => {
@@ -696,11 +738,12 @@ async function izleyiciYenile(v, zorla = true) {
     v.kap.innerHTML = `<div class="uyari-kutu">${kacir(e.message)}</div>`;
     return;
   }
-  if (izleyiciler.get(v.kap) !== v) return; // beklerken kutu baska goreve baglandi
+  if (!v.kap.isConnected || izleyiciler.get(v.kap) !== v) return; // beklerken kutu baska goreve baglandi
   // gorev bu izlemede bitti (sayfa acilisinda zaten bitmis olan sayilmaz): sonraki mesaj onerisi
   if (v.sonDurum && !BITMIS.has(v.sonDurum) && BITMIS.has(r.durum)) {
     setTimeout(() => document.dispatchEvent(new Event("ajan-tur-bitti")), 300);
   }
+  if (r.durum !== v.sonDurum) v.durumBildir?.(r.durum);
   v.sonDurum = r.durum;
   const imza = JSON.stringify(r) + [...v.acik].join(",");
   if (!zorla && imza === v.imza) return;
