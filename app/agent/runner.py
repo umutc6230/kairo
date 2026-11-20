@@ -938,10 +938,8 @@ class AgentRunner:
                     continue  # bayraklar dongu basinda islenir; model cagrilmaz
                 # 2) kullanici yonlendirmeleri + diger oturumlardan mesajlar: guvenli sinirda
                 run.kuyruk.extend(self._gelen.pop(run_id, []))
-                run.kuyruk.extend(
-                    f"[{'IS DEVRI' if m.tur == 'devir' else 'Oturum mesaji'} - {m.kimden_ad} "
-                    f"({m.kimden})] {m.metin}"
-                    for m in koord.KOORD.teslim_al(f"gorev:{run_id}")
+                run.kuyruk.extend(  # dis icerik olarak isaretli (veri, emir degil)
+                    koord.mesaj_metni(m) for m in koord.KOORD.teslim_al(f"gorev:{run_id}")
                 )
                 while run.kuyruk:
                     m = run.kuyruk.pop(0)
