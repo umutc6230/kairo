@@ -299,7 +299,7 @@ function oturumListesiCiz() {
       const kapali = kapaliAltlar.has(o.id) && !cocuk.some((c) => c.id === durum.oturumId);
       const od = o.id === calisanOturumId ? "calisiyor" : oturumDurumu(o, gorevHaritasi);
       const s = el(`<div class="oturum ${alt ? "alt-oturum" : ""} ${durum.gorunum === "sohbet" && o.id === durum.oturumId ? "aktif" : ""} ${od ? `durum-${od}` : ""} ${od === "calisiyor" ? "calisiyor" : ""}" data-id="${o.id}">
-        <span class="calisma-nokta" aria-hidden="true"></span><span class="ad" title="${kacir(o.baslik)}">${kacir(o.baslik)}</span>${od && od !== "calisiyor" ? `<span class="oturum-durum" title="${kacir(DURUM_ETIKET[od])}" aria-label="${kacir(DURUM_ETIKET[od])}"></span>` : ""}${cocuk.length ? `<button class="ikon-btn alt-ac ${kapali ? "kapali" : ""}" title="Alt oturumlar (${cocuk.length})" aria-label="Alt oturumları ${kapali ? "göster" : "gizle"}" aria-expanded="${!kapali}" data-ikon="asagi"></button>` : ""}<button class="ikon-btn daha" title="Diger" data-ikon="daha"></button></div>`);
+        <span class="calisma-nokta" ${od ? `title="${kacir(DURUM_ETIKET[od])}" role="img" aria-label="${kacir(DURUM_ETIKET[od])}"` : 'aria-hidden="true"'}></span><span class="ad" title="${kacir(o.baslik)}">${kacir(o.baslik)}</span>${cocuk.length ? `<button class="ikon-btn alt-ac ${kapali ? "kapali" : ""}" title="Alt oturumlar (${cocuk.length})" aria-label="Alt oturumları ${kapali ? "göster" : "gizle"}" aria-expanded="${!kapali}" data-ikon="asagi"></button>` : ""}<button class="ikon-btn daha" title="Diger" data-ikon="daha"></button></div>`);
       s.querySelector(".alt-ac")?.addEventListener("click", (e) => {
         e.stopPropagation();
         kapaliAltlar[kapali ? "delete" : "add"](o.id);

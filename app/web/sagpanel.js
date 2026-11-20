@@ -1,5 +1,4 @@
 // Sag panel (Claude Code Desktop gibi): proje dosya agaci, baglayicilar; alt durum cubugu.
-import { dockAcKapa } from "./dock.js";
 import { ikon, ikonlariYerlestir } from "./ikonlar.js";
 import { kacir } from "./md.js";
 import { $, api, baglayiciDurumu, bildir, durum, el, modal } from "./ortak.js";
@@ -436,11 +435,7 @@ export function sagPanelKur({ baglayiciAc, ayarAc, degisiklikAc }) {
   paneliAyarla(localStorage.getItem(PANEL_ANAHTAR) !== "0");
   $("#btn-sag-panel").onclick = () => paneliAyarla($("#sag-panel").hidden);
   $("#btn-dosyalar").onclick = () => dosyaPaneliAyarla($("#dosya-panel").hidden);
-  $("#sp-dosya-kapat").onclick = () => dosyaPaneliAyarla(false);
-  // Paradev gibi arac izgarasi: mevcut ust cubuk dugmelerini / dock'lari acar (yeni davranis yok)
-  document.querySelectorAll(".sp-araclar [data-tikla]").forEach((b) => { b.onclick = () => document.querySelector(b.dataset.tikla)?.click(); });
-  document.querySelectorAll(".sp-araclar [data-dock-ac]").forEach((b) => { b.onclick = () => dockAcKapa(b.dataset.dockAc, true); });
-  $("#sp-dosya-yenile").onclick = dosyaAgaciniYenile;
+  $("#sp-dosya-kapat").onclick = () => dosyaPaneliAyarla(false);  $("#sp-dosya-yenile").onclick = dosyaAgaciniYenile;
   dosyaPaneliAyarla(localStorage.getItem(DOSYA_ANAHTAR) === "1");
   setInterval(islerYenile, 4000);
   setInterval(threadlerYenile, 5000);

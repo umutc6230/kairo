@@ -1111,11 +1111,6 @@ a.sp-satir { text-decoration: none; }
 .onizleme-kart.durdu .canli-nokta { background: var(--cok-soluk); animation: none; }
 .onizleme-kart.durdu .onizleme-cerceve { opacity: .5; }
 
-/* ---- oturum durum ikonlari (onay bekliyor / hata) ---- */
-.oturum-durum { flex-shrink: 0; width: 8px; height: 8px; margin: 0 4px 0 8px; border-radius: 50%; }
-.oturum.durum-onay .oturum-durum { background: var(--sari); box-shadow: 0 0 0 3px color-mix(in srgb, var(--sari) 25%, transparent); }
-.oturum.durum-hata .oturum-durum { background: var(--kirmizi); }
-.oturum.durum-onay .ad { color: var(--metin); }
 
 /* ---- Ctrl+K oturum degistirici ---- */
 .degistirici #ar-sonuc { max-height: 52vh; overflow-y: auto; padding-top: 6px; }
@@ -1142,12 +1137,6 @@ a.sp-satir { text-decoration: none; }
 .kenar-kullanim .kk-cubuk { flex: 1; height: 4px; border-radius: 2px; background: var(--yuzey3); overflow: hidden; }
 .kenar-kullanim .kk-cubuk span { display: block; height: 100%; background: var(--vurgu); }
 
-/* ---- sag panel arac izgarasi ---- */
-.sp-araclar { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; padding: 10px 10px 12px; border-bottom: 1px solid var(--cizgi); }
-.sp-arac { display: flex; align-items: center; gap: 8px; padding: 7px 9px; border: 1px solid var(--cizgi); border-radius: 8px; background: var(--yuzey); font-size: 12.5px; color: var(--soluk); text-align: left; min-width: 0; }
-.sp-arac:hover { background: var(--yuzey2); color: var(--metin); }
-.sp-arac svg { width: 15px; height: 15px; flex-shrink: 0; }
-.sp-arac kbd { margin-left: auto; font: 10.5px var(--mono); color: var(--cok-soluk); white-space: nowrap; }
 
 /* ---- proje agaci (Proje gorunumu) ---- */
 .proje-grup .grup-baslik { justify-content: flex-start; gap: 7px; color: var(--metin); font-size: 13.5px; }
@@ -1164,3 +1153,10 @@ a.sp-satir { text-decoration: none; }
 .mm-cizgi::before { content: ""; position: absolute; inset: -4px -2px; }
 .mm-cizgi:hover { width: 14px; background: var(--soluk); }
 .mm-cizgi.aktif { width: 14px; background: var(--vurgu); }
+
+/* ---- oturum satiri bas ikonu (Paradev gibi): gri nokta; calisiyor/onay/hata renkli ---- */
+.calisma-nokta { display: block !important; background: var(--cizgi2); animation: none; }
+.oturum.calisiyor .calisma-nokta { background: var(--vurgu); animation: nabiz 1.2s ease-in-out infinite; }
+.oturum.durum-onay .calisma-nokta { background: var(--sari); box-shadow: 0 0 0 3px color-mix(in srgb, var(--sari) 25%, transparent); }
+.oturum.durum-hata .calisma-nokta { background: var(--kirmizi); }
+.oturum.aktif .calisma-nokta:not([title]) { background: var(--soluk); }
