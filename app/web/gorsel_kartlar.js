@@ -13,7 +13,7 @@ async function kopyala(metin) {
 
 const CSP = "default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; img-src data: blob:; font-src data:; media-src data: blob:";
 // iframe yuksekligini icerige gore ayarlar (yalniz sayi gonderir)
-const YUKSEKLIK = "<script>(()=>{const g=()=>parent.postMessage({kairoYukseklik:document.documentElement.scrollHeight},'*');new ResizeObserver(g).observe(document.documentElement);addEventListener('load',g);g()})()</script>";
+const YUKSEKLIK = "<script>(()=>{const g=()=>parent.postMessage({kairoYukseklik:document.documentElement.scrollHeight},'*');new ResizeObserver(g).observe(document.documentElement);addEventListener('load',g);g();[150,500,1500].forEach(t=>setTimeout(g,t))})()</script>";
 const TEMEL_STIL = "<style>html{color-scheme:dark}body{margin:0;padding:12px;font:14px 'Segoe UI',system-ui,sans-serif;color:#ecebe7;background:transparent}</style>";
 
 const iframeler = new Set();

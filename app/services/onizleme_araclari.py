@@ -94,7 +94,12 @@ def onizleme_isleyici(
             return {"hata": "port 1-65535 araliginda olmali."}
         yol = "/" + (yol or "").lstrip("/")
         url = f"http://localhost:{port}{yol}"
-        if port_acik(port):  # zaten calisan sunucu: yalniz onizleme
+        if port_acik(port):
+            if komut.strip():  # canli testte bulundu: port baska uygulamadaydi, o gosteriliyordu
+                return {
+                    "hata": f"{port} portu baska bir surecte kullaniliyor; sunucu baslatilmadi. "
+                    "Bos bir port sec ya da mevcut sunucu icin komutu bos birak."
+                }
             return {"url": url, "is_id": "", "not": "Port zaten acik; mevcut sunucu gosteriliyor."}
         if not komut.strip():
             return {"hata": f"{port} portunda calisan sunucu yok; `komut` ver."}

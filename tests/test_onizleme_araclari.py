@@ -37,6 +37,8 @@ def test_onizleme_port_zaten_acik() -> None:
         f = oniz.onizleme_isleyici(None, None)
         r = f(port=port, yol="app")
         assert r["url"] == f"http://localhost:{port}/app" and r["is_id"] == ""
+        # komut verildi ama port baska surecte: yanlis sunucu gosterilmez
+        assert "baska bir surecte" in f(port=port, komut="npm run dev")["hata"]
     finally:
         s.close()
 
