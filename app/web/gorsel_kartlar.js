@@ -16,24 +16,72 @@ const CSP = "default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-i
 const YUKSEKLIK = "<script>(()=>{const g=()=>parent.postMessage({kairoYukseklik:document.documentElement.scrollHeight},'*');new ResizeObserver(g).observe(document.documentElement);addEventListener('load',g);g();[150,500,1500].forEach(t=>setTimeout(g,t))})()</script>";
 const TEMEL_STIL = "<style>html{color-scheme:dark}body{margin:0;padding:12px;font:14px 'Segoe UI',system-ui,sans-serif;color:#ecebe7;background:transparent}</style>";
 
+// KOPRU: kart yalniz `window.kairo.komut(k)` ile istek yollar. Ana sayfa: kaynak = kayitli kart
+// iframe'i mi, tur beyaz listede mi, oran sinirinda mi bakar; her komut uygulama ici modalla
+// kullaniciya sorulur, sunucuda PolitikaMotoru'ndan gecer. Sonuc yalniz o iframe'e doner.
+const KOPRU = "<script>(()=>{let n=0;const b=new Map();addEventListener('message',e=>{const y=e.data&&e.data.kairoKopruYanit;if(e.source!==parent||!y||!b.has(y.id))return;b.get(y.id)(y);b.delete(y.id)});window.kairo={komut:k=>new Promise(r=>{const id=++n;b.set(id,r);parent.postMessage({kairoKopru:{id,tur:'komut',komut:String(k)}},'*')})}})()</script>";
+export const KOPRU_TURLERI = new Set(["komut"]);
+export const KOPRU_ARALIK_MS = 2000;
+
 const iframeler = new Set();
+const sonIstek = new WeakMap(); // iframe -> son istek zamani (oran siniri; ayni anda tek istek)
+
+// Saf denetim (test edilir): gecerli istek mi? Gecersizse neden doner.
+export function kopruDenetle(veri, kaynakVar, son, simdi) {
+  if (!kaynakVar) return "kaynak";
+  if (!veri || typeof veri !== "object" || !KOPRU_TURLERI.has(veri.tur)) return "tur";
+  if (typeof veri.komut !== "string" || !veri.komut.trim() || veri.komut.length > 2000) return "komut";
+  if (son && simdi - son < KOPRU_ARALIK_MS) return "oran";
+  return "";
+}
+
+function kopruYanit(f, id, yanit) {
+  f.contentWindow?.postMessage({ kairoKopruYanit: { id, ...yanit } }, "*");
+}
+
+async function kopruIstegi(f, veri) {
+  const neden = kopruDenetle(veri, true, sonIstek.get(f), Date.now());
+  if (neden) return kopruYanit(f, veri?.id, { ok: false, hata: neden === "oran" ? "Çok sık istek." : "Geçersiz istek." });
+  sonIstek.set(f, Date.now() + 10 ** 9); // onay/calisma bitene kadar yeni istek yok
+  const onay = await new Promise((coz) => {
+    const g = el('<div><p>Bu mini uygulama bir komut çalıştırmak istiyor:</p><pre class="kart-komut"></pre></div>');
+    g.querySelector("pre").textContent = veri.komut;
+    modal({ baslik: f.title, icerik: g, kapaninca: () => coz(false), dugmeler: [
+      { metin: "Reddet" },
+      { metin: "Çalıştır", tur: "ana", eylem: (kapat) => { coz(true); kapat(); } },
+    ] });
+  });
+  try {
+    if (!onay) return kopruYanit(f, veri.id, { ok: false, hata: "Kullanıcı reddetti." });
+    const s = await api("/api/kart-komut", { method: "POST", govde: { komut: veri.komut, onay: true } });
+    kopruYanit(f, veri.id, { ok: s.cikis_kodu === 0 || s.cikis_kodu == null, cikti: s.cikti || "", cikis_kodu: s.cikis_kodu });
+  } catch (e) {
+    kopruYanit(f, veri.id, { ok: false, hata: e.message });
+  } finally {
+    sonIstek.set(f, Date.now());
+  }
+}
+
 window.addEventListener("message", (e) => {
-  const h = Number(e.data?.kairoYukseklik);
-  if (!h) return;
+  let kaynak = null;
   for (const f of iframeler) {
     if (!f.isConnected) { iframeler.delete(f); continue; }
-    if (f.contentWindow === e.source && !f.dataset.sabit) f.style.height = `${Math.min(Math.max(h, 60), 900)}px`;
+    if (f.contentWindow === e.source) kaynak = f;
   }
+  if (!kaynak) return; // yabanci kaynak: yok sayilir
+  if (e.data?.kairoKopru) { kopruIstegi(kaynak, e.data.kairoKopru); return; }
+  const h = Number(e.data?.kairoYukseklik);
+  if (h && !kaynak.dataset.sabit) kaynak.style.height = `${Math.min(Math.max(h, 60), 900)}px`;
 });
 
-function sandboxIframe(html, sabitYukseklik) {
+function sandboxIframe(html, sabitYukseklik, baslik = "Mini arayüz") {
   const f = document.createElement("iframe");
   f.className = "arayuz-cerceve";
   f.setAttribute("sandbox", "allow-scripts");
   f.setAttribute("referrerpolicy", "no-referrer");
-  f.title = "Mini arayüz";
+  f.title = baslik;
   if (sabitYukseklik) { f.dataset.sabit = "1"; f.style.height = sabitYukseklik; }
-  f.srcdoc = onizlemeSrcdoc(TEMEL_STIL + html + YUKSEKLIK, CSP, "html");
+  f.srcdoc = onizlemeSrcdoc(TEMEL_STIL + KOPRU + html + YUKSEKLIK, CSP, "html");
   iframeler.add(f);
   return f;
 }
@@ -45,12 +93,12 @@ export function arayuzKarti(o, kap) {
       <button class="ikon-btn kucuk-ikon" data-kopya title="HTML'i kopyala" aria-label="HTML'i kopyala" data-ikon="kopyala"></button>
       <button class="ikon-btn kucuk-ikon" data-buyut title="Büyüt" aria-label="Büyüt" data-ikon="kare"></button></div>
     <div class="arayuz-govde"></div></div>`);
-  if (html) k.querySelector(".arayuz-govde").append(sandboxIframe(html));
+  if (html) k.querySelector(".arayuz-govde").append(sandboxIframe(html, "", baslik));
   else k.querySelector(".arayuz-govde").append(el('<div class="soluk kucuk">Arayüz içeriği yok.</div>'));
   k.querySelector("[data-kopya]").onclick = () => kopyala(html);
   k.querySelector("[data-buyut]").onclick = () => {
     const g = el('<div class="arayuz-buyuk"></div>');
-    g.append(sandboxIframe(html, "70vh"));
+    g.append(sandboxIframe(html, "70vh", baslik));
     modal({ baslik, icerik: g, genis: true, dugmeler: [{ metin: "Kapat" }] });
   };
   ikonlariYerlestir(k);
