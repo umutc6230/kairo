@@ -217,11 +217,11 @@ class KararIstegi(BaseModel):
 DIKTE_MAX_SN = 30  # Gemma 4 ses girisi ~30 sn
 DIKTE_UZAK = (
     "Bulut dikte kapali: ses buluta gonderilmez. Ayarlar > 'Sesli dikte bulutta' acilirsa "
-    "secili OpenRouter modeli (ses destekliyse) kullanilir."
+    "ayri dikte modeli (OpenRouter) kullanilir."
 )
 DIKTE_UZAK_SESSIZ = (
-    "Secili OpenRouter modeli sesi anlamiyor; ses girisli bir model secin "
-    "(or. google/gemini-2.5-flash)."
+    "Dikte modeli sesi anlamiyor ya da listede yok; Ayarlar'da ses girisli bir dikte modeli "
+    "yazin (or. google/gemini-2.5-flash)."
 )
 DIKTE_SESSIZ = "Secili model sesi anlamiyor; dikte icin Gemma 4 (E4B/12B) secin."
 DIKTE_TALIMATI = "Bu ses kaydini oldugu gibi yaziya dok. Yalniz soylenen metni yaz."
@@ -2105,15 +2105,17 @@ def uygulama_olustur(
     # ---- ses dikte (A5.7): YALNIZ yerel ses destekli model; buluta ses gonderilmez ----
     def dikte_durumu() -> dict:
         a = ayarlar.oku()
-        if a.saglayici == "openrouter" and a.or_model:
-            if not a.dikte_bulut:
-                return {"kullanilabilir": False, "model": a.or_model, "neden": DIKTE_UZAK}
-            if not (openrouter.model_bilgisi(a.or_model) or {}).get("ses"):
-                return {"kullanilabilir": False, "model": a.or_model, "neden": DIKTE_UZAK_SESSIZ}
+        # bulut dikte + anahtar: ayri dikte modeli (sohbet saglayicisindan bagimsiz)
+        if a.dikte_bulut and openrouter.anahtar():
+            m = a.dikte_model or a.or_model
+            if not (openrouter.model_bilgisi(m) or {}).get("ses"):
+                return {"kullanilabilir": False, "model": m, "neden": DIKTE_UZAK_SESSIZ}
             return {
-                "kullanilabilir": True, "model": a.or_model, "neden": "", "max_sn": DIKTE_MAX_SN,
+                "kullanilabilir": True, "model": m, "neden": "", "max_sn": DIKTE_MAX_SN,
                 "bulut": True,
             }  # fmt: skip
+        if a.saglayici == "openrouter" and a.or_model:
+            return {"kullanilabilir": False, "model": a.or_model, "neden": DIKTE_UZAK}
         p = MODELLER.get(a.model)
         if p is None or not p.ses:
             return {"kullanilabilir": False, "model": a.model, "neden": DIKTE_SESSIZ}

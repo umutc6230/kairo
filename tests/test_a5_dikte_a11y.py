@@ -112,14 +112,20 @@ async def test_dikte_bulut_izinle_ve_ses_destekli_modelle(istemci, app) -> None:
     d = (await istemci.get("/api/dikte/durum")).json()
     assert d["kullanilabilir"] is False and "buluta gonderilmez" in d["neden"]  # varsayilan kapali
 
-    await istemci.put("/api/ayarlar", json={"dikte_bulut": True})
+    uzak = app.state.yonetici.uzak
+    uzak.anahtar_kaydet("sk-or-v1-" + "a" * 32)
+    await istemci.put("/api/ayarlar", json={"dikte_bulut": True, "dikte_model": "g/ses"})
     d = (await istemci.get("/api/dikte/durum")).json()
     assert d["kullanilabilir"] is False and "sesi anlamiyor" in d["neden"]  # model bilinmiyor
 
-    uzak = app.state.yonetici.uzak
     json_yaz(uzak.liste_yolu, {"zaman": 0, "modeller": [{"id": "g/ses", "ses": True}]})
     d = (await istemci.get("/api/dikte/durum")).json()
     assert d["kullanilabilir"] is True and d["bulut"] is True and d["model"] == "g/ses"
+
+    # ayri dikte modeli: sohbet saglayicisi yerel olsa da mikrofon calisir
+    await istemci.put("/api/ayarlar", json={"saglayici": "yerel"})
+    d = (await istemci.get("/api/dikte/durum")).json()
+    assert d["kullanilabilir"] is True and d["model"] == "g/ses"
 
 
 def test_openrouter_ses_isteginde_veri_toplama_kapali() -> None:

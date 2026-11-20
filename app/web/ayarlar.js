@@ -120,8 +120,10 @@ export function ayarlarAc(sekme = "ai") {
         <label class="anahtar"><input type="checkbox" id="ay-araclar" ${a.sohbet_araclari ? "checked" : ""}><span></span></label></div>
       <div class="anahtar-satir"><div><div>İnternet erişimi</div><div class="ayar-not">Açıkken model web'de arama yapabilir ve sayfa okuyabilir (<code>web_ara</code>, <code>web_getir</code>). Tam yetki kapalıyken her istek onay ister; yerel ağ adresleri okunmaz. Kurum politikası kapattıysa açılamaz.</div></div>
         <label class="anahtar"><input type="checkbox" id="ay-ag" ${a.ag_acik ? "checked" : ""}><span></span></label></div>
-      <div class="anahtar-satir"><div><div>Sesli dikte bulutta</div><div class="ayar-not">Sağlayıcı OpenRouter iken mikrofon kaydın seçili OpenRouter modeline (ses girişi destekliyorsa, ör. Gemini) gönderilip yazıya dökülür. Kapalıyken ses bilgisayardan çıkmaz; dikte yalnız yerel Gemma 4 ile çalışır. Gönderimde sağlayıcıdan veri toplamaması istenir.</div></div>
+      <div class="anahtar-satir"><div><div>Sesli dikte bulutta</div><div class="ayar-not">Açıkken mikrofon kaydın aşağıdaki ayrı dikte modeline (OpenRouter, ses girişli) gönderilip yazıya dökülür; sohbette hangi model seçili olursa olsun çalışır. Kapalıyken ses bilgisayardan çıkmaz; dikte yalnız yerel Gemma 4 ile çalışır. Gönderimde sağlayıcıdan veri toplamaması istenir.</div></div>
         <label class="anahtar"><input type="checkbox" id="ay-dikte-bulut" ${a.dikte_bulut ? "checked" : ""}><span></span></label></div>
+      <div class="anahtar-satir"><div><div>Dikte modeli</div><div class="ayar-not">OpenRouter model kimliği, ses girişi desteklemeli (ör. google/gemini-2.5-flash).</div></div>
+        <input class="alan" id="ay-dikte-model" style="max-width:240px" value="${kacir(a.dikte_model || "")}"></div>
       <div class="anahtar-satir"><div><div>Tarayıcı kontrolü</div><div class="ayar-not">Ajan ayrı bir tarayıcı profiliyle (senin Chrome profilin, çerezlerin ve şifrelerin değil) sayfa açabilir, form doldurabilir, tıklayabilir, ekran görüntüsü alabilir. Dış sitelerde her tıklama ve yazma ayrıca onay ister. Acil durdurma: sohbette <code>/browser kapat</code>.</div></div>
         <label class="anahtar"><input type="checkbox" id="ay-tarayici" ${a.tarayici_acik ? "checked" : ""}><span></span></label></div>
       <div class="anahtar-satir"><div><div>Bilgisayar kullanımı (tüm programlar)</div><div class="ayar-not">Açıkken ajan bilgisayardaki tüm program pencerelerini görebilir, tıklayabilir ve yazabilir. Tam yetki kapalıyken her eylem onay ister. Yönetici onayı (UAC), kilit ekranı, Windows Güvenliği ve parola pencereleri hiçbir zaman kontrol edilmez. Acil durdurma: sohbette <code>/masaustu durdur</code>.</div></div>
@@ -861,6 +863,7 @@ export function ayarlarAc(sekme = "ai") {
   alanKaydet("#ay-araclar", "sohbet_araclari");
   alanKaydet("#ay-ag", "ag_acik");
   $("#ay-dikte-bulut", govde).onchange = async (e) => { await kaydet({ dikte_bulut: e.target.checked }); dikteDurumuYenile(); };
+  $("#ay-dikte-model", govde).onchange = async (e) => { await kaydet({ dikte_model: e.target.value.trim() }); dikteDurumuYenile(); };
   // Tam yetki: acarken tek seferlik onay (openbot ilk acilis onayi gibi); kapatmak serbest
   $("#ay-tam-yetki", govde).onchange = async (e) => {
     const g = e.target;

@@ -1799,5 +1799,10 @@
  "{0} token · {1}": "{0} tokens · {1}",
  "One Dark": "One Dark",
  "Dracula": "Dracula",
- "Tokyo Night": "Tokyo Night"
+ "Tokyo Night": "Tokyo Night",
+ "Dikte modeli": "Dictation model",
+ "OpenRouter model kimliği, ses girişi desteklemeli (ör. google/gemini-2.5-flash).": "OpenRouter model ID; must support audio input (e.g. google/gemini-2.5-flash).",
+ "Açıkken mikrofon kaydın aşağıdaki ayrı dikte modeline (OpenRouter, ses girişli) gönderilip yazıya dökülür; sohbette hangi model seçili olursa olsun çalışır. Kapalıyken ses bilgisayardan çıkmaz; dikte yalnız yerel Gemma 4 ile çalışır. Gönderimde sağlayıcıdan veri toplamaması istenir.": "When on, your microphone recording is sent to the separate dictation model below (OpenRouter, audio input) and transcribed; it works whichever chat model is selected. When off, audio never leaves the computer and dictation works only with local Gemma 4. The provider is asked not to collect data.",
+ "Bulut dikte kapali: ses buluta gonderilmez. Ayarlar > 'Sesli dikte bulutta' acilirsa ayri dikte modeli (OpenRouter) kullanilir.": "Cloud dictation is off: audio is not sent to the cloud. If Settings > 'Cloud voice dictation' is turned on, the separate dictation model (OpenRouter) is used.",
+ "Dikte modeli sesi anlamiyor ya da listede yok; Ayarlar'da ses girisli bir dikte modeli yazin (or. google/gemini-2.5-flash).": "The dictation model does not understand audio or is not in the list; enter an audio-input dictation model in Settings (e.g. google/gemini-2.5-flash)."
 }
