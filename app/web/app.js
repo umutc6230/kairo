@@ -20,7 +20,7 @@ import { gorunumUygula, kisayolEslesir } from "./ayarlar2.js";
 import { rutinleriYukle, rutinlerKur } from "./rutinler.js";
 import { ajanlarKur, ajanlarYukle } from "./ajanlar.js";
 import { miniHaritaKur } from "./minimap.js";
-import { DURUM_ETIKET, gorevDurumlari, oturumDurumu, sabitDegistir, sabitler } from "./oturum_durumu.js";
+import { DURUM_ETIKET, gorevDurumlari, oturumDali, oturumDurumu, sabitDegistir, sabitler } from "./oturum_durumu.js";
 import { ajanBloklariniCiz, ajanKayitlariniBirlestir, ajanliOturum, akisVar, calisanOturumId, durdur, mesajlariCiz, sohbetKur, sohbetRunlari, yeniSohbetEkrani } from "./sohbet.js";
 
 const BASLIKLAR = { karsilastir: "Karşılaştır", ocr: "OCR testi", arac: "Araç testi", paket: "Test paketi", eklentiler: "Eklentiler", skiller: "Skill'ler ve talimatlar", modeller: "Modeller", gorevler: "Ajan görevleri", rutinler: "Rutinler", ajanlar: "Ajanlar" };
@@ -126,7 +126,9 @@ function baslikMenusu(capa) {
 }
 
 function baslikAyarla(metin) {
-  $("#sayfa-basligi").textContent = metin || "Yeni sohbet";
+  const b = $("#sayfa-basligi");
+  b.textContent = metin || "Yeni sohbet";
+  b.title = b.textContent; // kesilen adin tamami ustune gelince gorunur
   document.title = `${metin || t("Yeni sohbet")} - Kairo`;
   baglamYenile();
 }
@@ -259,6 +261,11 @@ function oturumListesiCiz() {
     };
   });
   kap.append(duzen);
+  if (listeDuzeni === "proje") { // Claude/Codex gibi: proje gorunumunden yeni proje acilir
+    const ac = el('<button class="proje-ac-btn" type="button"><span data-ikon="arti"></span><span>Proje aç</span></button>');
+    ac.onclick = () => projeAc();
+    kap.append(ac);
+  }
   const gruplar = new Map();
   const gorunur = durum.oturumlar.filter((o) => o.mesaj_sayisi || o.ajan_sayisi || o.id === durum.oturumId || ajanliOturum(o.id));
   const idler = new Set(gorunur.map((o) => o.id));
@@ -283,11 +290,15 @@ function oturumListesiCiz() {
     const projeMi = ad.startsWith("p:");
     const alan = projeMi ? ad.slice(2) : "";
     const baslik = projeMi ? projeAdi(alan) : ad;
-    const grup = el(`<div class="grup ${projeMi ? "proje-grup" : ""} ${kapaliGruplar.has(ad) ? "kapali" : ""}"><div class="grup-baslik">${projeMi ? '<span class="proje-ikon" data-ikon="klasor"></span>' : ""}<span class="grup-ad" title="${kacir(baslik)}">${kacir(baslik)}</span>${projeMi && liste.length ? `<span class="grup-sayi">${liste.length}</span>` : ""}<span class="grup-sag">${projeMi ? `<button class="ikon-btn grup-yeni" title="${kacir(baslik)}: yeni sohbet" aria-label="${kacir(baslik)} projesinde yeni sohbet" data-ikon="arti"></button>` : ""}<span data-ikon="asagi"></span></span></div><div class="grup-ogeler"></div></div>`);
+    const grup = el(`<div class="grup ${projeMi ? "proje-grup" : ""} ${kapaliGruplar.has(ad) ? "kapali" : ""}"><div class="grup-baslik">${projeMi ? '<span class="proje-ikon" data-ikon="klasor"></span>' : ""}<span class="grup-ad" title="${kacir(baslik)}">${kacir(baslik)}</span>${projeMi && liste.length ? `<span class="grup-sayi">${liste.length}</span>` : ""}<span class="grup-sag">${projeMi ? `<button class="ikon-btn grup-yeni" title="${kacir(baslik)}: yeni sohbet" aria-label="${kacir(baslik)} projesinde yeni sohbet" data-ikon="arti"></button><button class="ikon-btn grup-menu" title="${kacir(baslik)}: diğer" aria-label="${kacir(baslik)} proje menüsü" data-ikon="daha"></button>` : ""}<span data-ikon="asagi"></span></span></div><div class="grup-ogeler"></div></div>`);
     grup.querySelector(".grup-yeni")?.addEventListener("click", async (e) => {
       e.stopPropagation();
       await projeyeGec(alan || KISISEL);
       git({ tur: "yeni" });
+    });
+    grup.querySelector(".grup-menu")?.addEventListener("click", (e) => {
+      e.stopPropagation();
+      menuAc(e.currentTarget, [{ metin: "Projeyi kaldır", ikon: "cop", eylem: () => projeKaldir(alan, baslik, liste.length) }]);
     });
     grup.querySelector(".grup-baslik").onclick = () => {
       grup.classList.toggle("kapali");
@@ -299,7 +310,7 @@ function oturumListesiCiz() {
       const kapali = kapaliAltlar.has(o.id) && !cocuk.some((c) => c.id === durum.oturumId);
       const od = o.id === calisanOturumId ? "calisiyor" : oturumDurumu(o, gorevHaritasi);
       const s = el(`<div class="oturum ${alt ? "alt-oturum" : ""} ${durum.gorunum === "sohbet" && o.id === durum.oturumId ? "aktif" : ""} ${od ? `durum-${od}` : ""} ${od === "calisiyor" ? "calisiyor" : ""}" data-id="${o.id}">
-        <span class="calisma-nokta" ${od ? `title="${kacir(DURUM_ETIKET[od])}" role="img" aria-label="${kacir(DURUM_ETIKET[od])}"` : 'aria-hidden="true"'}></span><span class="ad" title="${kacir(o.baslik)}">${kacir(o.baslik)}</span>${cocuk.length ? `<button class="ikon-btn alt-ac ${kapali ? "kapali" : ""}" title="Alt oturumlar (${cocuk.length})" aria-label="Alt oturumları ${kapali ? "göster" : "gizle"}" aria-expanded="${!kapali}" data-ikon="asagi"></button>` : ""}<button class="ikon-btn daha" title="Diger" data-ikon="daha"></button></div>`);
+        <span class="calisma-nokta" ${od ? `title="${kacir(DURUM_ETIKET[od])}" role="img" aria-label="${kacir(DURUM_ETIKET[od])}"` : 'aria-hidden="true"'}></span><span class="ad" title="${kacir(o.baslik)}">${kacir(o.baslik)}</span>${rozetler(o)}${cocuk.length ? `<button class="ikon-btn alt-ac ${kapali ? "kapali" : ""}" title="Alt oturumlar (${cocuk.length})" aria-label="Alt oturumları ${kapali ? "göster" : "gizle"}" aria-expanded="${!kapali}" data-ikon="asagi"></button>` : ""}<button class="ikon-btn daha" title="Diger" data-ikon="daha"></button></div>`);
       s.querySelector(".alt-ac")?.addEventListener("click", (e) => {
         e.stopPropagation();
         kapaliAltlar[kapali ? "delete" : "add"](o.id);
@@ -314,10 +325,20 @@ function oturumListesiCiz() {
       cocuk.forEach((c) => ekle(c, true));
     };
     liste.forEach((o) => ekle(o));
+    if (liste.some((o) => oturumDurumu(o, gorevHaritasi) === "hata")) { // Claude gibi: grupta hatali oturum var
+      grup.querySelector(".grup-sag").insertAdjacentHTML("afterbegin", '<span class="grup-uyari" title="Bu gruptaki bir oturumda görev hatayla bitti" role="img" aria-label="Hatalı oturum var" data-ikon="uyari"></span>');
+    }
     kap.append(grup);
   }
   if (!gruplar.size) kap.append(el(`<div class="ayar-not" style="padding:16px 10px">Henüz sohbet yok.</div>`));
   ikonlariYerlestir(kap);
+}
+
+// Oturum satiri rozetleri: oturumda gecen PR'lar ve son gorevin calistigi dal (worktree)
+function rozetler(o) {
+  const pr = o.prlar?.length ? `<span class="oturum-rozet pr" title="${kacir(o.prlar.join(" · "))}" role="img" aria-label="${o.prlar.length} PR"><span data-ikon="pr"></span>${o.prlar.length > 1 ? o.prlar.length : ""}</span>` : "";
+  const dal = oturumDali(o);
+  return pr + (dal ? `<span class="oturum-rozet dal" title="Dal: ${kacir(dal)}" role="img" aria-label="Dal ${kacir(dal)}"><span data-ikon="dal"></span></span>` : "");
 }
 
 function oturumSatiriBagla(s, o, grup) {
@@ -340,6 +361,19 @@ async function yenidenAdlandir(o) {
     await api(`/api/oturumlar/${o.id}`, { method: "PATCH", govde: { baslik: yeni } });
     if (o.id === durum.oturumId) baslikAyarla(yeni);
     oturumlariYenile();
+  } catch (e) { bildir(e.message, "hata"); }
+}
+
+// Claude/Codex gibi: proje Kairo'dan kaldirilir, bagli sohbetleri de silinir; diskteki dosyalar kalir
+async function projeKaldir(alanId, ad, sayi) {
+  const not = sayi ? ` Bu projeye ait ${sayi} sohbet de kalıcı olarak silinecek.` : "";
+  if (!(await onayla("Projeyi kaldır", `"${ad}" Kairo'dan kaldırılacak.${not} Bilgisayardaki proje dosyalarına dokunulmaz.`, { evet: "Kaldır", tehlike: true }))) return;
+  try {
+    const r = await api(`/api/projeler/${encodeURIComponent(alanId)}`, { method: "DELETE" });
+    if (durum.oturumId && !(await api("/api/oturumlar")).some((o) => o.id === durum.oturumId)) git({ tur: "yeni" });
+    await projeYenile();
+    oturumlariYenile();
+    bildir(`Proje kaldırıldı${r.silinen_sohbet ? `, ${r.silinen_sohbet} sohbet silindi` : ""}.`, "basari");
   } catch (e) { bildir(e.message, "hata"); }
 }
 

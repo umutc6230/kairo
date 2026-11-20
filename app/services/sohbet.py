@@ -25,6 +25,7 @@ from app.agent.terminal import KomutServisi
 from app.agent.workspaces import CalismaAlani, Guven, Mod, WorkspaceDeposu
 from app.exceptions import Bulunamadi, SesDesteklenmiyor, UygulamaHatasi, YerelLLMHatasi
 from app.services import onizleme_araclari as oniz
+from app.services import sirlar
 from app.services import skiller as skl
 from app.services.ekler import Ek, EkDeposu
 from app.services.model_yonetici import ModelYonetici
@@ -548,6 +549,7 @@ async def arac_calistir(
                 sonuc = {"hata": f"{type(e).__name__}: {e}"}
     gorsel = sonuc.pop("_gorsel", None) if isinstance(sonuc, dict) else None
     metin, kesildi = sonuc_kisalt(sonuc)
+    metin = sirlar.maskele(metin)  # kasadaki anahtar ciktida gecerse modele gitmez
     kayit = {
         "id": cagri["id"],
         "ad": ad,
@@ -759,6 +761,7 @@ class SohbetServisi:
         self.openrouter = None  # OpenRouterDeposu (api baglar): gorsel_uret icin
         self.is_emirleri = None  # (ac, listele) api baglar: sohbetten thread (is emri)
         self.tarayici = None  # Tarayici (api baglar)
+        self.tarayici_paneli = ""  # kullanicinin tarayici panelinde actigi adres (arayuz bildirir)
         self.masaustu = None  # Masaustu (api baglar)
         self.kod_zekasi: dict[str, Any] = {}  # alan id -> KodZekasi (dil sunuculari surer)
         self.web_transport = None  # testlerde sahte web
@@ -772,6 +775,13 @@ class SohbetServisi:
         """
         alan = self.projeler.aktif() if self.projeler else None
         if alan is not None:
+            # modeli secilmemis proje Ayarlar'daki varsayilan koordinator/uygulayiciyi kullanir
+            # (kopya: kayit bos kalir, varsayilan degisince hemen yansir)
+            a = self.yonetici.ayarlar.oku()
+            k = alan.koordinator_model or a.varsayilan_koordinator
+            u = alan.uygulayici_model or a.varsayilan_uygulayici
+            if (k, u) != (alan.koordinator_model, alan.uygulayici_model):
+                alan = alan.model_copy(update={"koordinator_model": k, "uygulayici_model": u})
             return alan
         return CalismaAlani(
             id=VARSAYILAN_ALAN_ID,
@@ -963,6 +973,14 @@ class SohbetServisi:
                     isleyiciler |= skl.script_isleyicisi(self.skiller, kapali, ajan_kaydi)
                 mevcut = {a["function"]["name"] for a in araclar}
                 isleyiciler |= skl.arac_isleyicileri(self.skiller, kapali, lambda: mevcut)
+        # always: true YALNIZ uygulamayla gelen skill'de gecerli (guvenlik taramasi); proje/plugin
+        # skill'i bu bayrakla kendini her istege sokamaz (prompt injection)
+        for s in self.skiller.kesfet():
+            if (
+                s.her_zaman and s.kaynak == "yerlesik" and not s.hata and s.ad != otomatik
+                and s.ad not in ayar.kapali_skiller
+            ):  # fmt: skip
+                skill_metni = f"{skill_metni}\n\n{skl.otomatik_metin(s)}".strip()
         talimat = self.talimatlar.sistem_metni(
             claude=ayar.claude_talimatlari, uygulama=ayar.uygulama_talimati
         )
@@ -1092,6 +1110,14 @@ class SohbetServisi:
             isleyiciler = uzanti_kancali(self.uzantilar, isleyiciler)
         if not ayar.sohbet_araclari and alan.id == VARSAYILAN_ALAN_ID:
             return sistem, [], {}, otomatik  # kullanici sohbette araclari kapatti
+        sistem += sirlar.talimat()
+        if self.tarayici_paneli and "tarayici_git" in isleyiciler:
+            # panel bir iframe/ayri pencere: model onu dogrudan goremez, kendi tarayicisiyla acar
+            sistem += (
+                "\n\n## Tarayici paneli\nKullanicinin Kairo tarayici panelinde su sayfa acik: "
+                f"{self.tarayici_paneli}\nKullanici bu sayfadan/ekrandan bahsederse tarayici_git "
+                "ile ac, tarayici_oku ile metni, tarayici_ekran + gorsel_oku ile goruntuyu incele."
+            )
         # MCP semalari baglami dolduruyordu (128 arac ~34K token): ihtiyaca gore yuklenir
         ertele(araclar, isleyiciler, {a.get("ad", "") for m in onceki for a in m.araclar})
         return sistem, araclar, isleyiciler, otomatik

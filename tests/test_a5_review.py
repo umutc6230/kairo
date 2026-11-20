@@ -199,3 +199,24 @@ async def test_derin_review_api_iki_odakli_gecis(istemci, app, git_proje) -> Non
     s = (await istemci.post("/api/review?derin=true")).json()
     assert len(gorulen) == 2 and "ODAK: guvenlik" in gorulen[0] and "ODAK: dogruluk" in gorulen[1]
     assert s["bulgular"][0]["gorus_sayisi"] == 2
+
+
+async def test_sohbet_pr_karti(istemci, monkeypatch) -> None:
+    """Sohbetteki PR karti: yalniz github.com PR adresi gh'ye gider, sonuc onbellekli."""
+    from app.agent import superajan as sa
+
+    cagri: list = []
+
+    def sahte_gh(*arg, **_kw):
+        cagri.append(arg)
+        return 0, '{"number": 10, "title": "Kaydirma", "url": "https://github.com/u/r/pull/10"}'
+
+    monkeypatch.setattr(sa, "gh", sahte_gh)
+    url = "https://github.com/u/r/pull/10"
+    assert (await istemci.get("/api/github/pr", params={"url": url})).json()["number"] == 10
+    await istemci.get("/api/github/pr", params={"url": url})
+    assert len(cagri) == 1 and url in cagri[0]
+    for kotu in ("https://evil.com/u/r/pull/1", "https://github.com/u/r/pull/1;rm", "--repo=x"):
+        r = await istemci.get("/api/github/pr", params={"url": kotu})
+        assert r.status_code >= 400
+    assert len(cagri) == 1  # gecersiz adres gh'ye hic ulasmadi

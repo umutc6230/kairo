@@ -1,7 +1,13 @@
 // Kucuk ve guvenli markdown -> HTML. Once HTML kacirilir; yalniz bilinen bicimler etiketlenir.
+import { t } from "./i18n.js";
 export function kacir(s) {
   return String(s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]);
 }
+
+// Sohbetteki dosya yollari tiklanir (sohbet.js): mutlak Windows yolu ya da klasorlu dosya adi
+const YOL = /^(?:[A-Za-z]:[\\/][^<>"|*?\n]*|(?:[\w.-]+[\\/])+[\w.-]+\.\w{1,8})(?::\d+)?$/;
+// yolKacik: HTML'e kacirilmis yol; sondaki noktalama yola dahil edilmez
+const yolLink = (yolKacik, ic) => `<span class="yol-link" role="link" tabindex="0" data-yol="${yolKacik.replace(/[.,;:]+$/, "")}" title="${t("Aç")}">${ic}</span>`;
 
 function satirIci(s) {
   const kodlar = [];
@@ -13,7 +19,12 @@ function satirIci(s) {
     .replace(/~~([^~\n]+)~~/g, "<del>$1</del>")
     .replace(/\[([^\]\n]+)\]\((https?:\/\/[^\s)]+)\)/g, '<a href="$2" target="_blank" rel="noopener">$1</a>')
     .replace(/(^|[\s(])(https?:\/\/[^\s<)]+)/g, '$1<a href="$2" target="_blank" rel="noopener">$2</a>');
-  return s.replace(/\u0000(\d+)\u0000/g, (_, i) => `<code>${kacir(kodlar[+i])}</code>`);
+  // metin zaten kacirildi: yol degeri dogrudan nitelige girer
+  s = s.replace(/(^|[\s(])([A-Za-z]:\\[^\s<>"|*?]+)/g, (_, on, y) => `${on}${yolLink(y, y)}`);
+  return s.replace(/\u0000(\d+)\u0000/g, (_, i) => {
+    const k = kacir(kodlar[+i]);
+    return YOL.test(kodlar[+i]) ? yolLink(k, `<code>${k}</code>`) : `<code>${k}</code>`;
+  });
 }
 
 function tabloMu(satirlar, i) {

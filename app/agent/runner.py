@@ -37,6 +37,7 @@ from app.agent.telemetri import span
 from app.agent.terminal import AKTIF_RUN, run_komutlarini_durdur
 from app.agent.yetenek import ModelYetenegi, butce_dokumu, dogrula, tahmini_token
 from app.exceptions import Bulunamadi, UygulamaHatasi
+from app.services import sirlar
 from app.services.depo import json_oku, json_yaz
 
 YAN_ETKILI = {
@@ -807,7 +808,7 @@ class AgentRunner:
         sonuc = (
             {"adim": a.no, **sonuc} if isinstance(sonuc, dict) else {"adim": a.no, "sonuc": sonuc}
         )
-        metin = json.dumps(sonuc, ensure_ascii=False, default=str)
+        metin = sirlar.maskele(json.dumps(sonuc, ensure_ascii=False, default=str))
         if len(metin) > SONUC_SINIRI:
             metin = metin[:SONUC_SINIRI] + '..."[kesildi]"'
         a.sonuc = metin[:2000]

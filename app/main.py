@@ -86,6 +86,19 @@ class PencereApi:
             logger.debug("Calisma alanina sigdirilamadi: {}", e)
             return False
 
+    def tarayici_ac(self, adres: str) -> bool:
+        """Dis siteyi AYRI pencerede acar: cogu site iframe icinde gosterilmeyi yasaklar
+        (X-Frame-Options). Yeni pencereye js_api VERILMEZ; site Kairo'ya erisemez."""
+        from urllib.parse import urlsplit
+
+        import webview
+
+        u = urlsplit(str(adres).strip())
+        if u.scheme not in ("http", "https") or not u.hostname:
+            return False
+        webview.create_window(f"Kairo - {u.hostname}", u.geturl(), width=1200, height=820)
+        return True
+
     def klasor_sec(self) -> str:
         """Windows klasor secme penceresi; iptalde bos metin."""
         import webview
@@ -247,7 +260,7 @@ def main(argv: list[str] | None = None) -> int:
             min_size=(960, 640),
             frameless=True,
             easy_drag=False,
-            text_select=True,  # varsayilan False: mesajlarda secim/kopyalama ve secim menusu calismiyordu
+            text_select=True,  # varsayilan False: mesajda secim/kopyalama calismiyordu
             background_color="#1f1f1e",
             js_api=api,
         )

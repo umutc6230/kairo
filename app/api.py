@@ -65,7 +65,7 @@ from app.exceptions import (
 from app.services import cc_plugin as ccp
 from app.services import ekler as ekler_modulu
 from app.services import masaustu_ayar as mda
-from app.services import sistem
+from app.services import sirlar, sistem
 from app.services import skiller as skl
 from app.services.agecidi import AgGecidi, agecidi_uygulamasi
 from app.services.arac_paketleri import AracPaketleri
@@ -186,6 +186,10 @@ HAFIZA_ARACI = {
         },
     },
 }  # fmt: skip
+
+# Sohbetteki PR karti: gh pr view --json alanlari ve kabul edilen adres bicimi
+PR_ALANLARI = "number,title,url,state,isDraft,additions,deletions,changedFiles,author,createdAt"
+PR_URL = re.compile(r"https://github\.com/[\w.-]+/[\w.-]+/pull/\d+")
 
 HAFIZA_TALIMATI = (
     "\n\n## Kalici hafiza\nOtomatik ogrenme acik. Gorev boyunca kalici ve tekrar kullanilabilir "
@@ -425,6 +429,7 @@ def uygulama_olustur(
     pluginler = PluginDeposu(veri_dizini)
     skiller.proje_kaynaklari = lambda: [*proje_skill_kaynaklari(), *pluginler.skill_kaynaklari()]
     hafiza = HafizaDeposu(veri_dizini)
+    sirlar.KASA = sirlar.SirKasasi(veri_dizini)
     hooklar = HookDeposu(veri_dizini)
     mcp = McpYoneticisi(veri_dizini)
     uzantilar = UzantiYoneticisi(veri_dizini)
@@ -1664,6 +1669,26 @@ def uygulama_olustur(
         pr_onbellek[(klasor, dal)] = (time.monotonic(), pr)
         return pr
 
+    @app.get("/api/github/pr")
+    async def github_pr(url: str) -> dict:
+        """Sohbetteki PR linki icin kart bilgisi (gh). Yalniz github.com PR adresi kabul edilir."""
+        if not PR_URL.fullmatch(url):
+            raise UygulamaHatasi("Gecersiz PR adresi.")
+        kayit = pr_onbellek.get(("url", url))
+        if kayit and time.monotonic() - kayit[0] < 120:
+            return kayit[1] or {}
+
+        def _getir() -> dict | None:
+            try:
+                kod, cikti = sa.gh("pr", "view", url, "--json", PR_ALANLARI, sure=15)
+                return json.loads(cikti) if kod == 0 else None
+            except (UygulamaHatasi, subprocess.TimeoutExpired, OSError, ValueError):
+                return None
+
+        pr = await asyncio.to_thread(_getir)
+        pr_onbellek[("url", url)] = (time.monotonic(), pr)
+        return pr or {}
+
     @app.get("/api/proje/degisiklikler")
     async def proje_degisiklikler() -> dict:
         """Sag panel 'Degisiklikler': dal, commit edilmemis +/- ve varsa dalin PR'i."""
@@ -1824,6 +1849,16 @@ def uygulama_olustur(
     @app.post("/api/tarayici/kapat")
     async def tarayici_kapat() -> dict:
         return await asyncio.to_thread(sohbet.tarayici.kapat)
+
+    @app.put("/api/tarayici/panel")
+    async def tarayici_paneli(istek: dict) -> dict:
+        """Arayuzdeki tarayici panelinin adresi; modele sistem notu olarak gider (bos = kapali)."""
+        adres = str(istek.get("adres", "")).strip()[:2000]
+        u = urlsplit(adres)
+        if adres and (u.scheme not in ("http", "https") or not u.hostname or u.username):
+            raise UygulamaHatasi("Gecersiz adres.")
+        sohbet.tarayici_paneli = adres
+        return {"adres": adres}
 
     @app.get("/api/tarayici")
     async def tarayici_durum() -> dict:
@@ -2462,8 +2497,13 @@ def uygulama_olustur(
 
     @app.delete("/api/projeler/{alan_id}")
     async def proje_sil(alan_id: str) -> dict:
-        projeler.sil(alan_id)
-        return {"silindi": alan_id}
+        """Projeyi Kairo'dan kaldirir + ona bagli sohbetleri siler. Diskteki dosyalara DOKUNMAZ."""
+        projeler.sil(alan_id)  # yoksa 404; sohbetler ancak proje gercekten varsa silinir
+        bagli = [o["id"] for o in oturumlar.liste() if o.get("alan") == alan_id]
+        for oid in bagli:
+            with contextlib.suppress(Bulunamadi):
+                oturumlar.sil(oid)
+        return {"silindi": alan_id, "silinen_sohbet": len(bagli)}
 
     @app.put("/api/projeler/{alan_id}/mod")
     async def proje_mod(alan_id: str, istek: ModIstegi) -> dict:
@@ -3048,6 +3088,34 @@ def uygulama_olustur(
             mda.bildirim, str(veri.get("baslik", URUN_ADI)), str(veri.get("metin", ""))
         )
         return {"gonderildi": ok}
+
+    @app.get("/api/sirlar")
+    async def sir_listesi() -> dict:
+        """Yalniz adlar; deger hicbir uctan geri okunmaz."""
+        return {"adlar": sirlar.KASA.adlar()}
+
+    @app.post("/api/sirlar")
+    async def sir_ekle(istek: dict) -> dict:
+        ad = await asyncio.to_thread(
+            sirlar.KASA.ekle, str(istek.get("deger", "")), str(istek.get("ad", ""))
+        )
+        return {"ad": ad}
+
+    @app.delete("/api/sirlar/{ad}")
+    async def sir_sil(ad: str) -> dict:
+        await asyncio.to_thread(sirlar.KASA.sil, ad)
+        return {"silindi": ad}
+
+    @app.post("/api/dosya/goster")
+    async def dosya_goster(istek: dict) -> dict:
+        """Sohbetteki yolu Gezgin'de secili gosterir; dosyayi ACMAZ/CALISTIRMAZ."""
+        ham = str(istek.get("yol", "")).strip().strip('"')
+        p = Path(ham)
+        if not ham or not p.is_absolute() or not p.exists():
+            raise UygulamaHatasi("Bu yol bulunamadi.")
+        hedef = ["explorer", str(p)] if p.is_dir() else ["explorer", f"/select,{p}"]
+        subprocess.Popen(hedef)  # noqa: S603 - sabit program, kabuk yok, yalniz gosterir
+        return {"gosterildi": True}
 
     @app.post("/api/masaustu/klasor-ac")
     async def veri_klasoru_ac() -> dict:

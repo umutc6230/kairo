@@ -85,7 +85,8 @@ svg { display: block; }
 
 /* ---- baslik cubugu ---- */
 .baslik { height: 44px; border-bottom: 1px solid var(--cizgi2); box-sizing: border-box; display: flex; align-items: center; flex-shrink: 0; user-select: none; }
-.baslik-sol { width: var(--kenar-gen); display: flex; gap: 2px; padding-left: 8px; align-items: center; transition: width .2s; }
+.baslik-sol { width: var(--kenar-gen); box-sizing: border-box; height: 100%; display: flex; gap: 2px; padding-left: 8px; align-items: center; transition: width .2s; border-right: 1px solid var(--cizgi); } /* kenar cizgisi basliga uzanir */
+#kok.kenar-kapali .baslik-sol { border-right-color: transparent; }
 .baslik-orta { flex: 1; height: 100%; display: flex; align-items: center; padding-left: 18px; color: var(--soluk); font-size: 15px; min-width: 0; }
 .baslik-orta span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .baslik-sag { display: flex; align-items: center; gap: 10px; height: 100%; }
@@ -139,7 +140,7 @@ svg { display: block; }
 @keyframes nabiz { 0%, 100% { opacity: 1; transform: scale(1); } 50% { opacity: .35; transform: scale(.7); } }
 @keyframes parilti { from { background-position: 150% 0; } to { background-position: -50% 0; } }
 .grup-baslik svg { width: 14px; height: 14px; transition: transform .15s; }
-.grup.kapali .grup-baslik svg { transform: rotate(-90deg); }
+.grup.kapali .grup-baslik [data-ikon="asagi"] svg { transform: rotate(-90deg); } /* yalniz ok doner, uyari/klasor ikonu degil */
 .grup.kapali .grup-ogeler { display: none; }
 .oturum { position: relative; display: flex; align-items: center; padding: 4px 10px; line-height: 1.3; border-radius: 9px; cursor: pointer; font-size: 14.5px; }
 .oturum span.ad { flex: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; -webkit-mask-image: linear-gradient(90deg, #000 85%, transparent); }
@@ -557,6 +558,7 @@ pre.duz { white-space: pre-wrap; font-family: var(--mono); font-size: 13px; marg
 .baslik-dugme:hover { background: var(--yuzey2); }
 .baslik-dugme svg { width: 14px; height: 14px; flex-shrink: 0; }
 .baslik-dugme span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+#sayfa-basligi { max-width: 40ch; } /* uzun oturum adi sabit genislikte kesilir, sonuna ... */
 .sp-ayrac { border-top: 1px solid var(--cizgi); margin: 6px 0; }
 .sp-satir.sp-tik { cursor: pointer; width: 100%; border-radius: 6px; }
 .sp-satir.sp-tik:hover { background: var(--yuzey2); }
@@ -580,7 +582,8 @@ pre.duz { white-space: pre-wrap; font-family: var(--mono); font-size: 13px; marg
 .tm-satir { display: flex; align-items: center; gap: 6px; padding: 6px 10px; border-top: 1px solid var(--cizgi); font-family: var(--mono); }
 .tm-girdi { flex: 1; background: none; border: 0; outline: 0; color: inherit; font: inherit; font-size: 12px; }
 .tr-adres { flex: 1; height: 28px; font-size: 12px; }
-.tr-cerceve { flex: 1; border: 0; background: #fff; width: 100%; }
+.tr-cerceve { flex: 1; border: 0; background: var(--bg); width: 100%; color-scheme: dark; } /* rengi olmayan sayfa temaya uysun */
+:root[data-tema="acik"] .tr-cerceve { color-scheme: light; }
 .rutin-sablon { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 10px; }
 .durum-cubugu { height: 28px; flex-shrink: 0; display: flex; align-items: center; gap: 12px; padding: 0 12px; border-top: 1px solid var(--cizgi2); font-size: 12px; background: var(--bg); }
 .durum-cubugu .hap { height: 22px; padding: 0 8px; font-size: 12px; }
@@ -903,7 +906,7 @@ a.sp-satir { text-decoration: none; }
 @media (prefers-reduced-motion: reduce) { .oturum .alt-ac svg { transition: none; } }
 
 /* ---- Sohbet listesi: tarih / proje gruplama + projede yeni sohbet ---- */
-.liste-duzen { display: flex; gap: 2px; margin: 6px 8px 0; padding: 2px; border-radius: 8px; background: var(--yuzey2); }
+.liste-duzen { display: flex; gap: 2px; margin: 6px 8px 0; padding: 2px; border-radius: 8px; background: var(--yuzey2); position: sticky; top: 0; z-index: 3; box-shadow: 0 -8px 0 4px var(--kenar); } /* kaydirirken sabit kalir */
 .liste-duzen-btn { flex: 1; border: 0; background: none; color: var(--soluk); font: inherit; font-size: 12.5px; padding: 3px 6px; border-radius: 6px; cursor: pointer; }
 .liste-duzen-btn[aria-pressed="true"] { background: var(--yuzey); color: var(--metin); }
 .liste-duzen-btn:focus-visible { outline: 2px solid var(--mavi); outline-offset: 1px; }
@@ -1160,3 +1163,63 @@ a.sp-satir { text-decoration: none; }
 .oturum.durum-onay .calisma-nokta { background: var(--sari); box-shadow: 0 0 0 3px color-mix(in srgb, var(--sari) 25%, transparent); }
 .oturum.durum-hata .calisma-nokta { background: var(--kirmizi); }
 .oturum.aktif .calisma-nokta:not([title]) { background: var(--soluk); }
+/* sohbet: en alta in oku (kullanici yukari kaydirinca gorunur) */
+.alta-in { position: absolute; left: 50%; transform: translateX(-50%); z-index: 5; width: 36px; height: 36px; border-radius: 50%; display: grid; place-items: center; background: var(--yuzey2); border: 1px solid var(--cizgi2); color: var(--metin); cursor: pointer; box-shadow: 0 4px 14px rgba(0,0,0,.3); }
+.alta-in:hover { background: var(--yuzey3); }
+.alta-in[hidden] { display: none; }
+.alta-in svg { width: 18px; height: 18px; }
+
+/* sohbetteki GitHub PR cipi ve karti (Claude Desktop gibi) */
+.pr-cip { display: inline-flex; align-items: center; gap: 4px; vertical-align: bottom; max-width: 100%; }
+.pr-cip svg { width: 14px; height: 14px; flex-shrink: 0; color: var(--yesil); }
+.pr-cip span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pr-kart { display: grid; grid-template-columns: auto 1fr; gap: 8px 12px; margin: 10px 0 4px; padding: 14px 16px; max-width: 560px; border: 1px solid var(--cizgi2); border-radius: 12px; background: var(--yuzey); color: var(--metin); text-decoration: none; }
+.pr-kart:hover { border-color: var(--soluk); }
+.pr-kart-ikon { grid-row: span 2; color: var(--turuncu); }
+.pr-kart-ikon svg { width: 22px; height: 22px; }
+.pr-kart-ust { display: flex; align-items: center; gap: 8px; font-size: 12.5px; min-width: 0; flex-wrap: wrap; }
+.pr-durum { display: inline-flex; align-items: center; gap: 4px; padding: 2px 8px; border-radius: 999px; font-size: 12px; background: var(--yuzey2); }
+.pr-durum svg { width: 12px; height: 12px; }
+.pr-durum.acik { color: var(--yesil); background: color-mix(in srgb, var(--yesil) 15%, transparent); }
+.pr-durum.birlesti { color: #a371f7; background: color-mix(in srgb, #a371f7 15%, transparent); }
+.pr-durum.kapali { color: var(--kirmizi); background: color-mix(in srgb, var(--kirmizi) 15%, transparent); }
+.pr-kart-alt { display: flex; align-items: center; justify-content: space-between; gap: 10px; min-width: 0; }
+.pr-kart-alt b { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 600; }
+.pr-sayilar { display: flex; gap: 6px; flex-shrink: 0; font-size: 12px; }
+.pr-sayilar > span { padding: 2px 8px; border-radius: 6px; background: var(--yuzey2); }
+.pr-fark .arti { color: var(--yesil); }
+.pr-fark .eksi { color: var(--kirmizi); }
+
+/* sohbette tek kaydirma gostergesi: soldaki mesaj haritasi; yerel cubuk gizli (kaydirma calisir) */
+#mesajlar { scrollbar-width: none; }
+#mesajlar::-webkit-scrollbar { display: none; }
+
+/* sohbetteki tiklanabilir dosya yolu */
+.yol-link { cursor: pointer; color: var(--mavi); text-decoration: underline dotted; text-underline-offset: 3px; overflow-wrap: anywhere; }
+.yol-link:hover, .yol-link:focus-visible { text-decoration-style: solid; outline: none; }
+.yol-link code { color: inherit; }
+
+/* kenar cubugu oturum rozetleri (Claude Desktop gibi): PR ve dal */
+.oturum-rozet { display: inline-flex; align-items: center; gap: 2px; margin-left: 6px; flex-shrink: 0; font-size: 12px; }
+.oturum-rozet svg { width: 14px; height: 14px; }
+.oturum-rozet.pr { color: var(--yesil); }
+.oturum-rozet.dal { color: #a371f7; }
+.grup-uyari { display: inline-flex; color: var(--sari, #d9a03f); margin-right: 4px; }
+.grup-uyari svg { width: 14px; height: 14px; }
+
+
+/* Proje gorunumunde yeni proje acma satiri */
+.proje-ac-btn { display: flex; align-items: center; gap: 8px; width: calc(100% - 16px); margin: 8px 8px 2px; padding: 6px 10px; border: 1px dashed var(--cizgi2); border-radius: 8px; background: none; color: var(--soluk); font: inherit; font-size: 13.5px; cursor: pointer; text-align: left; }
+.proje-ac-btn:hover, .proje-ac-btn:focus-visible { color: var(--metin); border-color: var(--soluk); background: var(--yuzey2); outline: none; }
+.proje-ac-btn svg { width: 15px; height: 15px; }
+
+/* durum cubugu ayiricilari kenar cubugu ve sag panel cizgilerinin tam altinda */
+.durum-cubugu { padding: 0; }
+.durum-cubugu > .dc-sol, .durum-cubugu > .dc-sag { padding: 0; gap: 0; flex-shrink: 0; overflow: hidden; }
+.durum-cubugu > .dc-sol { width: var(--kenar-gen); box-sizing: border-box; padding-left: 6px; }
+.durum-cubugu > .dc-sag { width: 280px; box-sizing: border-box; justify-content: flex-end; padding-right: 6px; border-left: 1px solid var(--cizgi) !important; }
+.dc-sol > *, .dc-sag > * { height: 100%; display: inline-flex; align-items: center; gap: 6px; padding: 0 8px; white-space: nowrap; }
+.dc-sol > :not([hidden]) + :not([hidden]), .dc-sag > :not([hidden]):not(:empty) + :not([hidden]):not(:empty) { border-left: 1px solid var(--cizgi); }
+#kok.kenar-kapali .durum-cubugu > .dc-sol { width: auto; }
+#kok:not(:has(.sag-panel:not([hidden]))) .durum-cubugu > .dc-sag { width: auto; }
+@media (max-width: 1100px) { .durum-cubugu > .dc-sag { width: auto; } }

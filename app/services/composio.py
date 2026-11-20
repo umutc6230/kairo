@@ -27,6 +27,7 @@ from typing import Any
 import httpx
 
 from app.exceptions import UygulamaHatasi
+from app.services import dpapi
 from app.services.depo import json_oku, json_yaz
 
 TABAN = "https://backend.composio.dev/api/v3.1"
@@ -51,9 +52,22 @@ class Composio:
 
     # ---- kayit ----
     def _kayit(self) -> dict:
-        return json_oku(self.yol, {}) or {}
+        """Anahtar diskte DPAPI ile sifreli; eski duz kayit ilk okumada sifrelenir."""
+        k = dict(json_oku(self.yol, {}) or {})
+        if k.get("anahtar"):  # eski surum: duz metin
+            self._yaz(k)
+            return k
+        if k.get("anahtar_sifreli"):
+            try:
+                k["anahtar"] = dpapi.coz(k.pop("anahtar_sifreli"))
+            except (OSError, ValueError):
+                k.pop("anahtar_sifreli", None)  # baska kullanici/PC: cozulemez, bagli degil say
+        return k
 
     def _yaz(self, v: dict) -> None:
+        v = dict(v)
+        if v.get("anahtar"):
+            v["anahtar_sifreli"] = dpapi.sifrele(v.pop("anahtar"))
         json_yaz(self.yol, v)
 
     def anahtar(self) -> str:

@@ -9,6 +9,8 @@ import { komutListesi, komutMu } from "./komutlar.js";
 import { projeDurumu } from "./proje.js";
 import { ikon, ikonlariYerlestir } from "./ikonlar.js";
 import { kacir, md } from "./md.js";
+import { prKartlariKur } from "./pr_kart.js";
+import { dosyaAc } from "./sagpanel.js";
 import {
   $, $$, api, bildir, canliSayac, durum, el, istatistikCipleri, modal, modelAdi, modelProfil, onayla, sayi, sseOku,
   ekResimleriYukle,
@@ -80,6 +82,16 @@ function altOturumKarti(o, kap) {
 
 export function sohbetKur(cb) {
   geriCagri = cb;
+  kaydirmaTakibiKur();
+  prKartlariKur();
+  const yolTik = (e) => {
+    const y = e.target.closest(".yol-link");
+    if (!y || (e.type === "keydown" && e.key !== "Enter")) return;
+    e.preventDefault();
+    yolAc(y.dataset.yol);
+  };
+  $("#mesajlar").addEventListener("click", yolTik);
+  $("#mesajlar").addEventListener("keydown", yolTik);
   const girdi = $("#girdi");
   girdi.addEventListener("input", () => { boyutla(); gonderDurumu(); });
   girdi.addEventListener("keydown", (e) => {
@@ -233,9 +245,47 @@ async function ekYukle(dosya) {
 }
 
 // ---- mesaj cizimi ----
+// Claude Desktop gibi: kullanici en alttaysa icerik buyudukce takip edilir; yukari kaydirinca birakilir
+let yapisik = true;
 function sonaKaydir(zorla = false) {
+  if (zorla) yapisik = true;
+  if (!yapisik) return okDurumu();
   const m = $("#mesajlar");
-  if (zorla || m.scrollHeight - m.scrollTop - m.clientHeight < 160) m.scrollTop = m.scrollHeight;
+  m.scrollTop = m.scrollHeight;
+  okDurumu();
+}
+
+// Sohbetteki yol: once uygulama icinde goster; yetkili klasor disindaysa Gezgin'de sec (calistirmaz)
+async function yolAc(yol) {
+  yol = yol.replace(/:\d+$/, "");
+  try {
+    await dosyaAc(yol, true);
+  } catch {
+    try { await api("/api/dosya/goster", { method: "POST", govde: { yol } }); } catch (e) { bildir(e.message, "hata"); }
+  }
+}
+
+function okDurumu() {
+  const ok = $("#alta-in");
+  if (!ok) return;
+  const m = $("#mesajlar");
+  ok.hidden = m.scrollHeight - m.scrollTop - m.clientHeight < 80;
+  ok.style.bottom = `${m.parentElement.clientHeight - m.offsetTop - m.clientHeight + 16}px`;
+}
+
+function kaydirmaTakibiKur() {
+  const m = $("#mesajlar");
+  const ok = el(`<button class="alta-in" id="alta-in" type="button" aria-label="En alta in" title="En alta in" hidden>${ikon("asagi")}</button>`);
+  ok.onclick = () => sonaKaydir(true);
+  m.after(ok);
+  m.addEventListener("scroll", () => {
+    yapisik = m.scrollHeight - m.scrollTop - m.clientHeight < 40;
+    okDurumu();
+  }, { passive: true });
+  const takip = () => sonaKaydir(); // MutationObserver degisiklikleri zaten topluyor
+  new MutationObserver(takip).observe(m, { childList: true, subtree: true, characterData: true, attributes: true, attributeFilter: ["style", "open", "hidden"] });
+  m.addEventListener("load", takip, true); // resim/iframe sonradan yuklenince yukseklik degisir
+  new ResizeObserver(takip).observe(m);
 }
 
 function sutun() {
@@ -712,7 +762,13 @@ export function yeniSohbetEkrani({ girdiyiKoru = false } = {}) {
 export async function gonder() {
   oneriTemizle();
   const girdi = $("#girdi");
-  const metin = anahtarCoz(girdi.value.trim()); // maskeli yer tutucu -> gercek anahtar
+  let metin;
+  try {
+    metin = await anahtarCoz(girdi.value.trim()); // anahtar kasaya, mesaja yalniz adi
+  } catch (e) {
+    bildir(`Anahtar kasaya kaydedilemedi, mesaj gönderilmedi: ${e.message}`, "hata");
+    return;
+  }
   if (komutMu(metin, (istem) => { $("#girdi").value = istem; gonder(); })) { // yerel slash komut: modele mesaj olarak gitmez
     girdi.value = "";
     boyutla();

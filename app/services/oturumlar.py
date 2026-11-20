@@ -17,6 +17,18 @@ def simdi() -> str:
     return datetime.now().isoformat(timespec="seconds")
 
 
+PR_LINK = re.compile(r"https://github\.com/[\w.-]+/[\w.-]+/pull/\d+")
+
+
+def _prlar(mesajlar: list[dict]) -> list[str]:
+    """Oturumda gecen GitHub PR linkleri (kenar cubugundaki PR rozeti; en fazla 9)."""
+    gorulen: dict[str, None] = {}
+    for m in mesajlar:
+        for url in PR_LINK.findall(m.get("metin", "")):
+            gorulen.setdefault(url, None)
+    return list(gorulen)[:9]
+
+
 class EkOzet(BaseModel):
     id: str
     ad: str
@@ -195,6 +207,7 @@ class OturumDeposu:
                     "mesaj_sayisi": len(ham.get("mesajlar", [])),
                     "ajan_sayisi": len(ham.get("ajan_runlari", [])),
                     "son_run": (ham.get("ajan_runlari") or [{}])[-1].get("run", ""),
+                    "prlar": _prlar(ham.get("mesajlar", [])),
                     "ust": ham.get("ust", ""),
                     "alan": ham.get("alan", ""),
                 }

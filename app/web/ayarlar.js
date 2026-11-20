@@ -172,6 +172,8 @@ export function ayarlarAc(sekme = "ai") {
       <div class="satir"><input class="alan" id="hf-yeni" placeholder="Yeni not: ör. Testler pytest -q ile çalışır" style="flex:1" maxlength="1000">
         <button class="btn" id="hf-ekle">Ekle</button><button class="btn" id="hf-ice" title="Claude, ChatGPT ya da Grok'tan hafızanı taşı">İçe aktar</button><button class="btn" id="hf-disa">Dışa aktar</button></div>
       <div id="hf-liste" class="ayar-grup"></div>
+      <div class="anahtar-satir"><div><div>Sır kasası</div><div class="ayar-not">Sohbete yapıştırdığın API anahtarları burada Windows şifrelemesiyle (DPAPI) saklanır. Modele yalnız adı gider; ajan komutlarında ortam değişkeni olarak hazırdır ve çıktıda maskelenir. Tüm oturumlarda geçerlidir.</div></div></div>
+      <div id="sr-liste" class="ayar-grup"></div>
     </div>
     <div class="modal-govde ek-panel" data-panel="mcp" hidden>
       <div class="ek-panel-ust"><div><b class="ek-panel-baslik">Bağlayıcılar</b><div class="soluk kucuk">Modele yeni araçlar verir (takvim, veritabanı, GitHub…). İşaretlemediğin her araç çağrısı onay ister; anahtarlar modele gitmez.</div></div>
@@ -270,6 +272,23 @@ export function ayarlarAc(sekme = "ai") {
   };
 
   // ---- Hafıza ----
+  const sirCiz = async () => {
+    const kap = $("#sr-liste", govde);
+    try {
+      const { adlar } = await api("/api/sirlar");
+      kap.innerHTML = adlar.map((ad) => `<div class="secenek-kart" data-sir="${kacir(ad)}"><div style="flex:1"><code>$${kacir(ad)}</code> <span class="soluk">••••••••</span></div><button class="btn tehlike">Sil</button></div>`).join("")
+        || '<div class="ayar-not">Kayıtlı anahtar yok.</div>';
+      $$("[data-sir]", kap).forEach((kart) => {
+        $("button", kart).onclick = async () => {
+          const ad = kart.dataset.sir;
+          if (!(await onayla("Anahtarı sil", `${ad} kasadan kalıcı olarak silinsin mi? Ajan bundan sonra kullanamaz.`, { evet: "Sil", tehlike: true }))) return;
+          try { await api(`/api/sirlar/${encodeURIComponent(ad)}`, { method: "DELETE" }); sirCiz(); } catch (err) { bildir(err.message, "hata"); }
+        };
+      });
+    } catch (e) { kap.innerHTML = `<div class="ayar-not">${kacir(e.message)}</div>`; }
+  };
+  sirCiz();
+
   const hafizaCiz = async () => {
     const kap = $("#hf-liste", govde);
     try {

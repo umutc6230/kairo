@@ -77,5 +77,5 @@ export async function dilKur(secilen) {
 }
 
 // Ilk boyamada Turkce gorunmesin diye son secim hemen uygulanir; asil kaynak ayarlardir.
-if (window.KAIRO_EN) dilKur("en");
+if (typeof window === "undefined") { /* node testleri: DOM yok */ } else if (window.KAIRO_EN) dilKur("en");
 else try { if (localStorage.getItem("kairo-dil") === "en") dilKur("en"); } catch { /* yok */ }
