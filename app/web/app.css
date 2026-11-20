@@ -581,7 +581,8 @@ pre.duz { white-space: pre-wrap; font-family: var(--mono); font-size: 13px; marg
 .tm-satir { display: flex; align-items: center; gap: 6px; padding: 6px 10px; border-top: 1px solid var(--cizgi); font-family: var(--mono); }
 .tm-girdi { flex: 1; background: none; border: 0; outline: 0; color: inherit; font: inherit; font-size: 12px; }
 .tr-adres { flex: 1; height: 28px; font-size: 12px; }
-.tr-cerceve { flex: 1; border: 0; background: #fff; width: 100%; }
+.tr-cerceve { flex: 1; border: 0; background: var(--bg); width: 100%; color-scheme: dark; } /* rengi olmayan sayfa temaya uysun */
+:root[data-tema="acik"] .tr-cerceve { color-scheme: light; }
 .rutin-sablon { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 10px; }
 .durum-cubugu { height: 28px; flex-shrink: 0; display: flex; align-items: center; gap: 12px; padding: 0 12px; border-top: 1px solid var(--cizgi2); font-size: 12px; background: var(--bg); }
 .durum-cubugu .hap { height: 22px; padding: 0 8px; font-size: 12px; }
