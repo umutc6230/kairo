@@ -1,4 +1,5 @@
 // Kucuk ve guvenli markdown -> HTML. Once HTML kacirilir; yalniz bilinen bicimler etiketlenir.
+import { t } from "./i18n.js";
 export function kacir(s) {
   return String(s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]);
 }
@@ -6,7 +7,7 @@ export function kacir(s) {
 // Sohbetteki dosya yollari tiklanir (sohbet.js): mutlak Windows yolu ya da klasorlu dosya adi
 const YOL = /^(?:[A-Za-z]:[\\/][^<>"|*?\n]*|(?:[\w.-]+[\\/])+[\w.-]+\.\w{1,8})(?::\d+)?$/;
 // yolKacik: HTML'e kacirilmis yol; sondaki noktalama yola dahil edilmez
-const yolLink = (yolKacik, ic) => `<span class="yol-link" role="link" tabindex="0" data-yol="${yolKacik.replace(/[.,;:]+$/, "")}" title="Aç">${ic}</span>`;
+const yolLink = (yolKacik, ic) => `<span class="yol-link" role="link" tabindex="0" data-yol="${yolKacik.replace(/[.,;:]+$/, "")}" title="${t("Aç")}">${ic}</span>`;
 
 function satirIci(s) {
   const kodlar = [];

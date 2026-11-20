@@ -905,7 +905,7 @@ a.sp-satir { text-decoration: none; }
 @media (prefers-reduced-motion: reduce) { .oturum .alt-ac svg { transition: none; } }
 
 /* ---- Sohbet listesi: tarih / proje gruplama + projede yeni sohbet ---- */
-.liste-duzen { display: flex; gap: 2px; margin: 6px 8px 0; padding: 2px; border-radius: 8px; background: var(--yuzey2); }
+.liste-duzen { display: flex; gap: 2px; margin: 6px 8px 0; padding: 2px; border-radius: 8px; background: var(--yuzey2); position: sticky; top: 0; z-index: 3; box-shadow: 0 -8px 0 4px var(--kenar); } /* kaydirirken sabit kalir */
 .liste-duzen-btn { flex: 1; border: 0; background: none; color: var(--soluk); font: inherit; font-size: 12.5px; padding: 3px 6px; border-radius: 6px; cursor: pointer; }
 .liste-duzen-btn[aria-pressed="true"] { background: var(--yuzey); color: var(--metin); }
 .liste-duzen-btn:focus-visible { outline: 2px solid var(--mavi); outline-offset: 1px; }
