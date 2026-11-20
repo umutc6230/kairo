@@ -27,6 +27,7 @@
   --kaydirma: #3b3b38;
   --kaydirma2: #4a4a46;
   --kenar-gen: 300px;
+  --sag-gen: 380px; /* sag panel = ustteki arac + pencere dugmeleri alani (Claude Desktop gibi hizali) */
 }
 :root[data-tema="acik"] {
   --bg: #faf9f6; --kenar: #f1efe9; --yuzey: #ffffff; --yuzey2: #e8e5dd; --yuzey3: #d9d5ca;
@@ -85,10 +86,13 @@ svg { display: block; }
 
 /* ---- baslik cubugu ---- */
 .baslik { height: 44px; border-bottom: 1px solid var(--cizgi2); box-sizing: border-box; display: flex; align-items: center; flex-shrink: 0; user-select: none; }
-.baslik-sol { width: var(--kenar-gen); display: flex; gap: 2px; padding-left: 8px; align-items: center; transition: width .2s; }
+.baslik-sol { width: var(--kenar-gen); box-sizing: border-box; height: 100%; display: flex; gap: 2px; padding-left: 8px; align-items: center; transition: width .2s; border-right: 1px solid var(--cizgi); } /* kenar cizgisi basliga uzanir */
+#kok.kenar-kapali .baslik-sol { border-right-color: transparent; }
 .baslik-orta { flex: 1; height: 100%; display: flex; align-items: center; padding-left: 18px; color: var(--soluk); font-size: 15px; min-width: 0; }
 .baslik-orta span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.baslik-sag { display: flex; align-items: center; gap: 10px; height: 100%; }
+.baslik-sag { display: flex; align-items: center; justify-content: space-between; gap: 10px; height: 100%; width: var(--sag-gen); box-sizing: border-box; flex-shrink: 0; padding-left: 8px; border-left: 1px solid transparent; }
+#kok:has(.sag-panel:not([hidden])) .baslik-sag { border-left-color: var(--cizgi2); } /* panel cizgisi basliga uzanir */
+@media (max-width: 1100px) { .baslik-sag { width: auto; border-left-color: transparent !important; } }
 .ikon-btn { width: 32px; height: 32px; display: grid; place-items: center; border-radius: 8px; color: var(--soluk); }
 .ikon-btn:hover:not(:disabled) { background: var(--yuzey2); color: var(--metin); }
 .ikon-btn svg { width: 19px; height: 19px; }
@@ -548,7 +552,7 @@ pre.duz { white-space: pre-wrap; font-family: var(--mono); font-size: 13px; marg
 
 /* ---- Claude Code Desktop duzeni: sag panel + sade ajan akisi ---- */
 .govde { display: flex; }
-.sag-panel { width: 280px; flex: none; border-left: 1px solid var(--cizgi2); padding: 14px 16px; overflow-y: auto; display: flex; flex-direction: column; gap: 2px; font-size: 13px; line-height: 1.3; }
+.sag-panel { width: var(--sag-gen); box-sizing: border-box; flex: none; border-left: 1px solid var(--cizgi2); padding: 14px 16px; overflow-y: auto; display: flex; flex-direction: column; gap: 2px; font-size: 13px; line-height: 1.3; }
 .sag-panel[hidden] { display: none; }
 .sp-baslik { font-weight: 600; margin-top: 10px; display: flex; justify-content: space-between; }
 .sp-satir { display: flex; align-items: center; gap: 8px; padding: 4px 0; background: none; border: 0; color: inherit; text-align: left; font: inherit; }
@@ -813,7 +817,7 @@ body.uzak-saglayici [data-yalniz-yerel] { display: none !important; }
 .klasor-sec-sira .alan[readonly] { cursor: pointer; }
 
 /* Sag panel (Claude Code gibi): bolum basliklari, ok isaretli satirlar, arka plan isleri */
-.yan-panel { width: 280px; flex: none; border-left: 1px solid var(--cizgi2); padding: 14px 14px; overflow-y: auto; display: flex; flex-direction: column; gap: 2px; font-size: 13px; }
+.yan-panel { width: var(--sag-gen); box-sizing: border-box; flex: none; border-left: 1px solid var(--cizgi2); padding: 14px 14px; overflow-y: auto; display: flex; flex-direction: column; gap: 2px; font-size: 13px; }
 .yan-panel[hidden] { display: none; }
 .sp-bolum { font-weight: 600; font-size: 13px; padding: 3px 6px 2px; }
 .sp-acilir { display: flex; align-items: center; gap: 4px; width: 100%; background: none; border: 0; color: inherit; cursor: pointer; text-align: left; border-radius: 6px; }
@@ -1205,3 +1209,6 @@ a.sp-satir { text-decoration: none; }
 .oturum-rozet.dal { color: #a371f7; }
 .grup-uyari { display: inline-flex; color: var(--sari, #d9a03f); margin-right: 4px; }
 .grup-uyari svg { width: 14px; height: 14px; }
+
+/* panel ac/kapa: baslik ortasinin sag ucunda, sag panel alaninin hemen solunda (Claude Desktop gibi) */
+.baslik-panel-btn { margin-left: auto; margin-right: 8px; flex-shrink: 0; }
