@@ -870,7 +870,18 @@ export async function gonder() {
   // onaylar ve diff bu sohbetin icinde gorunur. Ekli mesajlar normal sohbet yolundan gider.
   if (ajanModu() && !ekler.length) {
     ajanGonderiliyor = true;
-    try { await ajanaGonder(oturumId, metin); } finally { ajanGonderiliyor = false; }
+    try {
+      await ajanaGonder(oturumId, metin);
+    } catch (e) {
+      if (durum.oturumId === oturumId && !girdi.value) {
+        girdi.value = metin;
+        boyutla();
+      }
+      bildir(e.message, "hata");
+    } finally {
+      ajanGonderiliyor = false;
+      gonderDurumu();
+    }
     return;
   }
   const s = sutun();
@@ -1156,7 +1167,8 @@ async function ajanaGonder(oturumId, metin) {
     sohbetGoreviniIzle(b.detay, r.id, oturumId, r.durum);
     sonaKaydir(true);
   } catch (e) {
-    s.append(el(`<div class="mesaj asistan"><div class="uyari-kutu">${kacir(e.message)}</div></div>`));
+    balon.remove();
+    throw e;
   }
 }
 

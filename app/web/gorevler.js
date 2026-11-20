@@ -353,6 +353,10 @@ function sohbetCiz(r) {
   const yazmaKutusuDurdurur = Boolean(izleyiciler.get(kap)?.durumBildir);
   const akis = ccAkis(r.adimlar, calisiyor, r.model_rol);
   // Claude Code gibi: gorev listesi cevabin icinde, adimlar ilerledikce isaretlenir
+  const worktreeSonucu = {
+    birlestirildi: "Ana dala birleştirildi.", degisiklik_yok: "Birleştirilecek değişiklik yok.",
+    atildi: "Değişiklikler atıldı.", kapali: "Bu görevin çalışma dalı kapalı.",
+  }[r.worktree_durumu];
   const plan = r.plan || [];
   const planModeli = r.adimlar.findLast((a) => a.arac === "plan_guncelle" && a.durum === "tamam")?.model;
   const planHtml = plan.length ? `<div class="sohbet-plan"><div class="sohbet-plan-baslik soluk kucuk">Plan · ${plan.filter((p) => p.durum === "tamam").length}/${plan.length}${planModeli ? ` · ${modelEtiketi(planModeli, r.model_rol)}` : ""}</div>
@@ -369,11 +373,12 @@ function sohbetCiz(r) {
     ${r.hata ? `<div class="uyari-kutu kucuk">${kacir(r.hata)}</div>` : ""}
     ${r.sonuc?.ozet ? `<div class="ajan-sonuc ajan-rapor"><div class="rapor-baslik">${basari ? '<span data-ikon="tik" class="yesil-ikon" aria-label="doğrulandı"></span> Tamamlandı' : "Sonuç"}${r.sonuc.kanit?.length ? ` <span class="soluk kucuk">(kanıt: adım ${kacir(r.sonuc.kanit.join(", "))})</span>` : ' <span class="rozet sari" title="Ajan, son dosya değişikliğinden sonra başarılı bir araç adımını kanıt olarak göstermedi. Cevap yanlış demek değil; otomatik kontrol edilmedi demek.">doğrulanmadı</span>'}</div><div class="md">${md(r.sonuc.ozet)}</div>${gorevRaporEylemleri()}</div>` : ""}
     ${incelemeHtml(r.inceleme)}
-    ${r.calisma_koku && r.dal ? `<div class="ajan-izole soluk kucuk">Ayrı dalda çalıştı: <code>${kacir(r.dal)}</code>${["basarili", "dogrulanmadi"].includes(r.durum) ? `
+    ${r.calisma_koku && r.dal ? `<div class="ajan-izole soluk kucuk">Ayrı dalda çalıştı: <code>${kacir(r.dal)}</code>${worktreeSonucu ? `<div>${worktreeSonucu}</div>` : ["basarili", "dogrulanmadi"].includes(r.durum) ? `
       <div class="satir"><input class="alan" data-entegre-test placeholder="Birleştirmeden önce test komutu (isteğe bağlı)" style="flex:1">
       <button class="btn ana" data-entegre>Ana dala birleştir</button><button class="btn tehlike" data-at>Değişiklikleri at</button></div>` : ""}</div>` : ""}
     ${yazmaKutusuDurdurur && calisiyor ? "" : `<div class="ajan-kontrol">${rozet(r.durum)}${kontroller(r, { yalnizTekrar: yazmaKutusuDurdurur })}</div>`}`;
   gorselYerleriDoldur(kap, r);
+  const yenile = () => { const v = izleyiciler.get(kap); if (v) return izleyiciYenile(v); };
   const ent = kap.querySelector("[data-entegre]");
   if (ent) {
     ent.onclick = async () => {
@@ -383,11 +388,16 @@ function sohbetCiz(r) {
         const mesaj = { birlestirildi: "Ana dala birleştirildi.", degisiklik_yok: "Birleştirilecek değişiklik yok.",
           test_basarisiz: "Test başarısız; birleştirilmedi.", kullanici_degisikligi_var: s.not, catisma: `Çakışma: ${(s.catisan || []).join(", ")}. ${s.not}` }[s.durum] || s.durum;
         bildir(mesaj, s.durum === "birlestirildi" ? "basari" : "uyari", 6000);
+        await yenile();
       } catch (e) { bildir(e.message, "hata"); } finally { ent.disabled = false; }
     };
     kap.querySelector("[data-at]").onclick = async () => {
       if (!(await onayla("Değişiklikleri at", "Ajanın ayrı daldaki tüm değişiklikleri silinsin mi? Ana dala dokunulmaz.", { evet: "At", tehlike: true }))) return;
-      try { await api(`/api/gorevler/${r.id}/at`, { method: "POST" }); bildir("Atıldı.", "basari", 1500); } catch (e) { bildir(e.message, "hata"); }
+      try {
+        const sonuc = await api(`/api/gorevler/${r.id}/at`, { method: "POST" });
+        bildir(sonuc.durum === "atildi" ? "Değişiklikler atıldı." : "Çalışma dalı zaten kapalı.", "basari", 1500);
+        await yenile();
+      } catch (e) { bildir(e.message, "hata"); await yenile(); }
     };
   }
   ikonlariYerlestir(kap);

@@ -77,3 +77,41 @@ async def test_api_izole_gorev(istemci, repo, tmp_path) -> None:
     await istemci.post("/api/projeler", json={"yol": str(repo), "guven": "guvenilir"})
     r = await istemci.post("/api/gorevler/" + "0" * 12 + "/entegre", json={})
     assert r.status_code == 404
+
+@pytest.mark.parametrize("islem, sonuc", [("entegre", "birlestirildi"), ("at", "atildi")])
+async def test_worktree_kapanisi_ve_ayni_sohbette_sonraki_gorev(
+    app, istemci, repo, tmp_path, monkeypatch, islem, sonuc
+) -> None:
+    from app.agent.runner import Run, RunDurum, Sonuc
+
+    proje = (await istemci.post("/api/projeler", json={"yol": str(repo)})).json()
+    assert (await istemci.post(f"/api/projeler/{proje['id']}/etkin")).status_code == 200
+    runner = app.state.ajan_runner
+    run = Run(hedef="Ilk gorev", durum=RunDurum.basarili, sonuc=Sonuc(ozet="Ilk sonuc"))
+    yol, dal = wt.olustur(repo, tmp_path / "wt", run.id)
+    (yol / "a.txt").write_bytes(b"degisiklik\n")
+    run.calisma_koku, run.dal = str(yol), dal
+    runner.depo.kaydet(run)
+
+    endpoint = f"/api/gorevler/{run.id}"
+    assert (await istemci.get(endpoint)).json()["worktree_durumu"] == "acik"
+    r = await istemci.post(f"{endpoint}/{islem}", json={})
+    assert r.status_code == 200 and r.json()["durum"] == sonuc
+    assert not yol.exists()
+    assert (await istemci.get(endpoint)).json()["worktree_durumu"] == sonuc
+    assert (await istemci.post(f"{endpoint}/{islem}", json={})).json()["durum"] == sonuc
+
+    run.worktree_durumu = ""  # worktree kapandiginda durum alani olmayan eski kayit
+    runner.depo.kaydet(run)
+    assert (await istemci.get(endpoint)).json()["worktree_durumu"] == "kapali"
+
+    async def model_kullanmadan_bitir(_run_id):
+        pass
+
+    monkeypatch.setattr(runner, "_dongu", model_kullanmadan_bitir)
+    yeni = await istemci.post(
+        "/api/gorevler", json={"hedef": "Ikinci mesaj", "onceki": run.id, "izole": True}
+    )
+    assert yeni.status_code == 200, yeni.text
+    assert yeni.json()["onceki"] == run.id
+    assert yeni.json()["worktree_durumu"] == "acik"

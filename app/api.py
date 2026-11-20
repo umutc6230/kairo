@@ -3031,25 +3031,42 @@ def uygulama_olustur(
         _akis_baslat(a)
         return a.model_dump()
 
+    worktree_kilidi = asyncio.Lock()
+
+    async def gorev_worktree_isle(run_id: str, istek: EntegreIstegi | None = None) -> dict:
+        async with worktree_kilidi:
+            r = run_deposu.getir(run_id)
+            if not r.calisma_koku or not r.dal or r.parent:
+                raise UygulamaHatasi("Bu gorevin bagimsiz worktree'si yok.")
+            if r.durum not in BITMIS_RUN:
+                raise UygulamaHatasi("Once gorev bitmeli.")
+            if r.worktree_durumu:
+                return {"durum": r.worktree_durumu}
+            yol = Path(r.calisma_koku)
+            if not yol.is_dir():
+                return {"durum": "kapali"}
+            proje = Path(sohbet.aktif_alan().kokler[0])
+            await asyncio.to_thread(wt.worktree_dogrula, proje, yol, r.dal)
+            if istek is None:
+                sonuc = await asyncio.to_thread(wt.at, proje, yol, r.dal)
+            else:
+                if r.durum not in (RunDurum.basarili, RunDurum.dogrulanmadi):
+                    raise UygulamaHatasi("Yalniz tamamlanan gorevler birlestirilebilir.")
+                sonuc = await asyncio.to_thread(
+                    wt.entegre_et, proje, yol, r.dal, r.hedef, istek.test_komutu
+                )
+            if sonuc["durum"] in {"birlestirildi", "atildi", "degisiklik_yok"}:
+                r.worktree_durumu = sonuc["durum"]
+                run_deposu.kaydet(r)
+            return sonuc
+
     @app.post("/api/gorevler/{run_id}/entegre")
     async def gorev_entegre(run_id: str, istek: EntegreIstegi) -> dict:
-        r = run_deposu.getir(run_id)
-        if not r.calisma_koku:
-            raise UygulamaHatasi("Bu gorev izole calismadi; entegre edilecek dal yok.")
-        if r.durum not in (RunDurum.basarili, RunDurum.dogrulanmadi):
-            raise UygulamaHatasi("Once gorev bitmeli.")
-        proje = Path(sohbet.aktif_alan().kokler[0])
-        return await asyncio.to_thread(
-            wt.entegre_et, proje, Path(r.calisma_koku), r.dal, r.hedef, istek.test_komutu
-        )
+        return await gorev_worktree_isle(run_id, istek)
 
     @app.post("/api/gorevler/{run_id}/at")
     async def gorev_at(run_id: str) -> dict:
-        r = run_deposu.getir(run_id)
-        if not r.calisma_koku:
-            raise UygulamaHatasi("Bu gorev izole calismadi.")
-        proje = Path(sohbet.aktif_alan().kokler[0])
-        return await asyncio.to_thread(wt.at, proje, Path(r.calisma_koku), r.dal)
+        return await gorev_worktree_isle(run_id)
 
     @app.get("/api/gorevler")
     async def gorev_listesi() -> dict:

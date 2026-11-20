@@ -270,6 +270,7 @@ class Run(BaseModel):
     gecmis: str = ""  # onceki turlarin ozeti; sonraki tura aynen tasinir
     etkilesimli: bool = False  # sohbetten baslatildi: soru_sor araci sunulur
     inceleme: dict = {}  # D (Chimera): gorev sonu otomatik inceleme {ozet, bulgular, ...}
+    worktree_durumu: str = ""
     calisma_koku: str = ""  # izole worktree (A8.3) ya da kalici ajanin klasoru; bos = proje kokunde
     dal: str = ""
     ad: str = ""  # takim uyesi adi (alt_ajan 'ad'); lider bos (mesajlarda 'lider')
@@ -282,7 +283,10 @@ class Run(BaseModel):
     guncelleme: str = ""
 
     def ozet(self) -> dict:
-        return self.model_dump(mode="json", exclude={"mesajlar", "hata_sayaci"})
+        veri = self.model_dump(mode="json", exclude={"mesajlar", "hata_sayaci"})
+        if self.dal and self.calisma_koku and not self.worktree_durumu:
+            veri["worktree_durumu"] = "acik" if Path(self.calisma_koku).is_dir() else "kapali"
+        return veri
 
 
 def _f(ad: str, aciklama: str, ozellikler: dict, zorunlu: list[str]) -> dict:
