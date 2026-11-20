@@ -287,6 +287,16 @@ function bekleyenKartlari(r) {
   return parcalar.join("");
 }
 
+// Paradev gibi: ajan bir seye takilinca akista soluk tek satir ("Onay bekleniyor: ...")
+function beklemeSatiri(r) {
+  const adim = [...r.adimlar].reverse().find((a) => ["onay_bekliyor", "cevap_bekliyor"].includes(a.durum));
+  const metin = r.durum === "duraklatildi" ? "Duraklatıldı; devam etmek için Devam'a bas."
+    : adim?.durum === "cevap_bekliyor" ? "Cevabın bekleniyor."
+      : adim ? `Onay bekleniyor: ${adimBasligi(adim)}`
+        : r.durum === "onay_bekliyor" ? "Onay bekleniyor." : "";
+  return metin ? `<div class="bekleme-satiri" role="status">${kacir(metin)}</div>` : "";
+}
+
 // Claude Code Desktop gibi: sohbette sade akis (adim satirlari, onay kartlari, sonuc);
 // plan, baglam, butce ve degisen dosyalar SAG PANELDE.
 function sohbetCiz(r) {
@@ -307,6 +317,7 @@ function sohbetCiz(r) {
     ${planHtml}
     <ol class="adim-liste sade">${akis}</ol>
     ${notlar.map((g) => `<div class="ajan-not md">${md(g)}</div>`).join("")}
+    ${beklemeSatiri(r)}
     ${calisiyor ? `<div class="baykus-canli" data-mod="${r.durum === "calisiyor" ? "calisiyor" : "bekliyor"}" style="--bk-gecikme:-${(Date.now() / 1000 % 3600).toFixed(2)}s"><span class="baykus-kap">${ikon("logo")}</span><span class="baykus-etiket">${r.durum === "calisiyor" ? "Çalışıyor…" : "Onay bekliyor…"}</span></div>` : ""}
     ${bekleyenKartlari(r)}
     ${r.hata ? `<div class="uyari-kutu kucuk">${kacir(r.hata)}</div>` : ""}

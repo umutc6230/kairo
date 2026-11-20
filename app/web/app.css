@@ -1110,3 +1110,34 @@ a.sp-satir { text-decoration: none; }
 .onizleme-kart .canli-nokta { width: 8px; height: 8px; border-radius: 50%; background: var(--yesil); animation: nabiz 1.6s ease-in-out infinite; }
 .onizleme-kart.durdu .canli-nokta { background: var(--cok-soluk); animation: none; }
 .onizleme-kart.durdu .onizleme-cerceve { opacity: .5; }
+
+/* ---- oturum durum ikonlari (onay bekliyor / hata) ---- */
+.oturum-durum { flex-shrink: 0; width: 8px; height: 8px; margin: 0 4px 0 8px; border-radius: 50%; }
+.oturum.durum-onay .oturum-durum { background: var(--sari); box-shadow: 0 0 0 3px color-mix(in srgb, var(--sari) 25%, transparent); }
+.oturum.durum-hata .oturum-durum { background: var(--kirmizi); }
+.oturum.durum-onay .ad { color: var(--metin); }
+
+/* ---- Ctrl+K oturum degistirici ---- */
+.degistirici #ar-sonuc { max-height: 52vh; overflow-y: auto; padding-top: 6px; }
+.degistirici .ds-grup { padding: 10px 10px 4px; font-weight: 600; }
+.degistirici .arama-sonuc { display: flex; align-items: center; gap: 10px; }
+.degistirici .ds-ad { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.degistirici .ds-proje { max-width: 34%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.degistirici .ds-zaman { flex-shrink: 0; min-width: 38px; text-align: right; }
+.ds-nokta { flex-shrink: 0; width: 7px; height: 7px; border-radius: 50%; background: var(--cizgi2); }
+.ds-nokta.ds-calisiyor { background: var(--vurgu); animation: nabiz 1.2s ease-in-out infinite; }
+.ds-nokta.ds-onay { background: var(--sari); }
+.ds-nokta.ds-hata { background: var(--kirmizi); }
+.degistirici-alt { display: flex; gap: 14px; padding: 10px 6px 0; border-top: 1px solid var(--cizgi); margin-top: 6px; }
+.bekleme-satiri { margin: 6px 0; color: var(--cok-soluk); font-size: 13.5px; }
+.bekleme-satiri::before { content: ""; display: inline-block; width: 6px; height: 6px; margin-right: 8px; border-radius: 50%; background: var(--sari); vertical-align: middle; }
+
+/* ---- kenar cubugu alti kullanim kutusu ---- */
+.kenar-kullanim { margin: 0 10px 8px; padding: 9px 11px; border: 1px solid var(--cizgi); border-radius: 10px; background: var(--yuzey); font-size: 12.5px; display: flex; flex-direction: column; gap: 6px; }
+.kenar-kullanim .kk-ust { display: flex; align-items: center; gap: 6px; }
+.kenar-kullanim .kk-kalan { margin-left: auto; font-weight: 600; }
+.kenar-kullanim .kk-kalan.az { color: var(--kirmizi); }
+.kenar-kullanim .kk-satir { display: flex; align-items: center; gap: 8px; }
+.kenar-kullanim .kk-bosluk { flex: 1; }
+.kenar-kullanim .kk-cubuk { flex: 1; height: 4px; border-radius: 2px; background: var(--yuzey3); overflow: hidden; }
+.kenar-kullanim .kk-cubuk span { display: block; height: 100%; background: var(--vurgu); }

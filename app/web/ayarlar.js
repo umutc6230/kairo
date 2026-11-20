@@ -4,6 +4,7 @@ import { modelSil } from "./modeller.js";
 import { uzantiKomutlariniYukle, uzantiSekmesiKur } from "./uzantilar.js";
 import { aracPaketleriCiz, baglayiciIceAktarCiz, EK_PANELLER, EK_SEKMELER, ekSekmeKur, githubBaglan } from "./ayarlar2.js";
 import { ikon, ikonlariYerlestir } from "./ikonlar.js";
+import { goreceliZaman, gorevDurumlari, oturumDurumu } from "./oturum_durumu.js";
 import { kacir } from "./md.js";
 import { $, $$, api, baglayiciDurumu, bildir, durum, ekAvatar, el, menuAc, modal, onayla, sayi, sor } from "./ortak.js";
 
@@ -1006,23 +1007,54 @@ export async function sunucuDurdur(harici) {
   yenile();
 }
 
-export function aramaAc(oturumAc) {
-  const kutu = el(`<div><div class="arama-kutu">${ikon("ara")}<input placeholder="Sohbetlerde ara..." id="ar-girdi"></div><div id="ar-sonuc" style="padding-top:8px"></div></div>`);
-  const m = modal({ baslik: "Ara", icerik: kutu });
+// Ctrl+K oturum degistirici: bos aramada Calisiyor / Onay bekliyor / Son gruplari; ok tuslari + Enter
+export function aramaAc(oturumAc, projeAdi = () => "", aktifId = "") {
+  const kutu = el(`<div class="degistirici"><div class="arama-kutu">${ikon("ara")}<input placeholder="Sohbete geç ya da ara..." id="ar-girdi" aria-label="Sohbet ara"></div>
+    <div id="ar-sonuc" role="listbox"></div><div class="degistirici-alt soluk kucuk"><span>↑↓ seç</span><span>Enter aç</span><span>Esc kapat</span></div></div>`);
+  const m = modal({ baslik: "Sohbete geç", icerik: kutu });
   const girdi = $("#ar-girdi", kutu);
   let zaman;
+  let secili = 0;
+  const sec = (i) => {
+    const s = [...kutu.querySelectorAll(".arama-sonuc")];
+    if (!s.length) return;
+    secili = (i + s.length) % s.length;
+    s.forEach((x, j) => { x.classList.toggle("secili", j === secili); x.setAttribute("aria-selected", String(j === secili)); });
+    s[secili].scrollIntoView({ block: "nearest" });
+  };
+  const satir = (o, d) => {
+    const proje = o.alan ? projeAdi(o.alan) : "";
+    const s = el(`<div class="arama-sonuc" role="option"><span class="ds-nokta ${d ? `ds-${d}` : ""}" aria-hidden="true"></span><span class="ds-ad">${kacir(o.baslik)}</span>
+      ${proje ? `<span class="soluk kucuk ds-proje">${kacir(proje)}</span>` : ""}<span class="soluk kucuk ds-zaman">${o.id === aktifId ? "Şu an" : kacir(goreceliZaman(o.guncelleme))}</span></div>`);
+    s.onclick = () => { m.kapat(); oturumAc(o.id); };
+    return s;
+  };
   const ara = async () => {
-    const liste = await api(`/api/oturumlar?q=${encodeURIComponent(girdi.value)}`).catch(() => []);
+    const q = girdi.value.trim();
+    const [liste, harita] = await Promise.all([api(`/api/oturumlar?q=${encodeURIComponent(q)}`).catch(() => []), gorevDurumlari()]);
     const kap = $("#ar-sonuc", kutu);
-    kap.innerHTML = liste.length ? "" : `<div class="ayar-not" style="padding:12px">Sonuç yok.</div>`;
-    liste.slice(0, 40).forEach((o) => {
-      const s = el(`<div class="arama-sonuc"><span>${kacir(o.baslik)}</span><span class="soluk kucuk">${kacir(o.guncelleme.slice(0, 16).replace("T", " "))}</span></div>`);
-      s.onclick = () => { m.kapat(); oturumAc(o.id); };
-      kap.append(s);
-    });
+    kap.innerHTML = "";
+    const gorunur = liste.filter((o) => o.mesaj_sayisi || o.ajan_sayisi || o.id === aktifId)
+      .sort((a, b) => (b.guncelleme || "").localeCompare(a.guncelleme || ""));
+    if (!gorunur.length) { kap.innerHTML = '<div class="ayar-not" style="padding:12px">Sonuç yok.</div>'; return; }
+    const gruplar = q ? [["", gorunur.slice(0, 40)]] : (() => {
+      const d = (o) => oturumDurumu(o, harita);
+      return [["Çalışıyor", gorunur.filter((o) => d(o) === "calisiyor")], ["Onay bekliyor", gorunur.filter((o) => d(o) === "onay")],
+        ["Son", gorunur.filter((o) => !["calisiyor", "onay"].includes(d(o))).slice(0, 15)]];
+    })();
+    for (const [ad, ogeler] of gruplar) {
+      if (!ogeler.length) continue;
+      if (ad) kap.append(el(`<div class="ds-grup soluk kucuk">${kacir(ad)}</div>`));
+      ogeler.forEach((o) => kap.append(satir(o, oturumDurumu(o, harita))));
+    }
+    sec(0);
   };
   girdi.oninput = () => { clearTimeout(zaman); zaman = setTimeout(ara, 150); };
-  girdi.onkeydown = (e) => { if (e.key === "Enter") $("#ar-sonuc .arama-sonuc", kutu)?.click(); };
+  girdi.onkeydown = (e) => {
+    if (e.key === "ArrowDown") { e.preventDefault(); sec(secili + 1); }
+    else if (e.key === "ArrowUp") { e.preventDefault(); sec(secili - 1); }
+    else if (e.key === "Enter") { e.preventDefault(); kutu.querySelectorAll(".arama-sonuc")[secili]?.click(); }
+  };
   ara();
   setTimeout(() => girdi.focus(), 10);
 }

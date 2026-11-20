@@ -19,6 +19,7 @@ import { dockAcKapa, dockKur, degisiklikYenile } from "./dock.js";
 import { gorunumUygula, kisayolEslesir } from "./ayarlar2.js";
 import { rutinleriYukle, rutinlerKur } from "./rutinler.js";
 import { ajanlarKur, ajanlarYukle } from "./ajanlar.js";
+import { DURUM_ETIKET, gorevDurumlari, oturumDurumu, sabitDegistir, sabitler } from "./oturum_durumu.js";
 import { ajanBloklariniCiz, ajanKayitlariniBirlestir, ajanliOturum, akisVar, calisanOturumId, durdur, mesajlariCiz, sohbetKur, sohbetRunlari, yeniSohbetEkrani } from "./sohbet.js";
 
 const BASLIKLAR = { karsilastir: "Karşılaştır", ocr: "OCR testi", arac: "Araç testi", paket: "Test paketi", eklentiler: "Eklentiler", skiller: "Skill'ler ve talimatlar", modeller: "Modeller", gorevler: "Ajan görevleri", rutinler: "Rutinler", ajanlar: "Ajanlar" };
@@ -189,9 +190,12 @@ function sagPanelOrtam() {
 }
 document.addEventListener("oturumlar-degisti", () => { oturumlariYenile(); sagPanelOrtam(); });
 
+let gorevHaritasi = new Map(); // run id -> durum (kenar cubugu durum ikonlari)
+// durum ikonlari guncel kalsin (baska yerden baslayan gorev, onaya dusen ajan); gizliyken istek yok
+setInterval(() => { if (!document.hidden && durum.oturumlar) oturumlariYenile(); }, 8000);
 async function oturumlariYenile() {
   try {
-    durum.oturumlar = await api("/api/oturumlar");
+    [durum.oturumlar, gorevHaritasi] = await Promise.all([api("/api/oturumlar"), gorevDurumlari()]);
   } catch { /* sessiz */ }
   oturumListesiCiz();
   if (!$("#bos-durum")?.hidden) bosDurumKartlari(); // proje sirasi sohbet sayisina bagli
@@ -249,8 +253,11 @@ function oturumListesiCiz() {
   for (const o of gorunur) {
     if (o.ust && idler.has(o.ust)) altlar.set(o.ust, [...(altlar.get(o.ust) || []), o]);
   }
+  const sabit = sabitler();
+  if (gorunur.some((o) => sabit.has(o.id))) gruplar.set("Sabitlenmiş", []); // her zaman en ustte
   for (const o of gorunur) {
     if (o.ust && idler.has(o.ust)) continue;
+    if (sabit.has(o.id)) { gruplar.get("Sabitlenmiş").push(o); continue; }
     const g = listeDuzeni === "proje" ? `p:${o.alan || ""}` : grupAdi(o.guncelleme);
     if (!gruplar.has(g)) gruplar.set(g, []);
     gruplar.get(g).push(o);
@@ -276,8 +283,9 @@ function oturumListesiCiz() {
     const satir = (o, alt = false) => {
       const cocuk = altlar.get(o.id) || [];
       const kapali = kapaliAltlar.has(o.id) && !cocuk.some((c) => c.id === durum.oturumId);
-      const s = el(`<div class="oturum ${alt ? "alt-oturum" : ""} ${durum.gorunum === "sohbet" && o.id === durum.oturumId ? "aktif" : ""} ${o.id === calisanOturumId ? "calisiyor" : ""}" data-id="${o.id}">
-        <span class="calisma-nokta" aria-hidden="true"></span><span class="ad" title="${kacir(o.baslik)}">${kacir(o.baslik)}</span>${cocuk.length ? `<button class="ikon-btn alt-ac ${kapali ? "kapali" : ""}" title="Alt oturumlar (${cocuk.length})" aria-label="Alt oturumları ${kapali ? "göster" : "gizle"}" aria-expanded="${!kapali}" data-ikon="asagi"></button>` : ""}<button class="ikon-btn daha" title="Diger" data-ikon="daha"></button></div>`);
+      const od = o.id === calisanOturumId ? "calisiyor" : oturumDurumu(o, gorevHaritasi);
+      const s = el(`<div class="oturum ${alt ? "alt-oturum" : ""} ${durum.gorunum === "sohbet" && o.id === durum.oturumId ? "aktif" : ""} ${od ? `durum-${od}` : ""} ${od === "calisiyor" ? "calisiyor" : ""}" data-id="${o.id}">
+        <span class="calisma-nokta" aria-hidden="true"></span><span class="ad" title="${kacir(o.baslik)}">${kacir(o.baslik)}</span>${od && od !== "calisiyor" ? `<span class="oturum-durum" title="${kacir(DURUM_ETIKET[od])}" aria-label="${kacir(DURUM_ETIKET[od])}"></span>` : ""}${cocuk.length ? `<button class="ikon-btn alt-ac ${kapali ? "kapali" : ""}" title="Alt oturumlar (${cocuk.length})" aria-label="Alt oturumları ${kapali ? "göster" : "gizle"}" aria-expanded="${!kapali}" data-ikon="asagi"></button>` : ""}<button class="ikon-btn daha" title="Diger" data-ikon="daha"></button></div>`);
       s.querySelector(".alt-ac")?.addEventListener("click", (e) => {
         e.stopPropagation();
         kapaliAltlar[kapali ? "delete" : "add"](o.id);
@@ -303,6 +311,7 @@ function oturumSatiriBagla(s, o, grup) {
   s.querySelector(".daha").onclick = (e) => {
     e.stopPropagation();
     menuAc(e.currentTarget, [
+      { metin: sabitler().has(o.id) ? "Sabitlemeyi kaldır" : "Sabitle", ikon: "raptiye", eylem: () => { sabitDegistir(o.id); oturumListesiCiz(); } },
       { metin: "Yeniden adlandır", ikon: "kalem", eylem: () => yenidenAdlandir(o) },
       { metin: "Sil", ikon: "cop", tehlike: true, eylem: () => oturumSil(o) },
     ]);
@@ -614,7 +623,7 @@ async function baslat() {
   $$(".nav-oge").forEach((n) => {
     n.onclick = () => {
       const h = n.dataset.git;
-      if (h === "ara") aramaAc(oturumAc);
+      if (h === "ara") aramaAc(oturumAc, projeAdi, durum.oturumId);
       else git({ tur: h === "ozellestir" ? "eklentiler" : h });
     };
   });
@@ -640,7 +649,7 @@ async function baslat() {
     if (!e.ctrlKey) return;
     const k = e.key.toLowerCase();
     if (k === "n") { e.preventDefault(); git({ tur: "yeni" }); }
-    else if (k === "k") { e.preventDefault(); aramaAc(oturumAc); }
+    else if (k === "k") { e.preventDefault(); aramaAc(oturumAc, projeAdi, durum.oturumId); }
     else if (k === "b") { e.preventDefault(); $("#kok").classList.toggle("kenar-kapali"); }
     else if (k === ",") { e.preventDefault(); ayarlarAc(); }
     else if (k === "l") { e.preventDefault(); $("#girdi")?.focus(); }

@@ -384,10 +384,11 @@ const DOLAR = (x) => `$${Number(x).toFixed(Math.abs(Number(x)) < 10 ? 2 : 0)}`;
 export async function orLimitYenile() {
   const b = $("#dc-or-limit");
   if (!b) return;
-  if (durum.ayarlar?.saglayici !== "openrouter") { b.hidden = true; return; }
+  const gizle = () => { b.hidden = true; const k = $("#kenar-kullanim"); if (k) k.hidden = true; };
+  if (durum.ayarlar?.saglayici !== "openrouter") { gizle(); return; }
   try {
     const l = await api("/api/openrouter/limit");
-    if (!l.var) { b.hidden = true; return; }
+    if (!l.var) { gizle(); return; }
     const kalan = l.kalan ?? l.bakiye;
     const parca = [l.kalan != null ? `Anahtar limiti: ${DOLAR(l.kalan)} / ${DOLAR(l.limit)}` : "Anahtar limiti: yok (sınırsız)"];
     if (l.bakiye != null) parca.push(`Hesap bakiyesi: ${DOLAR(l.bakiye)}`);
@@ -398,7 +399,20 @@ export async function orLimitYenile() {
     b.title = parca.join(" · ");
     b.classList.toggle("az", kalan != null && kalan < 1);
     b.hidden = false;
-  } catch { b.hidden = true; }
+    kenarKullanimCiz(l, kalan);
+  } catch { gizle(); }
+}
+
+// Paradev gibi kenar cubugu alti kullanim kutusu: kalan, limit doluluk cubugu, hesap bakiyesi
+function kenarKullanimCiz(l, kalan) {
+  const k = $("#kenar-kullanim");
+  if (!k) return;
+  const yuzde = l.limit ? Math.min(100, Math.round((100 * (l.kullanim || 0)) / l.limit)) : null;
+  k.innerHTML = `<div class="kk-ust"><b>OpenRouter</b>${l.ucretsiz ? '<span class="rozet">ücretsiz</span>' : ""}<span class="kk-kalan ${kalan != null && kalan < 1 ? "az" : ""}">${kalan != null ? `${DOLAR(kalan)} kalan` : "limitsiz"}</span></div>
+    ${yuzde != null ? `<div class="kk-satir"><span class="soluk">Anahtar limiti</span><div class="kk-cubuk" role="progressbar" aria-label="Anahtar limiti kullanımı" aria-valuenow="${yuzde}" aria-valuemin="0" aria-valuemax="100"><span style="width:${yuzde}%"></span></div><span class="soluk">%${yuzde}</span></div>` : ""}
+    ${l.bakiye != null ? `<div class="kk-satir"><span class="soluk">Hesap bakiyesi</span><span class="kk-bosluk"></span><span>${DOLAR(l.bakiye)}</span></div>` : ""}
+    ${l.uyari ? `<div class="soluk kucuk">${kacir(l.uyari)}</div>` : ""}`;
+  k.hidden = false;
 }
 
 export function sagPanelKur({ baglayiciAc, ayarAc, degisiklikAc }) {
