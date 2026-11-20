@@ -17,8 +17,10 @@ def test_docx_pdf_hatasiz_lisansli_ve_kairo_notlu() -> None:
     kok = yerlesik_skill_dizini()
     d = SkillDeposu(Path("."), [("yerlesik", kok)])
     bulunan = {s.ad: s for s in d.kesfet()}
-    assert set(bulunan) == {"docx", "pdf"}  # NOTICE skill sanilmaz
-    for ad, s in bulunan.items():
+    # NOTICE skill sanilmaz; guvenlik-taramasi Kairo'nun kendi skill'i (lisans dosyasi yok)
+    assert set(bulunan) == {"docx", "pdf", "guvenlik-taramasi"}
+    assert not bulunan["guvenlik-taramasi"].hata and bulunan["guvenlik-taramasi"].her_zaman
+    for ad, s in ((a, bulunan[a]) for a in ("docx", "pdf")):
         assert not s.hata and s.aciklama
         assert "Apache License" in (kok / ad / "LICENSE.txt").read_text(encoding="utf-8")
         assert "Kairo (Windows) notu" in (kok / ad / "SKILL.md").read_text(encoding="utf-8")
