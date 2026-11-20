@@ -380,26 +380,14 @@ async function degisikliklerYenile() {
 
 const DOLAR = (x) => `$${Number(x).toFixed(Math.abs(Number(x)) < 10 ? 2 : 0)}`;
 
-// Durum cubugu: OpenRouter kalan limiti/bakiyesi (anahtar sunucuda; buraya yalniz tutarlar gelir)
+// Kenar cubugu kullanim kutusu: OpenRouter kalan limiti/bakiyesi (anahtar sunucuda; buraya yalniz tutarlar gelir)
 export async function orLimitYenile() {
-  const b = $("#dc-or-limit");
-  if (!b) return;
-  const gizle = () => { b.hidden = true; const k = $("#kenar-kullanim"); if (k) k.hidden = true; };
+  const gizle = () => { const k = $("#kenar-kullanim"); if (k) k.hidden = true; };
   if (durum.ayarlar?.saglayici !== "openrouter") { gizle(); return; }
   try {
     const l = await api("/api/openrouter/limit");
     if (!l.var) { gizle(); return; }
-    const kalan = l.kalan ?? l.bakiye;
-    const parca = [l.kalan != null ? `Anahtar limiti: ${DOLAR(l.kalan)} / ${DOLAR(l.limit)}` : "Anahtar limiti: yok (sınırsız)"];
-    if (l.bakiye != null) parca.push(`Hesap bakiyesi: ${DOLAR(l.bakiye)}`);
-    if (l.kullanim != null) parca.push(`Kullanılan: ${DOLAR(l.kullanim)}`);
-    if (l.ucretsiz) parca.push("Ücretsiz katman");
-    if (l.uyari) parca.push(l.uyari);
-    b.textContent = kalan != null ? `OpenRouter: ${DOLAR(kalan)} kalan` : "OpenRouter: limitsiz";
-    b.title = parca.join(" · ");
-    b.classList.toggle("az", kalan != null && kalan < 1);
-    b.hidden = false;
-    kenarKullanimCiz(l, kalan);
+    kenarKullanimCiz(l, l.kalan ?? l.bakiye);
   } catch { gizle(); }
 }
 
@@ -439,10 +427,9 @@ export function sagPanelKur({ baglayiciAc, ayarAc, degisiklikAc }) {
   dosyaPaneliAyarla(localStorage.getItem(DOSYA_ANAHTAR) === "1");
   setInterval(islerYenile, 4000);
   setInterval(threadlerYenile, 5000);
-  threadlerYenile();
   setTimeout(orLimitYenile, 1500); // ayarlar yuklendikten sonra
   setInterval(orLimitYenile, 60000);
-  $("#dc-or-limit").onclick = async () => { await orLimitYenile(); bildir($("#dc-or-limit").title, "bilgi", 5000); };
+  threadlerYenile();
   $("#sp-baglayici-baslik").onclick = (e) => {
     const acik = $("#sp-baglayici-detay").hidden;
     detayAcKapa(e.currentTarget, $("#sp-baglayici-detay"), acik);
