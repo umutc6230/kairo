@@ -1091,3 +1091,16 @@ a.sp-satir { text-decoration: none; }
 .mesaj-serit button:hover::before, .mesaj-serit button.aktif::before { width: 14px; opacity: 1; }
 .mesaj-serit button:focus-visible { outline: 1px solid var(--metin, #eee); }
 .mesaj-serit button.sabit::before { background: var(--vurgu); opacity: 1; }
+
+/* ---- sohbet ici mini arayuz ve onizleme kartlari (gorsel_kartlar.js) ---- */
+.arayuz-kart { margin: 8px 0; border: 1px solid var(--cizgi2); border-radius: var(--yaricap); overflow: hidden; background: var(--kod); }
+.arayuz-ust { display: flex; align-items: center; gap: 8px; padding: 6px 8px 6px 12px; border-bottom: 1px solid var(--cizgi); background: var(--yuzey); font-size: 13px; }
+.arayuz-ust code { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
+.arayuz-ust .arayuz-baslik svg { width: 15px; height: 15px; color: var(--soluk); }
+.arayuz-ust .dc-bosluk { flex: 1; }
+.arayuz-cerceve { display: block; width: 100%; height: 160px; border: 0; background: transparent; }
+.onizleme-cerceve { height: 480px; background: #fff; }
+.arayuz-buyuk .arayuz-cerceve { height: 70vh; }
+.onizleme-kart .canli-nokta { width: 8px; height: 8px; border-radius: 50%; background: var(--yesil); animation: nabiz 1.6s ease-in-out infinite; }
+.onizleme-kart.durdu .canli-nokta { background: var(--cok-soluk); animation: none; }
+.onizleme-kart.durdu .onizleme-cerceve { opacity: .5; }
