@@ -1212,3 +1212,14 @@ a.sp-satir { text-decoration: none; }
 .proje-ac-btn { display: flex; align-items: center; gap: 8px; width: calc(100% - 16px); margin: 8px 8px 2px; padding: 6px 10px; border: 1px dashed var(--cizgi2); border-radius: 8px; background: none; color: var(--soluk); font: inherit; font-size: 13.5px; cursor: pointer; text-align: left; }
 .proje-ac-btn:hover, .proje-ac-btn:focus-visible { color: var(--metin); border-color: var(--soluk); background: var(--yuzey2); outline: none; }
 .proje-ac-btn svg { width: 15px; height: 15px; }
+
+/* durum cubugu ayiricilari kenar cubugu ve sag panel cizgilerinin tam altinda */
+.durum-cubugu { padding: 0; }
+.durum-cubugu > .dc-sol, .durum-cubugu > .dc-sag { padding: 0; gap: 0; flex-shrink: 0; overflow: hidden; }
+.durum-cubugu > .dc-sol { width: var(--kenar-gen); box-sizing: border-box; padding-left: 6px; }
+.durum-cubugu > .dc-sag { width: 280px; box-sizing: border-box; justify-content: flex-end; padding-right: 6px; border-left: 1px solid var(--cizgi) !important; }
+.dc-sol > *, .dc-sag > * { height: 100%; display: inline-flex; align-items: center; gap: 6px; padding: 0 8px; white-space: nowrap; }
+.dc-sol > :not([hidden]) + :not([hidden]), .dc-sag > :not([hidden]):not(:empty) + :not([hidden]):not(:empty) { border-left: 1px solid var(--cizgi); }
+#kok.kenar-kapali .durum-cubugu > .dc-sol { width: auto; }
+#kok:not(:has(.sag-panel:not([hidden]))) .durum-cubugu > .dc-sag { width: auto; }
+@media (max-width: 1100px) { .durum-cubugu > .dc-sag { width: auto; } }
