@@ -32,6 +32,7 @@ from pydantic import BaseModel, Field, ValidationError
 from app import URUN_ADI, URUN_SAHIBI, URUN_SAHIBI_GITHUB, URUN_SAHIBI_X, __version__
 from app.agent import akis as akis_mod
 from app.agent import cli_ajan, mcp_ice, mcp_oauth
+from app.agent import koordinasyon as koord
 from app.agent import review as rv
 from app.agent import worktree as wt
 from app.agent.ajanlar import AJAN_NOTU_ARACI, AJANA_MESAJ_ARACI, AjanDeposu, KuyrukOgesi
@@ -1849,6 +1850,11 @@ def uygulama_olustur(
     @app.post("/api/tarayici/kapat")
     async def tarayici_kapat() -> dict:
         return await asyncio.to_thread(sohbet.tarayici.kapat)
+
+    @app.get("/api/koordinasyon")
+    async def koordinasyon_durumu() -> dict:
+        """Sag panel 'Koordinasyon' (aktif proje) + kenar cubugu rozetleri (tum projeler)."""
+        return {"proje": koord.KOORD.aktifler(sohbet.aktif_alan().id), "tum": koord.KOORD.tumu()}
 
     @app.put("/api/tarayici/panel")
     async def tarayici_paneli(istek: dict) -> dict:

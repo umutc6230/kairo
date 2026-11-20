@@ -1234,3 +1234,7 @@ a.sp-satir { text-decoration: none; }
 .alt-canli-nokta.onay { background: var(--sari, #d9a03f); }
 .alt-canli-nokta.hata { background: var(--kirmizi); }
 .alt-canli-ok svg { width: 16px; height: 16px; color: var(--soluk); }
+
+/* kenar cubugu koordinasyon rozetleri: baska oturumu bekliyor / dosya duzenliyor */
+.oturum-rozet.bekliyor { color: var(--sari, #d9a03f); }
+.oturum-rozet.kilit { color: var(--mavi); }

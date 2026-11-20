@@ -1868,5 +1868,11 @@
  "Bu site gömülü gösterime izin vermiyor; ayrı pencerede açıldı.": "This site doesn't allow embedding; it opened in a separate window.",
  "Bu site gömülü gösterime izin vermiyor ve ayrı pencere açılamadı.": "This site doesn't allow embedding and a separate window couldn't be opened.",
  "Alt oturum silinmiş": "Sub-session deleted",
- "Boşta": "Idle"
+ "Boşta": "Idle",
+ "Koordinasyon": "Coordination",
+ "Bekliyor": "Waiting",
+ "Dosya yazmadı": "No files written yet",
+ "Bu projede başka çalışan oturum yok": "No other active sessions in this project",
+ "Başka oturumu bekliyor": "Waiting for another session",
+ "Dosya düzenliyor": "Editing files"
 }

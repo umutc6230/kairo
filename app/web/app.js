@@ -20,7 +20,7 @@ import { gorunumUygula, kisayolEslesir } from "./ayarlar2.js";
 import { rutinleriYukle, rutinlerKur } from "./rutinler.js";
 import { ajanlarKur, ajanlarYukle } from "./ajanlar.js";
 import { miniHaritaKur } from "./minimap.js";
-import { DURUM_ETIKET, gorevDurumlari, oturumDali, oturumDurumu, sabitDegistir, sabitler } from "./oturum_durumu.js";
+import { DURUM_ETIKET, gorevDurumlari, oturumDali, oturumDurumu, oturumKoord, sabitDegistir, sabitler } from "./oturum_durumu.js";
 import { ajanBloklariniCiz, ajanKayitlariniBirlestir, ajanliOturum, akisVar, calisanOturumId, durdur, mesajlariCiz, sohbetKur, sohbetRunlari, yeniSohbetEkrani } from "./sohbet.js";
 
 const BASLIKLAR = { karsilastir: "Karşılaştır", ocr: "OCR testi", arac: "Araç testi", paket: "Test paketi", eklentiler: "Eklentiler", skiller: "Skill'ler ve talimatlar", modeller: "Modeller", gorevler: "Ajan görevleri", rutinler: "Rutinler", ajanlar: "Ajanlar" };
@@ -201,7 +201,7 @@ setInterval(async () => {
   if (document.hidden || !durum.oturumlar) return;
   try {
     const [liste, harita] = await Promise.all([api("/api/oturumlar"), gorevDurumlari()]);
-    const imza = JSON.stringify(liste.map((o) => [o.id, o.baslik, o.guncelleme, oturumDurumu(o, harita)]));
+    const imza = JSON.stringify(liste.map((o) => [o.id, o.baslik, o.guncelleme, oturumDurumu(o, harita), oturumKoord(o)]));
     if (imza === sonImza) return;
     sonImza = imza;
     durum.oturumlar = liste;
@@ -338,7 +338,11 @@ function oturumListesiCiz() {
 function rozetler(o) {
   const pr = o.prlar?.length ? `<span class="oturum-rozet pr" title="${kacir(o.prlar.join(" · "))}" role="img" aria-label="${o.prlar.length} PR"><span data-ikon="pr"></span>${o.prlar.length > 1 ? o.prlar.length : ""}</span>` : "";
   const dal = oturumDali(o);
-  return pr + (dal ? `<span class="oturum-rozet dal" title="Dal: ${kacir(dal)}" role="img" aria-label="Dal ${kacir(dal)}"><span data-ikon="dal"></span></span>` : "");
+  const k = oturumKoord(o); // oturumlar arasi koordinasyon: baskasini bekliyor / dosya tutuyor
+  const koordRozet = k?.bekliyor
+    ? `<span class="oturum-rozet bekliyor" title="${kacir(t("Başka oturumu bekliyor"))}: ${kacir(k.bekliyor)}" role="img" aria-label="${kacir(t("Başka oturumu bekliyor"))}"><span data-ikon="saat"></span></span>`
+    : k?.dosya ? `<span class="oturum-rozet kilit" title="${kacir(t("Dosya düzenliyor"))}: ${Number(k.dosya)}" role="img" aria-label="${kacir(t("Dosya düzenliyor"))}"><span data-ikon="kalem"></span></span>` : "";
+  return pr + koordRozet + (dal ? `<span class="oturum-rozet dal" title="Dal: ${kacir(dal)}" role="img" aria-label="Dal ${kacir(dal)}"><span data-ikon="dal"></span></span>` : "");
 }
 
 function oturumSatiriBagla(s, o, grup) {
