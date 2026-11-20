@@ -1192,3 +1192,8 @@ a.sp-satir { text-decoration: none; }
 /* sohbette tek kaydirma gostergesi: soldaki mesaj haritasi; yerel cubuk gizli (kaydirma calisir) */
 #mesajlar { scrollbar-width: none; }
 #mesajlar::-webkit-scrollbar { display: none; }
+
+/* sohbetteki tiklanabilir dosya yolu */
+.yol-link { cursor: pointer; color: var(--mavi); text-decoration: underline dotted; text-underline-offset: 3px; overflow-wrap: anywhere; }
+.yol-link:hover, .yol-link:focus-visible { text-decoration-style: solid; outline: none; }
+.yol-link code { color: inherit; }

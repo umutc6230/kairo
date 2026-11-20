@@ -31,12 +31,13 @@ async function klasorCiz(kap, yol) {
   }
 }
 
-async function dosyaAc(yol) {
+export async function dosyaAc(yol, hataFirlat = false) {
   try {
     const r = await api(`/api/proje/dosya?yol=${encodeURIComponent(yol)}`);
     const not = r.truncated ? `<div class="soluk kucuk">İlk ${r.satir_bitis} / ${r.toplam_satir} satır gösteriliyor.</div>` : "";
     modal({ baslik: r.goreli || yol, genis: true, icerik: `${not}<pre class="dosya-gorunum">${kacir(r.icerik)}</pre>`, dugmeler: [{ metin: "Kapat" }] });
   } catch (e) {
+    if (hataFirlat) throw e;
     bildir(e.message, "hata");
   }
 }

@@ -3073,6 +3073,17 @@ def uygulama_olustur(
         )
         return {"gonderildi": ok}
 
+    @app.post("/api/dosya/goster")
+    async def dosya_goster(istek: dict) -> dict:
+        """Sohbetteki yolu Gezgin'de secili gosterir; dosyayi ACMAZ/CALISTIRMAZ."""
+        ham = str(istek.get("yol", "")).strip().strip('"')
+        p = Path(ham)
+        if not ham or not p.is_absolute() or not p.exists():
+            raise UygulamaHatasi("Bu yol bulunamadi.")
+        hedef = ["explorer", str(p)] if p.is_dir() else ["explorer", f"/select,{p}"]
+        subprocess.Popen(hedef)  # noqa: S603 - sabit program, kabuk yok, yalniz gosterir
+        return {"gosterildi": True}
+
     @app.post("/api/masaustu/klasor-ac")
     async def veri_klasoru_ac() -> dict:
         os.startfile(veri_dizini)  # noqa: S606 - kullanicinin kendi veri klasoru

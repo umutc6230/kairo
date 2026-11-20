@@ -10,6 +10,7 @@ import { projeDurumu } from "./proje.js";
 import { ikon, ikonlariYerlestir } from "./ikonlar.js";
 import { kacir, md } from "./md.js";
 import { prKartlariKur } from "./pr_kart.js";
+import { dosyaAc } from "./sagpanel.js";
 import {
   $, $$, api, bildir, canliSayac, durum, el, istatistikCipleri, modal, modelAdi, modelProfil, onayla, sayi, sseOku,
   ekResimleriYukle,
@@ -83,6 +84,14 @@ export function sohbetKur(cb) {
   geriCagri = cb;
   kaydirmaTakibiKur();
   prKartlariKur();
+  const yolTik = (e) => {
+    const y = e.target.closest(".yol-link");
+    if (!y || (e.type === "keydown" && e.key !== "Enter")) return;
+    e.preventDefault();
+    yolAc(y.dataset.yol);
+  };
+  $("#mesajlar").addEventListener("click", yolTik);
+  $("#mesajlar").addEventListener("keydown", yolTik);
   const girdi = $("#girdi");
   girdi.addEventListener("input", () => { boyutla(); gonderDurumu(); });
   girdi.addEventListener("keydown", (e) => {
@@ -244,6 +253,16 @@ function sonaKaydir(zorla = false) {
   const m = $("#mesajlar");
   m.scrollTop = m.scrollHeight;
   okDurumu();
+}
+
+// Sohbetteki yol: once uygulama icinde goster; yetkili klasor disindaysa Gezgin'de sec (calistirmaz)
+async function yolAc(yol) {
+  yol = yol.replace(/:\d+$/, "");
+  try {
+    await dosyaAc(yol, true);
+  } catch {
+    try { await api("/api/dosya/goster", { method: "POST", govde: { yol } }); } catch (e) { bildir(e.message, "hata"); }
+  }
 }
 
 function okDurumu() {
