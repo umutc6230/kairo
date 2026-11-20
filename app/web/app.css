@@ -764,6 +764,9 @@ body.uzak-saglayici [data-yalniz-yerel] { display: none !important; }
 .ajan-kontrol .btn.kucuk { padding: 0 12px; }
 /* Ajan akisinda baykus satiri metinle ayni hizada */
 .adim-liste + .baykus-canli, .ajan-not + .baykus-canli { margin-left: 0; }
+.ajan-islem { min-width: 0; margin: 8px 0; color: var(--soluk); font-size: 14px; line-height: 1.6; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.ajan-islem[data-calisiyor] { animation: ajan-islem-nabiz 1.8s ease-in-out infinite; }
+@keyframes ajan-islem-nabiz { 50% { opacity: .56; } }
 
 /* Ajan ara cevaplari ve son cevap: Claude Code gibi okunakli Markdown */
 .ajan-not.md { margin: 8px 0; line-height: 1.6; }
