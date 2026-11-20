@@ -557,6 +557,7 @@ pre.duz { white-space: pre-wrap; font-family: var(--mono); font-size: 13px; marg
 .baslik-dugme:hover { background: var(--yuzey2); }
 .baslik-dugme svg { width: 14px; height: 14px; flex-shrink: 0; }
 .baslik-dugme span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+#sayfa-basligi { max-width: 40ch; } /* uzun oturum adi sabit genislikte kesilir, sonuna ... */
 .sp-ayrac { border-top: 1px solid var(--cizgi); margin: 6px 0; }
 .sp-satir.sp-tik { cursor: pointer; width: 100%; border-radius: 6px; }
 .sp-satir.sp-tik:hover { background: var(--yuzey2); }

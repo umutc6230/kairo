@@ -126,7 +126,9 @@ function baslikMenusu(capa) {
 }
 
 function baslikAyarla(metin) {
-  $("#sayfa-basligi").textContent = metin || "Yeni sohbet";
+  const b = $("#sayfa-basligi");
+  b.textContent = metin || "Yeni sohbet";
+  b.title = b.textContent; // kesilen adin tamami ustune gelince gorunur
   document.title = `${metin || t("Yeni sohbet")} - Kairo`;
   baglamYenile();
 }
