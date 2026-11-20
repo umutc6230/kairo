@@ -46,7 +46,7 @@ from app.agent.masaustu import Masaustu
 from app.agent.mcp import McpYoneticisi
 from app.agent.policy import Istek, PolitikaMotoru, YanEtki, maskele, yerel_host_mu
 from app.agent.runner import BITMIS as BITMIS_RUN
-from app.agent.runner import YAZAN_ARACLAR, AgentRunner, Butce, RunDeposu, RunDurum, olay_akisi
+from app.agent.runner import YAZAN_ARACLAR, AgentRunner, Butce, Run, RunDeposu, RunDurum, olay_akisi
 from app.agent.takim import TakimPanosu
 from app.agent.tarayici import Tarayici, playwright_var
 from app.agent.terminal import KomutServisi
@@ -459,12 +459,16 @@ def uygulama_olustur(
     sohbet.mcp = mcp
     sohbet.hafiza = hafiza
 
-    def ajan_baglami(hedef: str) -> tuple[str, list, dict]:
+    def ajan_baglami(
+        hedef: str, model_secimi: str | None = None
+    ) -> tuple[str, list, dict, str | None]:
         alan = sohbet.aktif_alan()
         if sohbet.ajan_araclari(alan) is None:
             raise UygulamaHatasi("Ajan araclari hazir degil.")
         a = ayarlar.oku()
-        sistem, araclar_, isleyiciler, _ = sohbet.baglam_hazirla(a, hedef, [], ajan_gorevi=True)
+        sistem, araclar_, isleyiciler, skill_adi = sohbet.baglam_hazirla(
+            a, hedef, [], model_secimi, ajan_gorevi=True
+        )
         if a.otomatik_ogrenme:  # kullanici actiysa ajan kalici not ekleyebilir (dusuk guven)
             araclar_ = [*araclar_, HAFIZA_ARACI]
             sistem += HAFIZA_TALIMATI
@@ -505,7 +509,7 @@ def uygulama_olustur(
 
         araclar_ = [*araclar_, SKILL_KAYDET_ARACI]
         isleyiciler = {**isleyiciler, "skill_kaydet": skill_kaydet}
-        return sistem, araclar_, isleyiciler
+        return sistem, araclar_, isleyiciler, skill_adi
 
     def model_yetenegi(model: str = "") -> ModelYetenegi:
         """model: projenin koordinator modeli (bos: aktif model). MODELLER disi = uzak."""
@@ -537,16 +541,39 @@ def uygulama_olustur(
     run_deposu = RunDeposu(veri_dizini)
     run_deposu.kurtar()  # onceki oturumda yarim kalanlar: belirsiz yan etki kullaniciya sorulur
 
-    def ajan_baglami_kok(hedef: str, kok: str) -> tuple[str, list, dict]:
-        """Izole worktree: ayni proje ayarlari, araclar YALNIZ worktree kokunde."""
-        sistem, araclar_, isleyiciler = ajan_baglami(hedef)
-        alan = sohbet.aktif_alan().model_copy(update={"kokler": [kok], "ek_klasorler": []})
-        kayit = sohbet.ajan_araclari(alan)
-        return sistem, araclar_, {**isleyiciler, **kayit.isleyiciler()}
+    async def gorev_baglami(run: Run) -> tuple[str, list, dict]:
+        secim = run.skill_adi
+        ayar = ayarlar.oku()
+        if (
+            run.calisma_koku
+            and run.dal
+            and not run.parent
+            and not run.kullanim.model_cagrisi
+            and secim is None
+            and ayar.skiller_acik
+        ):
+            model = run.model if run.model_sabit or run.ajan_id else None
+            try:
+                async with asyncio.timeout(45), yonetici.kullan(model or None) as llm:
+                    secim = await sohbet.skill_sec(llm, ayar, run.hedef, [], genis=True)
+            except Exception as e:  # noqa: BLE001 - secim hatasi gorevi durdurmaz
+                logger.debug("Gorev skill secimi basarisiz: {}", e)
+        sistem, araclar_, isleyiciler, skill_adi = await asyncio.to_thread(
+            ajan_baglami, run.hedef, secim
+        )
+        run.skill_adi = skill_adi or ""
+        if run.calisma_koku:
+            # Izole gorev araclari yalniz worktree kokunde calisir.
+            alan = sohbet.aktif_alan().model_copy(
+                update={"kokler": [run.calisma_koku], "ek_klasorler": []}
+            )
+            kayit = sohbet.ajan_araclari(alan)
+            isleyiciler = {**isleyiciler, **kayit.isleyiciler()}
+        return sistem, araclar_, isleyiciler
 
     ajan = AgentRunner(
         run_deposu,
-        ajan_baglami,
+        lambda hedef: ajan_baglami(hedef)[:3],
         lambda model=None: yonetici.kullan(model or None),
         onay_durumu,
         yetenek=model_yetenegi,
@@ -555,7 +582,7 @@ def uygulama_olustur(
             hafiza.sistem_metni(sohbet.aktif_alan().id) if ayarlar.oku().hafiza_acik else ""
         ),
     )
-    ajan.araclar_kok = ajan_baglami_kok
+    ajan.gorev_baglami = gorev_baglami
     ajan.kok = lambda: next(iter(sohbet.aktif_alan().kokler), "")
     ajan.paralel_model = lambda: ayarlar.oku().saglayici == "openrouter"
     ajan.uygulayici_model = lambda: sohbet.aktif_alan().uygulayici_model
@@ -563,7 +590,11 @@ def uygulama_olustur(
     def _proje_modeli(rol: str) -> dict:
         """Aktif projenin 'koordinator' / 'uygulayici' modeli; secilmemisse aktif model."""
         ozel = getattr(sohbet.aktif_alan(), f"{rol}_model")
-        return {"model": ozel or ayarlar.oku().aktif_model, "model_sabit": bool(ozel)}
+        return {
+            "model": ozel or ayarlar.oku().aktif_model,
+            "model_sabit": bool(ozel),
+            "model_rol": rol,
+        }
 
     # ---- kalici ajanlar (openbot tasarimindan): kimlik + kuyruk + ajanlar arasi mesaj ----
     from app.agent.dersler import DersDefteri

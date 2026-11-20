@@ -1,5 +1,5 @@
 // Sohbet gorunumu: mesajlar, dusunce blogu, yazma alani, ekler, akis ve durdurma.
-import { sohbetteGorevGoster } from "./gorevler.js";
+import { goreviIptalEt, sohbetteGorevGoster } from "./gorevler.js";
 import { threadKarti } from "./superajan.js";
 import { arayuzKarti, onizlemeKarti } from "./gorsel_kartlar.js";
 import { masaustuBildirimi } from "./ayarlar2.js";
@@ -20,6 +20,8 @@ import {
 
 const bekleyenEkler = []; // {id?, ad, tur, onizleme, yukleniyor}
 let akisKontrol = null; // AbortController
+let aktifGorev = null;
+const iptalBekleyenGorevler = new Set();
 export let calisanOturumId = null; // kenar cubugunda animasyonlu gosterilir
 let geriCagri = { oturumlarYenile: async () => {}, baslikAyarla: () => {}, oturumAc: async () => {} };
 let oneriKararlari = {}; // acik oturumun alt oturum onerisi kararlari: kaynak -> alt id | "reddedildi"
@@ -137,7 +139,11 @@ export function sohbetKur(cb) {
     if (dosyalar.length) { e.preventDefault(); dosyalar.forEach(ekYukle); return; }
     anahtarYapistir(e, girdi); // API anahtari kutuda maskeli gorunur
   });
-  $("#btn-gonder").onclick = () => (akisKontrol ? durdur() : gonder());
+  $("#btn-gonder").onclick = () => {
+    if (akisKontrol) return durdur();
+    const gorev = calisanGorev();
+    return gorev ? ajanGoreviniDurdur(gorev) : gonder();
+  };
   $("#btn-ek").onclick = () => $("#dosya-sec").click();
   $("#dosya-sec").onchange = (e) => { [...e.target.files].forEach(ekYukle); e.target.value = ""; };
   const yazma = $("#yazma");
@@ -215,18 +221,41 @@ function boyutla() {
   g.style.overflowY = g.scrollHeight > 260 ? "auto" : "hidden";
 }
 
+function calisanGorev() {
+  return aktifGorev && aktifGorev.oturumId === durum.oturumId && aktifGorev.detay.isConnected
+    ? aktifGorev : null;
+}
+
+async function ajanGoreviniDurdur(gorev) {
+  if (iptalBekleyenGorevler.has(gorev.id)) return;
+  iptalBekleyenGorevler.add(gorev.id);
+  gonderDurumu();
+  try {
+    const sonuc = await goreviIptalEt(gorev.id);
+    if (sonuc && aktifGorev?.id === gorev.id) aktifGorev = null;
+  } catch (e) {
+    bildir(e.message, "hata");
+  } finally {
+    iptalBekleyenGorevler.delete(gorev.id);
+    gonderDurumu();
+  }
+}
+
 function gonderDurumu() {
   const b = $("#btn-gonder");
-  if (akisKontrol) {
-    b.disabled = false;
+  const gorev = calisanGorev();
+  if (akisKontrol || gorev) {
+    b.disabled = !akisKontrol && iptalBekleyenGorevler.has(gorev?.id);
     b.classList.add("durdur");
     b.innerHTML = ikon("durdur");
     b.title = "Durdur";
+    b.setAttribute("aria-label", t("Durdur"));
     return;
   }
   b.classList.remove("durdur");
   b.innerHTML = ikon("yukari");
   b.title = "Gonder (Enter)";
+  b.setAttribute("aria-label", t("Gönder"));
   const yukleniyor = bekleyenEkler.some((e) => e.yukleniyor);
   b.disabled = yukleniyor || (!$("#girdi").value.trim() && !bekleyenEkler.length);
 }
@@ -740,6 +769,8 @@ export function bosDurum(goster) {
 const PENCERE = 40;
 
 export function mesajlariCiz(oturum) {
+  aktifGorev = null;
+  gonderDurumu();
   oneriKararlari = { ...(oturum?.oneri_kararlari || {}) };
   $("#mesajlar .mesaj-sutun")?.remove();
   if (!oturum || !oturum.mesajlar.length) { bosDurum(true); return; }
@@ -1083,6 +1114,17 @@ function ajanBlogu(kayit) {
   const kap = el(`<div class="mesaj asistan ajan-mesaj"><div class="gr-detay" aria-live="polite"><div class="parilti">Ajan başlıyor…</div></div></div>`);
   return { kap, detay: kap.querySelector(".gr-detay"), kayit };
 }
+function sohbetGoreviniIzle(detay, id, oturumId, ilkDurum) {
+  const durumBildir = (runDurumu) => {
+    if (oturumId !== durum.oturumId || !detay.isConnected) return;
+    if (runDurumu === "calisiyor") aktifGorev = { detay, id, oturumId };
+    else if (aktifGorev?.id === id) aktifGorev = null;
+    gonderDurumu();
+  };
+  if (ilkDurum) durumBildir(ilkDurum);
+  sohbetteGorevGoster(detay, id, durumBildir);
+}
+
 const BITMIS_RUN = new Set(["iptal", "basarili", "dogrulanmadi", "basarisiz"]);
 
 async function ajanaGonder(oturumId, metin) {
@@ -1111,7 +1153,7 @@ async function ajanaGonder(oturumId, metin) {
     document.dispatchEvent(new Event("oturumlar-degisti")); // baslik kaydedildikten SONRA
     const b = ajanBlogu({ run: r.id, metin });
     s.append(b.kap);
-    sohbetteGorevGoster(b.detay, r.id);
+    sohbetGoreviniIzle(b.detay, r.id, oturumId, r.durum);
     sonaKaydir(true);
   } catch (e) {
     s.append(el(`<div class="mesaj asistan"><div class="uyari-kutu">${kacir(e.message)}</div></div>`));
@@ -1128,7 +1170,7 @@ export function ajanBloklariniCiz(oturumId) {
     s.append(kullaniciMesaji({ rol: "kullanici", metin: k.metin, ekler: [], run: k.run }));
     const b = ajanBlogu(k);
     s.append(b.kap);
-    if (i === kayitlar.length - 1) sohbetteGorevGoster(b.detay, k.run);
+    if (i === kayitlar.length - 1) sohbetGoreviniIzle(b.detay, k.run, oturumId);
     // onceki turlar: sonuc markdown olarak (son tur gibi), hata duz metin
     else api(`/api/gorevler/${k.run}`).then((r) => {
       b.detay.innerHTML = r.sonuc?.ozet

@@ -19,7 +19,7 @@ import json
 import re
 import time
 import uuid
-from collections.abc import AsyncIterator, Callable
+from collections.abc import AsyncIterator, Awaitable, Callable
 from contextlib import AbstractAsyncContextManager
 from datetime import datetime
 from enum import StrEnum
@@ -170,7 +170,6 @@ class Butce(BaseModel):
     max_adim: int = Field(default=0, ge=0, le=100_000)
     max_sure_sn: int = Field(default=1800, ge=10, le=24 * 3600)
     # cagri basina gonderilen baglamin TOPLAMI; 32K baglamda ~60 cagri
-    max_token: int = Field(default=10_000_000, ge=1000, le=20_000_000)
     max_ayni_hata: int = Field(default=2, ge=1, le=10)
     max_ilerlemesiz: int = Field(default=3, ge=1, le=10)
     max_ardisik_ret: int = Field(default=6, ge=2, le=50)  # A13: ret dongusu butceyi yemesin
@@ -205,6 +204,7 @@ class Adim(BaseModel):
     dosya: str = ""  # okunan/yazilan dosya (ozet icin; kirpilmis sonuctan parse edilmez)
     hash: str = ""
     checkpoint: str = ""  # yazma adiminin checkpoint kimligi (diff / geri alma ekrani)
+    model: str = ""  # arac cagrisi ureten istemcinin modeli
     aciklama: str = ""  # modelin bu cagridan once yazdigi "ne ve neden" cumlesi (arayuzde)
     zaman: str = Field(default_factory=lambda: datetime.now().isoformat(timespec="seconds"))
 
@@ -237,11 +237,14 @@ class Run(BaseModel):
     model: str = ""
     # proje koordinator/uygulayici modeli: aktif model degisse de bu modelle calisir
     model_sabit: bool = False
+    model_rol: str = ""
+    son_model: str = ""  # son basarili model cagrisi
     durum: RunDurum = RunDurum.calisiyor
     butce: Butce = Field(default_factory=Butce)
     kullanim: Kullanim = Field(default_factory=Kullanim)
     deneme: int = 1
     plan: list[PlanAdimi] = []
+    skill_adi: str | None = None  # None: secim yapilmadi, bos: uygun skill yok
     adimlar: list[Adim] = []
     mesajlar: list[dict] = []  # modele giden gecmis (sistem haric)
     kuyruk: list[str] = []  # calisirken gelen kullanici mesajlari
@@ -525,7 +528,7 @@ class AgentRunner:
         self.yetenek = yetenek
         self.hafiza = hafiza or (lambda: "")
         self.hooks = hooks
-        self.araclar_kok: Callable[[str, str], tuple] | None = None
+        self.gorev_baglami: Callable[[Run], Awaitable[tuple]] | None = None
         self.kok: Callable[[], str] | None = None  # aktif proje koku: hook'larin cwd'si
         self.dersler: Any = None  # DersDefteri (api baglar): gorevler arasi hatalardan ogrenme
         # D (Chimera): async (run) -> inceleme dict | None; api baglar (ayar + git diff + model)
@@ -568,6 +571,7 @@ class AgentRunner:
         ek_sistem: str = "",
         calisma_koku: str = "",
         model_sabit: bool = False,
+        model_rol: str = "",
     ) -> Run:
         if self.yetenek is not None:  # aracsiz modelle gorev baslamaz (acik hata)
             dogrula(self.yetenek(), araclar_gerekli=True)
@@ -576,7 +580,7 @@ class AgentRunner:
         run = Run(
             hedef=hedef.strip(), kabul=kabul or [], butce=butce or Butce(), model=model,
             etkilesimli=etkilesimli, ajan_id=ajan_id, ek_sistem=ek_sistem,
-            calisma_koku=calisma_koku, model_sabit=model_sabit,
+            calisma_koku=calisma_koku, model_sabit=model_sabit, model_rol=model_rol,
         )  # fmt: skip
         kabul_metni = "\n".join(f"- {k}" for k in run.kabul) or "- (belirtilmedi: hedefi kanitla)"
         gorev_metni = f"GOREV: {run.hedef}\n\nKABUL KOSULLARI:\n{kabul_metni}"
@@ -823,8 +827,6 @@ class AgentRunner:
             return f"Adim butcesi doldu ({b.max_adim})."
         if k.sure_sn >= b.max_sure_sn:
             return f"Sure butcesi doldu ({b.max_sure_sn} sn)."
-        if k.token >= b.max_token:
-            return f"Token butcesi doldu ({b.max_token})."
         biten = [a for a in run.adimlar if a.arac not in META
                  and a.durum not in (AdimDurum.sirada, AdimDurum.onay_bekliyor)]  # fmt: skip
         son = biten[-b.max_ardisik_ret :]
@@ -844,10 +846,8 @@ class AgentRunner:
             # olay dongusunu kilitlememek icin is parcaciginda hazirlanir
             jeton = AKTIF_RUN.set(run_id)  # koordinasyon: baglam bu gorev adina kaydolur
             try:
-                if run.calisma_koku and self.araclar_kok is not None:  # izole worktree araclari
-                    sistem, semalar, isleyiciler = await asyncio.to_thread(
-                        self.araclar_kok, run.hedef, run.calisma_koku
-                    )
+                if self.gorev_baglami is not None:
+                    sistem, semalar, isleyiciler = await self.gorev_baglami(run)
                 else:
                     sistem, semalar, isleyiciler = await asyncio.to_thread(self.araclar, run.hedef)
             finally:
@@ -1083,6 +1083,7 @@ class AgentRunner:
             argumanlar=arg if arg is not None else {"_ham": str(ham)[:500]},
             cagri_id=c.get("id") or uuid.uuid4().hex[:8],
             yan_etkili=ad in YAN_ETKILI,
+            model=run.son_model,
         )
         if arg is None:  # onarilamadi: calistirma, modele bildir
             a.durum = AdimDurum.hata
@@ -1155,6 +1156,7 @@ class AgentRunner:
                             tools=semalar,
                             max_tokens=run.baglam.get("cevap") or cevap_tokeni(self._baglam()),
                         )
+                        run.son_model = getattr(llm, "model", "") or ""
                         kullanim = getattr(llm, "son_kullanim", None)
                         kullanim = kullanim if isinstance(kullanim, dict) else {}
                         iz.update({f"usage.{k}": v for k, v in kullanim.items()
@@ -1491,7 +1493,6 @@ class AgentRunner:
         # paralel kardesler kalan butceyi PAYLASIR (toplam ebeveyni asmaz)
         ebeveyn_kalan = (run.butce.max_adim - run.kullanim.adim) if run.butce.max_adim else 10**6
         kalan_adim = ebeveyn_kalan // max(1, int(g.get("_pay") or 1))
-        kalan_token = run.butce.max_token - run.kullanim.token
         hata = ""
         if not gorev or not araclar:
             hata = "alt_ajan icin gorev ve en az bir arac gerekli."
@@ -1512,6 +1513,7 @@ class AgentRunner:
             hedef=gorev,
             model=uygulayici or run.model,
             model_sabit=bool(uygulayici) or run.model_sabit,
+            model_rol="uygulayici",
             parent=run.id,
             # izole worktree'deki ebeveynin cocugu da ayni kokte/dalda calisir (ana projeye yazmaz)
             calisma_koku=run.calisma_koku,
@@ -1523,7 +1525,6 @@ class AgentRunner:
             butce=Butce(
                 max_adim=max(1, min(istenen, kalan_adim - 1)),
                 max_sure_sn=run.butce.max_sure_sn,
-                max_token=max(1000, kalan_token),
                 max_ayni_hata=run.butce.max_ayni_hata,
                 max_ilerlemesiz=run.butce.max_ilerlemesiz,
             ),
