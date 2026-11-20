@@ -157,7 +157,7 @@ function gorevEtkinligi(r) {
     return { etiket, ayrinti: ayrinti || adim.arac };
   }
   const plan = r.plan?.find((a) => a.durum === "suruyor");
-  if (plan) return { etiket: "Plan adımı", ayrinti: plan.baslik };
+  if (plan) return { etiket: plan.baslik };
   return { etiket: r.adimlar.length ? "Sonraki adım hazırlanıyor…" : "İstek değerlendiriliyor…" };
 }
 
@@ -258,13 +258,14 @@ function ccAkis(adimlar, calisiyor, rol) {
   return parcalar.join("");
 }
 
-function kontroller(r) {
+function kontroller(r, { yalnizTekrar = false } = {}) {
   const b = (is, ad, kosul, tehlike = false) =>
     `<button class="btn kucuk ${tehlike ? "tehlike" : ""}" data-islem="${is}" ${kosul ? "" : "disabled"}>${ad}</button>`;
   return `<div class="dugme-sira">
+    ${yalnizTekrar ? "" : `
     ${b("duraklat", "Duraklat", r.durum === "calisiyor")}
     ${b("devam", "Devam", ["duraklatildi", "onay_bekliyor"].includes(r.durum))}
-    ${b("iptal", "İptal", !BITMIS.has(r.durum), true)}
+    ${b("iptal", "İptal", !BITMIS.has(r.durum), true)}`}
     ${b("tekrar", "Tekrar dene", ["basarisiz", "iptal", "dogrulanmadi"].includes(r.durum))}
   </div>`;
 }
@@ -343,7 +344,7 @@ function sohbetCiz(r) {
     .slice(-2);
   const calisiyor = !BITMIS.has(r.durum);
   const etkinlik = calisiyor ? gorevEtkinligi(r) : null;
-  const yazmaKutusuDurdurur = izleyiciler.get(kap)?.durumBildir && r.durum === "calisiyor";
+  const yazmaKutusuDurdurur = Boolean(izleyiciler.get(kap)?.durumBildir);
   const akis = ccAkis(r.adimlar, calisiyor, r.model_rol);
   // Claude Code gibi: gorev listesi cevabin icinde, adimlar ilerledikce isaretlenir
   const plan = r.plan || [];
@@ -357,7 +358,7 @@ function sohbetCiz(r) {
     <ol class="adim-liste sade">${akis}</ol>
     ${notlar.map(ajanNotu).join("")}
     ${beklemeSatiri(r)}
-    ${calisiyor ? `<div class="baykus-canli" data-mod="${r.durum === "calisiyor" ? "calisiyor" : "bekliyor"}" style="--bk-gecikme:-${(Date.now() / 1000 % 3600).toFixed(2)}s"><span class="baykus-kap">${ikon("logo")}</span><span class="baykus-etiket"><span>${kacir(etkinlik.etiket)}</span>${etkinlik.ayrinti ? ` · <span title="${kacir(etkinlik.ayrinti)}">${kacir(etkinlik.ayrinti)}</span>` : ""}</span></div>` : ""}
+    ${etkinlik ? `<div class="ajan-islem"${r.durum === "calisiyor" ? " data-calisiyor" : ""}><span>${kacir(etkinlik.etiket)}</span>${etkinlik.ayrinti ? ` · <span title="${kacir(etkinlik.ayrinti)}">${kacir(etkinlik.ayrinti)}</span>` : ""}</div>` : ""}
     ${bekleyenKartlari(r)}
     ${r.hata ? `<div class="uyari-kutu kucuk">${kacir(r.hata)}</div>` : ""}
     ${r.sonuc?.ozet ? `<div class="ajan-sonuc ajan-rapor"><div class="rapor-baslik">${basari ? '<span data-ikon="tik" class="yesil-ikon" aria-label="doğrulandı"></span> Tamamlandı' : "Sonuç"}${r.sonuc.kanit?.length ? ` <span class="soluk kucuk">(kanıt: adım ${kacir(r.sonuc.kanit.join(", "))})</span>` : ' <span class="rozet sari" title="Ajan, son dosya değişikliğinden sonra başarılı bir araç adımını kanıt olarak göstermedi. Cevap yanlış demek değil; otomatik kontrol edilmedi demek.">doğrulanmadı</span>'}<button class="ikon-btn" title="Cevabı kopyala" aria-label="Cevabı kopyala" data-kopya data-ikon="kopyala"></button></div><div class="md">${md(r.sonuc.ozet)}</div></div>` : ""}
@@ -365,7 +366,7 @@ function sohbetCiz(r) {
     ${r.calisma_koku && r.dal ? `<div class="ajan-izole soluk kucuk">Ayrı dalda çalıştı: <code>${kacir(r.dal)}</code>${["basarili", "dogrulanmadi"].includes(r.durum) ? `
       <div class="satir"><input class="alan" data-entegre-test placeholder="Birleştirmeden önce test komutu (isteğe bağlı)" style="flex:1">
       <button class="btn ana" data-entegre>Ana dala birleştir</button><button class="btn tehlike" data-at>Değişiklikleri at</button></div>` : ""}</div>` : ""}
-    ${yazmaKutusuDurdurur ? "" : `<div class="ajan-kontrol">${rozet(r.durum)}${kontroller(r)}</div>`}`;
+    ${yazmaKutusuDurdurur && calisiyor ? "" : `<div class="ajan-kontrol">${rozet(r.durum)}${kontroller(r, { yalnizTekrar: yazmaKutusuDurdurur })}</div>`}`;
   gorselYerleriDoldur(kap, r);
   const ent = kap.querySelector("[data-entegre]");
   if (ent) {

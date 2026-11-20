@@ -1117,7 +1117,7 @@ function ajanBlogu(kayit) {
 function sohbetGoreviniIzle(detay, id, oturumId, ilkDurum) {
   const durumBildir = (runDurumu) => {
     if (oturumId !== durum.oturumId || !detay.isConnected) return;
-    if (runDurumu === "calisiyor") aktifGorev = { detay, id, oturumId };
+    if (!BITMIS_RUN.has(runDurumu)) aktifGorev = { detay, id, oturumId };
     else if (aktifGorev?.id === id) aktifGorev = null;
     gonderDurumu();
   };
