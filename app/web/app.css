@@ -1099,7 +1099,13 @@ a.sp-satir { text-decoration: none; }
 .arayuz-ust .arayuz-baslik svg { width: 15px; height: 15px; color: var(--soluk); }
 .arayuz-ust .dc-bosluk { flex: 1; }
 .arayuz-cerceve { display: block; width: 100%; height: 160px; border: 0; background: transparent; }
-.onizleme-cerceve { height: 480px; background: #fff; }
+.onizleme-cerceve { height: 70vh; background: var(--bg); }
+/* kucuk resim: 2x boyutta cizilip %50 olceklenir; 240px yukseklikte sayfanin ust yarisi kaydirmasiz */
+.onizleme-kucuk { display: block; width: 100%; height: 240px; padding: 0; border: 0; overflow: hidden; cursor: zoom-in; background: var(--bg); position: relative; }
+.onizleme-kucuk .onizleme-cerceve.kucuk { width: 200%; height: 480px; transform: scale(.5); transform-origin: 0 0; pointer-events: none; }
+.onizleme-kucuk::after { content: ''; position: absolute; inset: 0; box-shadow: inset 0 -24px 24px -16px var(--kod); pointer-events: none; }
+.onizleme-kucuk:hover::after { box-shadow: inset 0 0 0 2px var(--vurgu); border-radius: 0 0 var(--yaricap) var(--yaricap); }
+.onizleme-kart { max-width: 560px; }
 .arayuz-buyuk .arayuz-cerceve { height: 70vh; }
 .onizleme-kart .canli-nokta { width: 8px; height: 8px; border-radius: 50%; background: var(--yesil); animation: nabiz 1.6s ease-in-out infinite; }
 .onizleme-kart.durdu .canli-nokta { background: var(--cok-soluk); animation: none; }

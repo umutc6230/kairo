@@ -60,6 +60,9 @@ export function arayuzKarti(o, kap) {
 
 const YEREL = /^http:\/\/(localhost|127\.0\.0\.1):\d{1,5}(\/[^\s"'<>]*)?$/;
 
+const onizlemeIframe = (url, sinif) => `<iframe class="arayuz-cerceve ${sinif}" title="Önizleme" referrerpolicy="no-referrer" ${sinif.includes("kucuk") ? 'scrolling="no" tabindex="-1"' : ""}
+  sandbox="allow-scripts allow-forms allow-same-origin allow-popups allow-modals" src="${kacir(url)}"></iframe>`;
+
 export function onizlemeKarti(o, kap) {
   let s = {};
   try { s = JSON.parse(o.sonuc || "{}"); } catch { return null; }
@@ -67,11 +70,18 @@ export function onizlemeKarti(o, kap) {
   const k = el(`<div class="arayuz-kart onizleme-kart" data-id="${kacir(o.id)}">
     <div class="arayuz-ust"><span class="canli-nokta" aria-hidden="true"></span><b>Önizleme</b><code class="soluk kucuk">${kacir(s.url)}</code><span class="dc-bosluk"></span>
       <button class="ikon-btn kucuk-ikon" data-yenile title="Yenile" aria-label="Yenile" data-ikon="yenile"></button>
+      <button class="ikon-btn kucuk-ikon" data-buyut title="Büyüt" aria-label="Büyüt" data-ikon="kare"></button>
       <a class="ikon-btn kucuk-ikon" href="${kacir(s.url)}" target="_blank" rel="noopener" title="Tarayıcıda aç" aria-label="Tarayıcıda aç" data-ikon="dis"></a>
       ${s.is_id ? '<button class="btn kucuk" data-durdur>Durdur</button>' : ""}</div>
-    <div class="arayuz-govde"><iframe class="arayuz-cerceve onizleme-cerceve" title="Önizleme" referrerpolicy="no-referrer"
-      sandbox="allow-scripts allow-forms allow-same-origin allow-popups allow-modals" src="${kacir(s.url)}"></iframe></div></div>`);
+    <button class="onizleme-kucuk" title="Büyütmek için tıkla" aria-label="Önizlemeyi büyüt">${onizlemeIframe(s.url, "onizleme-cerceve kucuk")}</button></div>`);
   const f = k.querySelector("iframe");
+  // kucuk resim: sayfa %50 olcekte, kaydirmasiz ve tiklanamaz; etkilesim buyutulmus pencerede
+  const buyut = () => {
+    const g = el(`<div class="arayuz-buyuk">${onizlemeIframe(s.url, "onizleme-cerceve")}</div>`);
+    modal({ baslik: s.url, icerik: g, genis: true, dugmeler: [{ metin: "Kapat" }] });
+  };
+  k.querySelector(".onizleme-kucuk").onclick = buyut;
+  k.querySelector("[data-buyut]").onclick = buyut;
   k.querySelector("[data-yenile]").onclick = () => { f.src = s.url; };
   const d = k.querySelector("[data-durdur]");
   if (d) d.onclick = async () => {
