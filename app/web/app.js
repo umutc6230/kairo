@@ -261,6 +261,11 @@ function oturumListesiCiz() {
     };
   });
   kap.append(duzen);
+  if (listeDuzeni === "proje") { // Claude/Codex gibi: proje gorunumunden yeni proje acilir
+    const ac = el('<button class="proje-ac-btn" type="button"><span data-ikon="arti"></span><span>Proje aç</span></button>');
+    ac.onclick = () => projeAc();
+    kap.append(ac);
+  }
   const gruplar = new Map();
   const gorunur = durum.oturumlar.filter((o) => o.mesaj_sayisi || o.ajan_sayisi || o.id === durum.oturumId || ajanliOturum(o.id));
   const idler = new Set(gorunur.map((o) => o.id));
