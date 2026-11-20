@@ -1,5 +1,5 @@
 // Sohbet gorunumu: mesajlar, dusunce blogu, yazma alani, ekler, akis ve durdurma.
-import { goreviIptalEt, sohbetteGorevGoster } from "./gorevler.js";
+import { gorevRaporEylemleri, gorevRaporEylemleriniBagla, goreviIptalEt, sohbetteGorevGoster } from "./gorevler.js";
 import { threadKarti } from "./superajan.js";
 import { arayuzKarti, onizlemeKarti } from "./gorsel_kartlar.js";
 import { masaustuBildirimi } from "./ayarlar2.js";
@@ -1174,9 +1174,10 @@ export function ajanBloklariniCiz(oturumId) {
     // onceki turlar: sonuc markdown olarak (son tur gibi), hata duz metin
     else api(`/api/gorevler/${k.run}`).then((r) => {
       b.detay.innerHTML = r.sonuc?.ozet
-        ? `<div class="ajan-sonuc ajan-rapor"><div class="md">${md(r.sonuc.ozet)}</div></div>`
+        ? `<div class="ajan-sonuc ajan-rapor"><div class="md">${md(r.sonuc.ozet)}</div>${gorevRaporEylemleri()}</div>`
         : `<div class="uyari-kutu">${kacir(r.hata || r.durum)}</div>`;
       ikonlariYerlestir(b.detay);
+      gorevRaporEylemleriniBagla(b.detay, r);
     }).catch(() => {});
   });
   ikonlariYerlestir(s);

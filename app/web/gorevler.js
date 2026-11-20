@@ -132,6 +132,7 @@ const SURUYOR = new Set(["sirada", "niyet", "onay_bekliyor", "cevap_bekliyor"]);
 
 function adimBasligi(a) {
   const g = a.argumanlar || {};
+  if (a.arac === "alt_ajan" && g.gorev) return String(g.gorev);
   if (g.aciklama) return String(g.aciklama);
   const tur = adimTuru(a);
   if (tur === "komut") return String(g.komut || g.command || g.metin || a.arac);
@@ -183,7 +184,7 @@ function ccAdim(a, rol) {
   const kod = a.cikis_kodu ? `<span class="rozet kirmizi">çıkış ${kacir(a.cikis_kodu)}</span>` : "";
   return `<li class="cc-adim">
     <button class="cc-baslik" aria-expanded="${acik}" data-ac="${kacir(a.no)}">
-      <span class="cc-ad">${kacir(adimBasligi(a))}</span>${durumRozet}${kod}<span class="cc-ok" aria-hidden="true">›</span>
+      <span class="cc-ad">${kacir(adimBasligi(a))}</span>${a.devredilen_model ? modelEtiketi(a.devredilen_model, "uygulayici") : ""}${durumRozet}${kod}<span class="cc-ok" aria-hidden="true">›</span>
     </button>
     ${acik ? `<div class="cc-kutu">
       ${modelEtiketi(a.model, rol)}
@@ -245,6 +246,11 @@ function ccAkis(adimlar, calisiyor, rol) {
     if (a.aciklama) {
       kapat();
       parcalar.push(`<li class="ajan-aciklama">${md(a.aciklama)}</li>`);
+    }
+    if (a.arac === "alt_ajan" && a.devredilen_model) {
+      kapat();
+      parcalar.push(ccAdim(a, rol));
+      continue;
     }
     if (GORSEL_ARACLAR.has(a.arac) && a.durum === "tamam") { // kart: grubun disinda, yerinde kalir
       kapat();
@@ -361,7 +367,7 @@ function sohbetCiz(r) {
     ${etkinlik ? `<div class="ajan-islem"${r.durum === "calisiyor" ? " data-calisiyor" : ""}><span>${kacir(etkinlik.etiket)}</span>${etkinlik.ayrinti ? ` · <span title="${kacir(etkinlik.ayrinti)}">${kacir(etkinlik.ayrinti)}</span>` : ""}</div>` : ""}
     ${bekleyenKartlari(r)}
     ${r.hata ? `<div class="uyari-kutu kucuk">${kacir(r.hata)}</div>` : ""}
-    ${r.sonuc?.ozet ? `<div class="ajan-sonuc ajan-rapor"><div class="rapor-baslik">${basari ? '<span data-ikon="tik" class="yesil-ikon" aria-label="doğrulandı"></span> Tamamlandı' : "Sonuç"}${r.sonuc.kanit?.length ? ` <span class="soluk kucuk">(kanıt: adım ${kacir(r.sonuc.kanit.join(", "))})</span>` : ' <span class="rozet sari" title="Ajan, son dosya değişikliğinden sonra başarılı bir araç adımını kanıt olarak göstermedi. Cevap yanlış demek değil; otomatik kontrol edilmedi demek.">doğrulanmadı</span>'}<button class="ikon-btn" title="Cevabı kopyala" aria-label="Cevabı kopyala" data-kopya data-ikon="kopyala"></button></div><div class="md">${md(r.sonuc.ozet)}</div></div>` : ""}
+    ${r.sonuc?.ozet ? `<div class="ajan-sonuc ajan-rapor"><div class="rapor-baslik">${basari ? '<span data-ikon="tik" class="yesil-ikon" aria-label="doğrulandı"></span> Tamamlandı' : "Sonuç"}${r.sonuc.kanit?.length ? ` <span class="soluk kucuk">(kanıt: adım ${kacir(r.sonuc.kanit.join(", "))})</span>` : ' <span class="rozet sari" title="Ajan, son dosya değişikliğinden sonra başarılı bir araç adımını kanıt olarak göstermedi. Cevap yanlış demek değil; otomatik kontrol edilmedi demek.">doğrulanmadı</span>'}</div><div class="md">${md(r.sonuc.ozet)}</div>${gorevRaporEylemleri()}</div>` : ""}
     ${incelemeHtml(r.inceleme)}
     ${r.calisma_koku && r.dal ? `<div class="ajan-izole soluk kucuk">Ayrı dalda çalıştı: <code>${kacir(r.dal)}</code>${["basarili", "dogrulanmadi"].includes(r.durum) ? `
       <div class="satir"><input class="alan" data-entegre-test placeholder="Birleştirmeden önce test komutu (isteğe bağlı)" style="flex:1">
@@ -490,6 +496,41 @@ export async function goreviIptalEt(id) {
   return api(`/api/gorevler/${id}/iptal`, { method: "POST" });
 }
 
+export function gorevRaporEylemleri() {
+  return `<div class="mesaj-alt">
+    <button class="ikon-btn" title="Cevabı kopyala" aria-label="Cevabı kopyala" data-kopya data-ikon="kopyala"></button>
+    <button class="ikon-btn" title="Cevabı paylaş" aria-label="Cevabı paylaş" data-rapor-paylas data-ikon="paylas"></button>
+  </div>`;
+}
+
+export function gorevRaporEylemleriniBagla(kap, r) {
+  const metin = r.sonuc?.ozet || "";
+  $("[data-kopya]", kap)?.addEventListener("click", async () => {
+    try {
+      await navigator.clipboard.writeText(metin);
+      bildir("Cevap kopyalandı.", "basari", 1500);
+    } catch { bildir("Kopyalanamadı.", "hata"); }
+  });
+  $("[data-rapor-paylas]", kap)?.addEventListener("click", async () => {
+    const ad = `kairo-rapor-${r.id}.md`;
+    try {
+      if (navigator.share) {
+        await navigator.share({ title: r.hedef, text: metin });
+      } else if (window.pywebview?.api?.dosya_kaydet) {
+        await window.pywebview.api.dosya_kaydet(ad, metin);
+      } else {
+        const a = document.createElement("a");
+        a.download = ad;
+        a.href = URL.createObjectURL(new Blob([metin], { type: "text/markdown" }));
+        a.click();
+        setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+      }
+    } catch (e) {
+      if (e.name !== "AbortError") bildir(e.message, "hata");
+    }
+  });
+}
+
 function baglantilar(r) {
   const kap = detayKabi();
   const v = izleyiciler.get(kap); // sohbet/panel kutusu: yenileme ve cizim o kutuya
@@ -504,14 +545,7 @@ function baglantilar(r) {
       await api(`/api/gorevler/${r.id}/${b.dataset.islem}`, { method: "POST" });
     });
   });
-  $$("[data-kopya]", kap).forEach((b) => {
-    b.onclick = async () => {
-      try {
-        await navigator.clipboard.writeText(r.sonuc?.ozet || "");
-        bildir("Cevap kopyalandı.", "basari", 1500);
-      } catch { bildir("Kopyalanamadı.", "hata"); }
-    };
-  });
+  gorevRaporEylemleriniBagla(kap, r);
   $$("[data-onay]", kap).forEach((b) => {
     b.onclick = sarmala(() => api(`/api/onaylar/${b.dataset.onay}`, { method: "POST", govde: { onayla: b.dataset.karar === "1", kapsam: b.dataset.kapsam || "tek" } }));
   });

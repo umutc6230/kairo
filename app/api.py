@@ -589,11 +589,13 @@ def uygulama_olustur(
 
     def _proje_modeli(rol: str) -> dict:
         """Aktif projenin 'koordinator' / 'uygulayici' modeli; secilmemisse aktif model."""
-        ozel = getattr(sohbet.aktif_alan(), f"{rol}_model")
+        alan = sohbet.aktif_alan()
+        ozel = getattr(alan, f"{rol}_model")
         return {
             "model": ozel or ayarlar.oku().aktif_model,
             "model_sabit": bool(ozel),
             "model_rol": rol,
+            "uygulayici_model": alan.uygulayici_model if rol == "koordinator" else "",
         }
 
     # ---- kalici ajanlar (openbot tasarimindan): kimlik + kuyruk + ajanlar arasi mesaj ----
