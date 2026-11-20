@@ -1784,5 +1784,20 @@
  "✓ Bu PC'de çalışır": "✓ Works on this PC",
  "✓ llama.cpp bulundu": "✓ llama.cpp found",
  "✗ llama.cpp bulunamadı": "✗ llama.cpp not found",
- "✗ Çalışmaz": "✗ Doesn't work"
+ "✗ Çalışmaz": "✗ Doesn't work",
+ "Yan sohbet (Ctrl+;)": "Side chat (Ctrl+;)",
+ "Thread'ler": "Threads",
+ "{0} bitti": "{0} done",
+ "Kullanici iptal etti.": "Cancelled by user.",
+ "Tahmini; bir sonraki istekte modele gidecek parçalar.": "Estimate; parts that will go to the model on the next request.",
+ "Sistem talimatı": "System prompt",
+ "KAIRO.md ve talimatlar": "KAIRO.md and instructions",
+ "Skill'ler": "Skills",
+ "{0} · sınırsız": "{0} · unlimited",
+ "{0} token · %{1} önbellekten · {2}": "{0} tokens · {1}% cached · {2}",
+ "{0} token · %{1} önbellekten": "{0} tokens · {1}% cached",
+ "{0} token · {1}": "{0} tokens · {1}",
+ "One Dark": "One Dark",
+ "Dracula": "Dracula",
+ "Tokyo Night": "Tokyo Night"
 }

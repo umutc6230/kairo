@@ -15,6 +15,7 @@ import {
 
 const bekleyenEkler = []; // {id?, ad, tur, onizleme, yukleniyor}
 let akisKontrol = null; // AbortController
+export let calisanOturumId = null; // kenar cubugunda animasyonlu gosterilir
 let geriCagri = { oturumlarYenile: async () => {}, baslikAyarla: () => {}, oturumAc: async () => {} };
 let oneriKararlari = {}; // acik oturumun alt oturum onerisi kararlari: kaynak -> alt id | "reddedildi"
 
@@ -285,10 +286,24 @@ function mesajDugmeleri(d, m) {
   }
 }
 
+// Duzenle (yalniz son kullanici mesaji): onaysiz, metin kutuya gelir; gonderilince bu mesaj ve cevabi kesilir.
+let duzenlenen = null;
+function duzenle(m) {
+  if (!durum.oturumId || akisVar()) { bildir("Cevap sürerken düzenlenemez.", "hata"); return; }
+  duzenlenen = { m, oid: durum.oturumId };
+  const g = $("#girdi");
+  g.value = m.metin || "";
+  boyutla();
+  gonderDurumu();
+  g.focus();
+  g.setSelectionRange(g.value.length, g.value.length);
+  bildir("Düzenleyip gönder; bu mesaj ve cevabı yenisiyle değişir. İptal: kutuyu boşalt.", "bilgi", 4000);
+}
+
 async function geriSar(m, tekrar = false) {
   const oid = durum.oturumId;
   if (!oid || akisVar()) { bildir("Cevap sürerken geri sarılamaz.", "hata"); return; }
-  if (!(await onayla(tekrar ? "Yeniden dene" : "Mesajı düzenle", `Bu mesaj ve sonrasındaki konuşma silinecek; mesaj ${tekrar ? "tekrar gönderilecek" : "yazma kutusuna geri gelecek"}. Ajanın yaptığı dosya değişiklikleri geri alınmaz (onlar için /rewind).`, { evet: tekrar ? "Yeniden dene" : "Düzenle", tehlike: true }))) return;
+  if (tekrar && !(await onayla("Yeniden dene", "Bu mesaj ve sonrasındaki konuşma silinecek; mesaj tekrar gönderilecek. Ajanın yaptığı dosya değişiklikleri geri alınmaz (onlar için /rewind).", { evet: "Yeniden dene", tehlike: true }))) return;
   try {
     const v = await api(`/api/oturumlar/${oid}/geri-sar`, { method: "POST", govde: m.id ? { mesaj_id: m.id } : { run: m.run } });
     if (m.run) { // tarayici onbellegindeki ajan kayitlari da ayni noktaya kesilir
@@ -321,7 +336,7 @@ function kullaniciMesaji(m) {
   saatYaz(d.querySelector(".mesaj-saat"), m.zaman);
   mesajDugmeleri(d, m);
   const gs = d.querySelector(".geri-sar");
-  if (gs) gs.onclick = () => geriSar(m);
+  if (gs) gs.onclick = () => duzenle(m);
   const tk = d.querySelector(".tekrar");
   if (tk) tk.onclick = () => geriSar(m, true);
   ekResimleriYukle(d);
@@ -704,6 +719,16 @@ export async function gonder() {
     if (/^!\s*\S/.test(metin)) { girdi.value = ""; boyutla(); gonderDurumu(); kabukCalistir(metin.slice(1).trim()); return; }
     if (/^#\s*[^#\s]/.test(metin)) { girdi.value = ""; boyutla(); gonderDurumu(); hafizaNotu(metin.slice(1).trim()); return; }
   }
+  if (duzenlenen) { // duzenlenen mesaj ve cevabi once kesilir, sonra yeni metin normal gonderilir
+    const { m, oid } = duzenlenen;
+    duzenlenen = null;
+    if (oid === durum.oturumId) {
+      try {
+        await api(`/api/oturumlar/${oid}/geri-sar`, { method: "POST", govde: m.id ? { mesaj_id: m.id } : { run: m.run } });
+        await geriCagri.oturumAc(oid, true);
+      } catch (e) { bildir(e.message, "hata"); return; }
+    }
+  }
   const ekler = bekleyenEkler.splice(0);
   girdi.value = "";
   boyutla();
@@ -730,6 +755,8 @@ export async function gonder() {
   yanit.canliBaslat(durum.ayarlar?.model);
   let kullaniciCizildi = false;
   akisKontrol = new AbortController();
+  calisanOturumId = oturumId;
+  document.querySelector(`.oturum[data-id="${oturumId}"]`)?.classList.add("calisiyor");
   gonderDurumu();
   try {
     for await (const o of sseOku(`/api/oturumlar/${oturumId}/mesaj`, { metin, ekler: ekler.map((e) => e.id) }, akisKontrol.signal)) {
@@ -787,6 +814,8 @@ export async function gonder() {
     clearInterval(yanit.sayac);
     if (yanit.el.querySelector(".mesaj-alt").hidden) yanit.bitir(null); // hata/durdurma
     akisKontrol = null;
+    calisanOturumId = null;
+    document.querySelectorAll(".oturum.calisiyor").forEach((x) => x.classList.remove("calisiyor"));
     gonderDurumu();
     geriCagri.oturumlarYenile();
     if (siradakiler.length) { // sirada bekleyen ilk mesaj sonraki tur olarak gider

@@ -35,6 +35,24 @@
   --turuncu: #c9603a; --ana-metin: #fff; --ana-ustu: #000; --tehlike-metin: #b3261e; --uyari-metin: #7a4f00;
   --kaydirma: #cdc9bd; --kaydirma2: #b3aea1;
 }
+:root[data-tema="onedark"] {
+  --bg: #282c34; --kenar: #21252b; --yuzey: #2c313a; --yuzey2: #333842; --yuzey3: #3e4451;
+  --cizgi: #3a3f4b; --cizgi2: #4b5263; --metin: #dcdfe4; --soluk: #9da5b4; --cok-soluk: #6b717d;
+  --kod: #21252b; --mavi: #61afef; --yesil: #98c379; --kirmizi: #e06c75; --sari: #e5c07b; --turuncu: #d19a66;
+  --vurgu: #61afef; --kaydirma: #3e4451; --kaydirma2: #4b5263;
+}
+:root[data-tema="dracula"] {
+  --bg: #282a36; --kenar: #21222c; --yuzey: #2f3140; --yuzey2: #383a4a; --yuzey3: #44475a;
+  --cizgi: #3a3c4e; --cizgi2: #4d5066; --metin: #f8f8f2; --soluk: #b4b6c8; --cok-soluk: #6272a4;
+  --kod: #1e1f29; --mavi: #8be9fd; --yesil: #50fa7b; --kirmizi: #ff5555; --sari: #f1fa8c; --turuncu: #ffb86c;
+  --vurgu: #bd93f9; --kaydirma: #44475a; --kaydirma2: #565970;
+}
+:root[data-tema="tokyonight"] {
+  --bg: #1a1b26; --kenar: #16161e; --yuzey: #1f2335; --yuzey2: #292e42; --yuzey3: #343a55;
+  --cizgi: #292e42; --cizgi2: #3b4261; --metin: #c0caf5; --soluk: #a9b1d6; --cok-soluk: #565f89;
+  --kod: #16161e; --mavi: #7aa2f7; --yesil: #9ece6a; --kirmizi: #f7768e; --sari: #e0af68; --turuncu: #ff9e64;
+  --vurgu: #7aa2f7; --kaydirma: #292e42; --kaydirma2: #3b4261;
+}
 @media (max-width: 1200px) { :root { --kenar-gen: 248px; } }
 :root[data-yazi="kucuk"] body { font-size: 13.5px; }
 :root[data-yazi="buyuk"] body { font-size: 17px; }
@@ -108,8 +126,18 @@ svg { display: block; }
 .nav-oge:hover, .nav-oge.aktif { background: var(--yuzey2); }
 .nav-oge.vurgulu { background: var(--yuzey3); }
 .nav-oge.vurgulu:hover { background: #45453f; }
-.kenar-oturumlar { flex: 1; overflow-y: auto; padding: 4px 8px 12px; }
-.grup-baslik { display: flex; align-items: center; justify-content: space-between; padding: 14px 8px 6px; color: var(--soluk); font-size: 13px; font-weight: 600; cursor: pointer; user-select: none; }
+.kenar-oturumlar { flex: 1; overflow-y: auto; padding: 4px 10px 12px; }
+.grup-baslik { display: flex; align-items: center; justify-content: space-between; padding: 16px 10px 6px; color: var(--cok-soluk); font-size: 12px; font-weight: 600; letter-spacing: .02em; cursor: pointer; user-select: none; }
+.grup-baslik:hover { color: var(--soluk); }
+.oturum { color: var(--soluk); transition: background .12s, color .12s; }
+.oturum:hover, .oturum.aktif { color: var(--metin); }
+.oturum.aktif { box-shadow: inset 2px 0 0 var(--vurgu); }
+/* calisan oturum: nabiz atan nokta + kayan parlama */
+.calisma-nokta { display: none; width: 7px; height: 7px; margin-right: 8px; flex-shrink: 0; border-radius: 50%; background: var(--vurgu); animation: nabiz 1.2s ease-in-out infinite; }
+.oturum.calisiyor .calisma-nokta { display: block; }
+.kenar-oturumlar .oturum.calisiyor { color: var(--metin); background-image: linear-gradient(90deg, transparent, color-mix(in srgb, var(--vurgu) 14%, transparent), transparent); background-size: 200% 100%; animation: parilti 2s linear infinite; }
+@keyframes nabiz { 0%, 100% { opacity: 1; transform: scale(1); } 50% { opacity: .35; transform: scale(.7); } }
+@keyframes parilti { from { background-position: 150% 0; } to { background-position: -50% 0; } }
 .grup-baslik svg { width: 14px; height: 14px; transition: transform .15s; }
 .grup.kapali .grup-baslik svg { transform: rotate(-90deg); }
 .grup.kapali .grup-ogeler { display: none; }
@@ -120,8 +148,8 @@ svg { display: block; }
 .oturum:hover .daha, .oturum.aktif .daha { opacity: 1; }
 .oturum .daha svg { width: 16px; height: 16px; }
 .kenar-alt { display: flex; align-items: center; justify-content: space-between; padding: 10px 12px; border-top: 1px solid var(--cizgi); }
-.kullanici { display: flex; align-items: center; gap: 8px; padding: 4px 8px 4px 4px; border-radius: 9px; }
-.kullanici:hover { background: var(--yuzey2); }
+.kenar-alt .kullanici { display: flex; align-items: center; gap: 8px; padding: 4px 8px 4px 4px; border-radius: 9px; }
+.kenar-alt .kullanici:hover { background: var(--yuzey2); }
 .avatar { width: 26px; height: 26px; border-radius: 50%; display: grid; place-items: center; background: var(--turuncu); color: #1b1b1a; font-weight: 700; font-size: 13px; }
 
 /* ---- ana ---- */
@@ -225,6 +253,7 @@ svg { display: block; }
 .mesaj-alt .sesli-oku[aria-pressed="true"] { color: var(--vurgu); background: var(--yuzey2); }
 .mesaj-alt .sabitle[aria-pressed="true"] { color: var(--vurgu); }
 .mesaj.kullanici .mesaj-alt { justify-content: flex-end; }
+.mesaj.kullanici:has(~ .mesaj.kullanici) .geri-sar { display: none; } /* duzenle yalniz son kullanici mesajinda */
 .hata-kutu { border: 1px solid #f2706b55; background: #f2706b14; color: var(--tehlike-metin); padding: 10px 14px; border-radius: 10px; font-size: 14px; margin-top: 6px; }
 .uyari-kutu { border: 1px solid #f2b24c55; background: #f2b24c12; color: var(--uyari-metin); padding: 8px 12px; border-radius: 10px; font-size: 13.5px; margin: 6px 0; }
 
@@ -1036,7 +1065,13 @@ a.sp-satir { text-decoration: none; }
 #hap-model .soluk { margin-left: 6px; }
 
 #girdi.oneri-var::placeholder { color: var(--soluk); opacity: .85; font-style: italic; }
-.sp-dosya-kap > summary { cursor: pointer; list-style: none; display: flex; align-items: center; gap: 4px; }
+.sp-dosya-kap > summary { cursor: pointer; list-style: none; display: flex; align-items: center; justify-content: flex-start; gap: 6px; }
+.sp-dosya-kap > summary .soluk { margin-left: auto; font-weight: 400; }
+#sag-panel-gorev { display: flex; flex-direction: column; gap: 6px; padding: 4px 6px 10px; font-size: 13px; }
+#sag-panel-gorev:empty { display: none; }
+#sag-panel-gorev .sp-baslik { font-size: 13px; margin-top: 8px; color: var(--metin); }
+#sag-panel-gorev .butce-satir { grid-template-columns: 56px 1fr auto; }
+#sag-panel-gorev .gorev-maliyet { padding-top: 2px; }
 .sp-dosya-kap > summary::-webkit-details-marker { display: none; }
 .sp-dosya-kap > summary::before { content: "\203A"; display: inline-block; transition: transform .15s; }
 .sp-dosya-kap[open] > summary::before { transform: rotate(90deg); }

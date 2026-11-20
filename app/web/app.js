@@ -19,7 +19,7 @@ import { dockAcKapa, dockKur, degisiklikYenile } from "./dock.js";
 import { gorunumUygula, kisayolEslesir } from "./ayarlar2.js";
 import { rutinleriYukle, rutinlerKur } from "./rutinler.js";
 import { ajanlarKur, ajanlarYukle } from "./ajanlar.js";
-import { ajanBloklariniCiz, ajanKayitlariniBirlestir, ajanliOturum, akisVar, durdur, mesajlariCiz, sohbetKur, sohbetRunlari, yeniSohbetEkrani } from "./sohbet.js";
+import { ajanBloklariniCiz, ajanKayitlariniBirlestir, ajanliOturum, akisVar, calisanOturumId, durdur, mesajlariCiz, sohbetKur, sohbetRunlari, yeniSohbetEkrani } from "./sohbet.js";
 
 const BASLIKLAR = { karsilastir: "Karşılaştır", ocr: "OCR testi", arac: "Araç testi", paket: "Test paketi", eklentiler: "Eklentiler", skiller: "Skill'ler ve talimatlar", modeller: "Modeller", gorevler: "Ajan görevleri", rutinler: "Rutinler", ajanlar: "Ajanlar" };
 const gecmis = [];
@@ -276,8 +276,8 @@ function oturumListesiCiz() {
     const satir = (o, alt = false) => {
       const cocuk = altlar.get(o.id) || [];
       const kapali = kapaliAltlar.has(o.id) && !cocuk.some((c) => c.id === durum.oturumId);
-      const s = el(`<div class="oturum ${alt ? "alt-oturum" : ""} ${durum.gorunum === "sohbet" && o.id === durum.oturumId ? "aktif" : ""}" data-id="${o.id}">
-        <span class="ad" title="${kacir(o.baslik)}">${kacir(o.baslik)}</span>${cocuk.length ? `<button class="ikon-btn alt-ac ${kapali ? "kapali" : ""}" title="Alt oturumlar (${cocuk.length})" aria-label="Alt oturumları ${kapali ? "göster" : "gizle"}" aria-expanded="${!kapali}" data-ikon="asagi"></button>` : ""}<button class="ikon-btn daha" title="Diger" data-ikon="daha"></button></div>`);
+      const s = el(`<div class="oturum ${alt ? "alt-oturum" : ""} ${durum.gorunum === "sohbet" && o.id === durum.oturumId ? "aktif" : ""} ${o.id === calisanOturumId ? "calisiyor" : ""}" data-id="${o.id}">
+        <span class="calisma-nokta" aria-hidden="true"></span><span class="ad" title="${kacir(o.baslik)}">${kacir(o.baslik)}</span>${cocuk.length ? `<button class="ikon-btn alt-ac ${kapali ? "kapali" : ""}" title="Alt oturumlar (${cocuk.length})" aria-label="Alt oturumları ${kapali ? "göster" : "gizle"}" aria-expanded="${!kapali}" data-ikon="asagi"></button>` : ""}<button class="ikon-btn daha" title="Diger" data-ikon="daha"></button></div>`);
       s.querySelector(".alt-ac")?.addEventListener("click", (e) => {
         e.stopPropagation();
         kapaliAltlar[kapali ? "delete" : "add"](o.id);
