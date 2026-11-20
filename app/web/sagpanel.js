@@ -1,4 +1,5 @@
 // Sag panel (Claude Code Desktop gibi): proje dosya agaci, baglayicilar; alt durum cubugu.
+import { t } from "./i18n.js";
 import { ikon, ikonlariYerlestir } from "./ikonlar.js";
 import { kacir } from "./md.js";
 import { $, api, baglayiciDurumu, bildir, durum, el, modal } from "./ortak.js";
@@ -309,6 +310,25 @@ const TH_GRUP = [
   ["Sorun var", ["basarisiz"], "kirmizi"],
   ["Çalışıyor", ["calisiyor", "sirada"], "mavi"],
 ];
+// Ayni projede su an calisan sohbet/gorevler: kim hangi dosyada, kim bekliyor, kime mesaj var
+async function koordinasyonYenile() {
+  const kap = $("#sp-koordinasyon");
+  if (!kap || $("#sag-panel").hidden) return;
+  try {
+    const { proje } = await api("/api/koordinasyon");
+    kap.innerHTML = proje.map((k) => {
+      const oturum = k.kimlik.startsWith("oturum:") ? k.kimlik.slice(7) : "";
+      const alt = k.bekliyor ? `${t("Bekliyor")}: ${k.bekliyor}` : k.dosyalar.join(", ") || t("Dosya yazmadı");
+      return `<button class="sp-satir sp-tik sp-is" ${oturum ? `data-oturum="${kacir(oturum)}"` : "data-git-ajanlar"} title="${kacir(`${k.ad}\n${k.dosyalar.join("\n")}`)}">
+        <span class="thread-nokta ${k.bekliyor ? "sari" : "mavi parilti"}"></span>
+        <span class="sp-ad">${kacir(k.ad)}<span class="sp-alt soluk kucuk">${kacir(alt)}</span></span>
+        ${k.gelen ? `<span class="rozet">${Number(k.gelen)}</span>` : ""}</button>`;
+    }).join("") || `<span class="soluk kucuk">${t("Bu projede başka çalışan oturum yok")}</span>`;
+    kap.querySelectorAll("[data-oturum]").forEach((b) => { b.onclick = () => document.querySelector(`.oturum[data-id="${CSS.escape(b.dataset.oturum)}"]`)?.click(); });
+    kap.querySelectorAll("[data-git-ajanlar]").forEach((b) => { b.onclick = () => document.querySelector('.nav-oge[data-git="ajanlar"]')?.click(); });
+  } catch { /* sessiz */ }
+}
+
 async function threadlerYenile() {
   const kap = $("#sp-threadler");
   if (!kap || $("#sag-panel").hidden) return;
@@ -432,6 +452,7 @@ export function sagPanelKur({ baglayiciAc, ayarAc, degisiklikAc }) {
   dosyaPaneliAyarla(localStorage.getItem(DOSYA_ANAHTAR) === "1");
   setInterval(islerYenile, 4000);
   setInterval(threadlerYenile, 5000);
+  setInterval(koordinasyonYenile, 3000);
   setTimeout(orLimitYenile, 1500); // ayarlar yuklendikten sonra
   setInterval(orLimitYenile, 60000);
   threadlerYenile();

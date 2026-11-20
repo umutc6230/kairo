@@ -542,6 +542,7 @@ async def test_proje_uclari(istemci, proje: Path, tmp_path: Path) -> None:
     liste = (await istemci.get("/api/projeler")).json()
     assert liste["aktif"] is None
     assert liste["etkin"]["ad"] == "Kisisel klasorler"  # proje yokken kisisel kokler
+    assert liste["etkin"]["kokler"] == [str(Path.home().resolve())]
     assert "planla" in liste["modlar"] and "guvenilir" in liste["guvenler"]
 
     alan = (await istemci.post("/api/projeler", json={"yol": str(proje), "ad": "P"})).json()

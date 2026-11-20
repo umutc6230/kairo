@@ -11,12 +11,14 @@ import json
 import re
 import time
 from collections.abc import AsyncIterator, Awaitable, Callable
+from contextlib import aclosing
 from pathlib import Path
 from typing import Any
 
 from loguru import logger
 from pydantic import BaseModel, Field
 
+from app.agent import koordinasyon as koord
 from app.agent.arac_bul import ertele
 from app.agent.araclar import KOMUT_SEMALARI, YAZMA_SEMALARI, AjanAracKaydi
 from app.agent.checkpoints import CheckpointDeposu
@@ -49,7 +51,6 @@ from app.services.sohbet_araclari import (
     is_emri_isleyicileri,
     plan_isleyici,
     sonuc_ozeti,
-    varsayilan_kokler,
 )
 from app.services.sohbet_araclari import ARACLAR as SOHBET_ARACLARI
 from app.services.talimatlar import TalimatDeposu
@@ -768,11 +769,7 @@ class SohbetServisi:
         self._kilitler: dict[str, asyncio.Lock] = {}
 
     def aktif_alan(self) -> CalismaAlani:
-        """Aktif proje; yoksa kisisel klasorlerle sinirli varsayilan alan (A1.1).
-
-        Proje acilmadiginda da kok DISI erisim yoktur: kokler masaustu/belgeler/indirilenler/
-        resimler ile sinirlidir. Once tum ev dizini ve her mutlak yol okunabiliyordu.
-        """
+        """Aktif proje; proje yoksa kullanicinin ev dizinindeki onayli kisisel alan."""
         alan = self.projeler.aktif() if self.projeler else None
         if alan is not None:
             # modeli secilmemis proje Ayarlar'daki varsayilan koordinator/uygulayiciyi kullanir
@@ -786,7 +783,7 @@ class SohbetServisi:
         return CalismaAlani(
             id=VARSAYILAN_ALAN_ID,
             ad="Kisisel klasorler",
-            kokler=[str(k) for k in varsayilan_kokler()],
+            kokler=[str(Path.home().resolve())],
             guven=Guven.sinirli,
             # Claude Code gibi: proje acik olmasa da ajan calisir; yan etkili her islem onay ister
             mod=Mod.onayli,
@@ -1111,6 +1108,14 @@ class SohbetServisi:
         if not ayar.sohbet_araclari and alan.id == VARSAYILAN_ALAN_ID:
             return sistem, [], {}, otomatik  # kullanici sohbette araclari kapatti
         sistem += sirlar.talimat()
+        if ajan_kaydi is not None and "proje_dosya_yaz" in isleyiciler:
+            # oturumlar arasi koordinasyon: yalniz gercek projede (yazma araci varken)
+            kid = koord.kimlik()
+            koord.KOORD.kaydol(kid, alan.id, " ".join(istek_metni.split())[:80] or kid)
+            sistem += koord.KOORD.sistem_notu(kid, alan.id)
+            kapsam = ajan_kaydi.kapsam
+            araclar += koord.SEMALAR
+            isleyiciler |= koord.isleyiciler(alan.id, lambda d: kapsam.goreli(kapsam.coz(d)))
         if self.tarayici_paneli and "tarayici_git" in isleyiciler:
             # panel bir iframe/ayri pencere: model onu dogrudan goremez, kendi tarayicisiyla acar
             sistem += (
@@ -1339,6 +1344,17 @@ class SohbetServisi:
             pass  # isitma basarisizsa sohbet yine calisir, yalniz ilk mesaj yavas olur
 
     async def mesaj_gonder(self, oturum_id: str, istek: MesajIstegi) -> AsyncIterator[Olay]:
+        """Tur boyunca bu oturum koordinasyon panosunda gorunur; tur bitince dosyalari birakir."""
+        jeton = koord.AKTIF_OTURUM.set(oturum_id)
+        try:
+            async with aclosing(self._mesaj_gonder(oturum_id, istek)) as akis:
+                async for olay in akis:
+                    yield olay
+        finally:
+            koord.KOORD.ayril(f"oturum:{oturum_id}")
+            koord.AKTIF_OTURUM.reset(jeton)
+
+    async def _mesaj_gonder(self, oturum_id: str, istek: MesajIstegi) -> AsyncIterator[Olay]:
         if not istek.metin.strip() and not istek.ekler:
             raise UygulamaHatasi("Bos mesaj gonderilemez.")
         ekler = [self.ekler.getir(i) for i in istek.ekler]

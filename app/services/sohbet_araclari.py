@@ -157,7 +157,7 @@ class DosyaAraclari:
             )
         return yetkili
 
-    def klasor_listele(self, yol: str = "masaustu", gizlileri_goster: bool = False) -> dict:
+    def klasor_listele(self, yol: str = "", gizlileri_goster: bool = False) -> dict:
         try:
             k = self._coz(yol)
         except YetkiYok as e:
@@ -171,7 +171,7 @@ class DosyaAraclari:
             return {"hata": str(e), "karar": "ret"}
         return _dosya_oku(p, baslangic)
 
-    def dosya_ara(self, aranan: str, klasor: str = "masaustu", derinlik: int = 3) -> dict:
+    def dosya_ara(self, aranan: str, klasor: str = "", derinlik: int = 3) -> dict:
         try:
             kok = self._coz(klasor)
         except YetkiYok as e:
@@ -312,7 +312,7 @@ ARACLAR: list[dict] = [
     _fonk(
         "klasor_listele",
         "Bu bilgisayardaki bir klasorun dosya ve klasorlerini listeler. Masaustu icin "
-        "yol='masaustu'; 'belgeler', 'indirilenler', 'resimler' ya da tam yol da olur.",
+        "Yol belirtilmezse etkin kok listelenir; masaustu gibi takma adlar da kullanilabilir.",
         {"yol": {"type": "string", "description": "masaustu, belgeler ya da C:\\... gibi yol"}},
         ["yol"],
     ),
@@ -330,7 +330,7 @@ ARACLAR: list[dict] = [
         "Bir klasorde adinda verilen metin gecen dosya/klasorleri arar (alt klasorler dahil).",
         {
             "aranan": {"type": "string"},
-            "klasor": {"type": "string", "description": "Varsayilan masaustu"},
+            "klasor": {"type": "string", "description": "Bos birakilirsa etkin kok"},
         },
         ["aranan"],
     ),

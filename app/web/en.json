@@ -1852,6 +1852,8 @@
  "{0}: diğer": "{0}: more",
  "{0} proje menüsü": "{0} project menu",
  "Projeyi kaldır": "Remove project",
+ "Grubun sohbetlerini sil": "Delete group chats",
+ "Grubun sohbetleri silindi.": "Group chats deleted.",
  "\"{0}\" Kairo'dan kaldırılacak. Bilgisayardaki proje dosyalarına dokunulmaz.": "\"{0}\" will be removed from Kairo. Project files on your computer are not touched.",
  "\"{0}\" Kairo'dan kaldırılacak. Bu projeye ait {1} sohbet de kalıcı olarak silinecek. Bilgisayardaki proje dosyalarına dokunulmaz.": "\"{0}\" will be removed from Kairo. Its {1} chats will also be permanently deleted. Project files on your computer are not touched.",
  "Proje kaldırıldı.": "Project removed.",
@@ -1866,5 +1868,13 @@
  "Sir adi BUYUK_HARF_VE_ALT_CIZGI olmali.": "Secret name must be UPPER_CASE_AND_UNDERSCORES.",
  "Sir bulunamadi.": "Secret not found.",
  "Bu site gömülü gösterime izin vermiyor; ayrı pencerede açıldı.": "This site doesn't allow embedding; it opened in a separate window.",
- "Bu site gömülü gösterime izin vermiyor ve ayrı pencere açılamadı.": "This site doesn't allow embedding and a separate window couldn't be opened."
+ "Bu site gömülü gösterime izin vermiyor ve ayrı pencere açılamadı.": "This site doesn't allow embedding and a separate window couldn't be opened.",
+ "Alt oturum silinmiş": "Sub-session deleted",
+ "Boşta": "Idle",
+ "Koordinasyon": "Coordination",
+ "Bekliyor": "Waiting",
+ "Dosya yazmadı": "No files written yet",
+ "Bu projede başka çalışan oturum yok": "No other active sessions in this project",
+ "Başka oturumu bekliyor": "Waiting for another session",
+ "Dosya düzenliyor": "Editing files"
 }

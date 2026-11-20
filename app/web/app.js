@@ -20,7 +20,7 @@ import { gorunumUygula, kisayolEslesir } from "./ayarlar2.js";
 import { rutinleriYukle, rutinlerKur } from "./rutinler.js";
 import { ajanlarKur, ajanlarYukle } from "./ajanlar.js";
 import { miniHaritaKur } from "./minimap.js";
-import { DURUM_ETIKET, gorevDurumlari, oturumDali, oturumDurumu, sabitDegistir, sabitler } from "./oturum_durumu.js";
+import { DURUM_ETIKET, gorevDurumlari, oturumDali, oturumDurumu, oturumKoord, sabitDegistir, sabitler } from "./oturum_durumu.js";
 import { ajanBloklariniCiz, ajanKayitlariniBirlestir, ajanliOturum, akisVar, calisanOturumId, durdur, mesajlariCiz, sohbetKur, sohbetRunlari, yeniSohbetEkrani } from "./sohbet.js";
 
 const BASLIKLAR = { karsilastir: "Karşılaştır", ocr: "OCR testi", arac: "Araç testi", paket: "Test paketi", eklentiler: "Eklentiler", skiller: "Skill'ler ve talimatlar", modeller: "Modeller", gorevler: "Ajan görevleri", rutinler: "Rutinler", ajanlar: "Ajanlar" };
@@ -201,7 +201,7 @@ setInterval(async () => {
   if (document.hidden || !durum.oturumlar) return;
   try {
     const [liste, harita] = await Promise.all([api("/api/oturumlar"), gorevDurumlari()]);
-    const imza = JSON.stringify(liste.map((o) => [o.id, o.baslik, o.guncelleme, oturumDurumu(o, harita)]));
+    const imza = JSON.stringify(liste.map((o) => [o.id, o.baslik, o.guncelleme, oturumDurumu(o, harita), oturumKoord(o)]));
     if (imza === sonImza) return;
     sonImza = imza;
     durum.oturumlar = liste;
@@ -286,11 +286,15 @@ function oturumListesiCiz() {
   if (listeDuzeni === "proje") { // sohbeti olmayan projeler de gorunsun: "+" ile ilk sohbet acilir
     for (const a of projeDurumu.liste || []) if (!gruplar.has(`p:${a.id}`)) gruplar.set(`p:${a.id}`, []);
   }
+  const kayitliProjeler = new Set((projeDurumu.liste || []).map((p) => p.id));
   for (const [ad, liste] of gruplar) {
     const projeMi = ad.startsWith("p:");
     const alan = projeMi ? ad.slice(2) : "";
     const baslik = projeMi ? projeAdi(alan) : ad;
-    const grup = el(`<div class="grup ${projeMi ? "proje-grup" : ""} ${kapaliGruplar.has(ad) ? "kapali" : ""}"><div class="grup-baslik">${projeMi ? '<span class="proje-ikon" data-ikon="klasor"></span>' : ""}<span class="grup-ad" title="${kacir(baslik)}">${kacir(baslik)}</span>${projeMi && liste.length ? `<span class="grup-sayi">${liste.length}</span>` : ""}<span class="grup-sag">${projeMi ? `<button class="ikon-btn grup-yeni" title="${kacir(baslik)}: yeni sohbet" aria-label="${kacir(baslik)} projesinde yeni sohbet" data-ikon="arti"></button><button class="ikon-btn grup-menu" title="${kacir(baslik)}: diğer" aria-label="${kacir(baslik)} proje menüsü" data-ikon="daha"></button>` : ""}<span data-ikon="asagi"></span></span></div><div class="grup-ogeler"></div></div>`);
+    const projeDisiGrup = !alan ? "projesiz" : alan === KISISEL ? "kisisel" : null;
+    const kaldirilabilir = projeMi && (projeDisiGrup || kayitliProjeler.has(alan));
+    const projeMenusu = kaldirilabilir ? `<button class="ikon-btn grup-menu" title="${kacir(baslik)}: diğer" aria-label="${kacir(baslik)} proje menüsü" data-ikon="daha"></button>` : "";
+    const grup = el(`<div class="grup ${projeMi ? "proje-grup" : ""} ${kapaliGruplar.has(ad) ? "kapali" : ""}"><div class="grup-baslik">${projeMi ? '<span class="proje-ikon" data-ikon="klasor"></span>' : ""}<span class="grup-ad" title="${kacir(baslik)}">${kacir(baslik)}</span>${projeMi && liste.length ? `<span class="grup-sayi">${liste.length}</span>` : ""}<span class="grup-sag">${projeMi ? `<button class="ikon-btn grup-yeni" title="${kacir(baslik)}: yeni sohbet" aria-label="${kacir(baslik)} projesinde yeni sohbet" data-ikon="arti"></button>${projeMenusu}` : ""}<span data-ikon="asagi"></span></span></div><div class="grup-ogeler"></div></div>`);
     grup.querySelector(".grup-yeni")?.addEventListener("click", async (e) => {
       e.stopPropagation();
       await projeyeGec(alan || KISISEL);
@@ -298,7 +302,13 @@ function oturumListesiCiz() {
     });
     grup.querySelector(".grup-menu")?.addEventListener("click", (e) => {
       e.stopPropagation();
-      menuAc(e.currentTarget, [{ metin: "Projeyi kaldır", ikon: "cop", eylem: () => projeKaldir(alan, baslik, liste.length) }]);
+      const sohbetSayisi = durum.oturumlar.filter((o) => o.alan === alan).length;
+      if (projeDisiGrup && !sohbetSayisi) return;
+      menuAc(e.currentTarget, [{
+        metin: projeDisiGrup ? "Grubun sohbetlerini sil" : "Projeyi kaldır",
+        ikon: "cop",
+        eylem: () => projeKaldir(alan, baslik, sohbetSayisi, projeDisiGrup),
+      }]);
     });
     grup.querySelector(".grup-baslik").onclick = () => {
       grup.classList.toggle("kapali");
@@ -338,7 +348,11 @@ function oturumListesiCiz() {
 function rozetler(o) {
   const pr = o.prlar?.length ? `<span class="oturum-rozet pr" title="${kacir(o.prlar.join(" · "))}" role="img" aria-label="${o.prlar.length} PR"><span data-ikon="pr"></span>${o.prlar.length > 1 ? o.prlar.length : ""}</span>` : "";
   const dal = oturumDali(o);
-  return pr + (dal ? `<span class="oturum-rozet dal" title="Dal: ${kacir(dal)}" role="img" aria-label="Dal ${kacir(dal)}"><span data-ikon="dal"></span></span>` : "");
+  const k = oturumKoord(o); // oturumlar arasi koordinasyon: baskasini bekliyor / dosya tutuyor
+  const koordRozet = k?.bekliyor
+    ? `<span class="oturum-rozet bekliyor" title="${kacir(t("Başka oturumu bekliyor"))}: ${kacir(k.bekliyor)}" role="img" aria-label="${kacir(t("Başka oturumu bekliyor"))}"><span data-ikon="saat"></span></span>`
+    : k?.dosya ? `<span class="oturum-rozet kilit" title="${kacir(t("Dosya düzenliyor"))}: ${Number(k.dosya)}" role="img" aria-label="${kacir(t("Dosya düzenliyor"))}"><span data-ikon="kalem"></span></span>` : "";
+  return pr + koordRozet + (dal ? `<span class="oturum-rozet dal" title="Dal: ${kacir(dal)}" role="img" aria-label="Dal ${kacir(dal)}"><span data-ikon="dal"></span></span>` : "");
 }
 
 function oturumSatiriBagla(s, o, grup) {
@@ -365,15 +379,25 @@ async function yenidenAdlandir(o) {
 }
 
 // Claude/Codex gibi: proje Kairo'dan kaldirilir, bagli sohbetleri de silinir; diskteki dosyalar kalir
-async function projeKaldir(alanId, ad, sayi) {
+async function projeKaldir(alanId, ad, sayi, projeDisiGrup) {
+  const baslik = projeDisiGrup ? "Grubun sohbetlerini sil" : "Projeyi kaldır";
   const not = sayi ? ` Bu projeye ait ${sayi} sohbet de kalıcı olarak silinecek.` : "";
-  if (!(await onayla("Projeyi kaldır", `"${ad}" Kairo'dan kaldırılacak.${not} Bilgisayardaki proje dosyalarına dokunulmaz.`, { evet: "Kaldır", tehlike: true }))) return;
+  const metin = projeDisiGrup
+    ? `"${ad}" grubundaki ${sayi} sohbet kalıcı olarak silinecek. Bilgisayardaki dosyalar korunacak.`
+    : `"${ad}" Kairo'dan kaldırılacak.${not} Bilgisayardaki proje dosyalarına dokunulmaz.`;
+  if (!(await onayla(baslik, metin, { evet: projeDisiGrup ? "Sil" : "Kaldır", tehlike: true }))) return;
   try {
-    const r = await api(`/api/projeler/${encodeURIComponent(alanId)}`, { method: "DELETE" });
+    const yol = projeDisiGrup
+      ? `/api/oturumlar/grup/${projeDisiGrup}`
+      : `/api/projeler/${encodeURIComponent(alanId)}`;
+    const r = await api(yol, { method: "DELETE" });
     if (durum.oturumId && !(await api("/api/oturumlar")).some((o) => o.id === durum.oturumId)) git({ tur: "yeni" });
     await projeYenile();
     oturumlariYenile();
-    bildir(`Proje kaldırıldı${r.silinen_sohbet ? `, ${r.silinen_sohbet} sohbet silindi` : ""}.`, "basari");
+    const sonuc = projeDisiGrup
+      ? "Grubun sohbetleri silindi."
+      : `Proje kaldırıldı${r.silinen_sohbet ? `, ${r.silinen_sohbet} sohbet silindi` : ""}.`;
+    bildir(sonuc, "basari");
   } catch (e) { bildir(e.message, "hata"); }
 }
 

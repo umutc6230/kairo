@@ -29,6 +29,7 @@ from typing import Any
 from loguru import logger
 from pydantic import BaseModel, Field
 
+from app.agent import koordinasyon as koord
 from app.agent.arac_bul import ARAC_BUL
 from app.agent.hooks import HookSonucu
 from app.agent.ozet import mesaj_token, ozetle_gerekirse
@@ -841,12 +842,16 @@ class AgentRunner:
         try:
             # Arac baglami MCP sunucularini baslatabilir (soguk acilis dakikalar surebilir):
             # olay dongusunu kilitlememek icin is parcaciginda hazirlanir
-            if run.calisma_koku and self.araclar_kok is not None:  # izole worktree araclari
-                sistem, semalar, isleyiciler = await asyncio.to_thread(
-                    self.araclar_kok, run.hedef, run.calisma_koku
-                )
-            else:
-                sistem, semalar, isleyiciler = await asyncio.to_thread(self.araclar, run.hedef)
+            jeton = AKTIF_RUN.set(run_id)  # koordinasyon: baglam bu gorev adina kaydolur
+            try:
+                if run.calisma_koku and self.araclar_kok is not None:  # izole worktree araclari
+                    sistem, semalar, isleyiciler = await asyncio.to_thread(
+                        self.araclar_kok, run.hedef, run.calisma_koku
+                    )
+                else:
+                    sistem, semalar, isleyiciler = await asyncio.to_thread(self.araclar, run.hedef)
+            finally:
+                AKTIF_RUN.reset(jeton)
             # Ertelenen MCP araclari (arac_bul): bulunanlar her turda semalara eklenir; devam eden
             # gorevde gecmiste cagrilanlar yuklu gelir (semasiz cagri saglayicida reddedilir)
             bul = isleyiciler.get(ARAC_BUL)
@@ -931,8 +936,11 @@ class AgentRunner:
                     break
                 if run_id in self._iptal or run_id in self._duraklat:
                     continue  # bayraklar dongu basinda islenir; model cagrilmaz
-                # 2) kullanici yonlendirmeleri: guvenli sinirda
+                # 2) kullanici yonlendirmeleri + diger oturumlardan mesajlar: guvenli sinirda
                 run.kuyruk.extend(self._gelen.pop(run_id, []))
+                run.kuyruk.extend(  # dis icerik olarak isaretli (veri, emir degil)
+                    koord.mesaj_metni(m) for m in koord.KOORD.teslim_al(f"gorev:{run_id}")
+                )
                 while run.kuyruk:
                     m = run.kuyruk.pop(0)
                     run.mesajlar.append(
@@ -1034,6 +1042,7 @@ class AgentRunner:
         finally:
             run.kullanim.sure_sn = round(time.monotonic() - bas, 1)
             run.kuyruk.extend(self._gelen.pop(run_id, []))  # islenemeyen mesaj kaybolmasin
+            koord.KOORD.ayril(f"gorev:{run_id}")  # gorev durdu/bitti: dosyalarini birakir
             self.depo.kaydet(run)
             self._iptal.discard(run_id)
             self._duraklat.discard(run_id)

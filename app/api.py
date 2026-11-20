@@ -32,6 +32,7 @@ from pydantic import BaseModel, Field, ValidationError
 from app import URUN_ADI, URUN_SAHIBI, URUN_SAHIBI_GITHUB, URUN_SAHIBI_X, __version__
 from app.agent import akis as akis_mod
 from app.agent import cli_ajan, mcp_ice, mcp_oauth
+from app.agent import koordinasyon as koord
 from app.agent import review as rv
 from app.agent import worktree as wt
 from app.agent.ajanlar import AJAN_NOTU_ARACI, AJANA_MESAJ_ARACI, AjanDeposu, KuyrukOgesi
@@ -1850,6 +1851,11 @@ def uygulama_olustur(
     async def tarayici_kapat() -> dict:
         return await asyncio.to_thread(sohbet.tarayici.kapat)
 
+    @app.get("/api/koordinasyon")
+    async def koordinasyon_durumu() -> dict:
+        """Sag panel 'Koordinasyon' (aktif proje) + kenar cubugu rozetleri (tum projeler)."""
+        return {"proje": koord.KOORD.aktifler(sohbet.aktif_alan().id), "tum": koord.KOORD.tumu()}
+
     @app.put("/api/tarayici/panel")
     async def tarayici_paneli(istek: dict) -> dict:
         """Arayuzdeki tarayici panelinin adresi; modele sistem notu olarak gider (bos = kapali)."""
@@ -2499,11 +2505,19 @@ def uygulama_olustur(
     async def proje_sil(alan_id: str) -> dict:
         """Projeyi Kairo'dan kaldirir + ona bagli sohbetleri siler. Diskteki dosyalara DOKUNMAZ."""
         projeler.sil(alan_id)  # yoksa 404; sohbetler ancak proje gercekten varsa silinir
-        bagli = [o["id"] for o in oturumlar.liste() if o.get("alan") == alan_id]
+        return {"silindi": alan_id, "silinen_sohbet": alan_sohbetlerini_sil(alan_id)}
+
+    def alan_sohbetlerini_sil(alan_id: str) -> int:
+        bagli = [o["id"] for o in oturumlar.liste() if o.get("alan", "") == alan_id]
         for oid in bagli:
             with contextlib.suppress(Bulunamadi):
                 oturumlar.sil(oid)
-        return {"silindi": alan_id, "silinen_sohbet": len(bagli)}
+        return len(bagli)
+
+    @app.delete("/api/oturumlar/grup/{grup}")
+    async def proje_disi_sohbetleri_sil(grup: Literal["projesiz", "kisisel"]) -> dict:
+        alan_id = VARSAYILAN_ALAN_ID if grup == "kisisel" else ""
+        return {"silinen_sohbet": alan_sohbetlerini_sil(alan_id)}
 
     @app.put("/api/projeler/{alan_id}/mod")
     async def proje_mod(alan_id: str, istek: ModIstegi) -> dict:

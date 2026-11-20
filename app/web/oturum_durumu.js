@@ -6,17 +6,25 @@ const CALISAN = new Set(["calisiyor", "sirada"]);
 const ONAY = new Set(["onay_bekliyor", "cevap_bekliyor", "duraklatildi"]);
 const HATA = new Set(["basarisiz"]);
 
-let onbellek = { zaman: 0, harita: new Map(), dallar: new Map() };
+let onbellek = { zaman: 0, harita: new Map(), dallar: new Map(), koord: new Map() };
 
 // run id -> durum; 3 sn onbellek (liste her yenilemede tekrar istemesin)
 export async function gorevDurumlari(zorla = false) {
   if (!zorla && Date.now() - onbellek.zaman < 3000) return onbellek.harita;
   try {
-    const v = await api("/api/gorevler");
+    const [v, k] = await Promise.all([api("/api/gorevler"), api("/api/koordinasyon").catch(() => ({ tum: [] }))]);
     const g = v.gorevler || [];
-    onbellek = { zaman: Date.now(), harita: new Map(g.map((r) => [r.id, r.durum])), dallar: new Map(g.filter((r) => r.dal).map((r) => [r.id, r.dal])) };
+    onbellek = {
+      zaman: Date.now(), harita: new Map(g.map((r) => [r.id, r.durum])), dallar: new Map(g.filter((r) => r.dal).map((r) => [r.id, r.dal])),
+      koord: new Map((k.tum || []).map((x) => [x.kimlik, x])), // "oturum:<id>" | "gorev:<run>" -> {dosya, bekliyor}
+    };
   } catch { /* sunucu yoksa eski harita */ }
   return onbellek.harita;
+}
+
+// Koordinasyon rozeti: oturumun (ya da son gorevinin) baska oturumu bekleyip beklemedigi / dosya tutup tutmadigi
+export function oturumKoord(o) {
+  return onbellek.koord.get(`oturum:${o.id}`) || (o.son_run && onbellek.koord.get(`gorev:${o.son_run}`)) || null;
 }
 
 export function oturumDurumu(o, harita) {
