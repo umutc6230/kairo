@@ -1835,5 +1835,7 @@
  "Anahtar limiti": "Key limit",
  "Hesap bakiyesi": "Account balance",
  "Anahtar limiti kullanımı": "Key limit usage",
- "%{0}": "{0}%"
+ "%{0}": "{0}%",
+ "Sohbet mini haritası": "Chat minimap",
+ "Mesaja git: {0}": "Go to message: {0}"
 }

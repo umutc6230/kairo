@@ -1141,3 +1141,27 @@ a.sp-satir { text-decoration: none; }
 .kenar-kullanim .kk-bosluk { flex: 1; }
 .kenar-kullanim .kk-cubuk { flex: 1; height: 4px; border-radius: 2px; background: var(--yuzey3); overflow: hidden; }
 .kenar-kullanim .kk-cubuk span { display: block; height: 100%; background: var(--vurgu); }
+
+/* ---- sag panel arac izgarasi ---- */
+.sp-araclar { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; padding: 10px 10px 12px; border-bottom: 1px solid var(--cizgi); }
+.sp-arac { display: flex; align-items: center; gap: 8px; padding: 7px 9px; border: 1px solid var(--cizgi); border-radius: 8px; background: var(--yuzey); font-size: 12.5px; color: var(--soluk); text-align: left; min-width: 0; }
+.sp-arac:hover { background: var(--yuzey2); color: var(--metin); }
+.sp-arac svg { width: 15px; height: 15px; flex-shrink: 0; }
+.sp-arac kbd { margin-left: auto; font: 10.5px var(--mono); color: var(--cok-soluk); white-space: nowrap; }
+
+/* ---- proje agaci (Proje gorunumu) ---- */
+.proje-grup .grup-baslik { justify-content: flex-start; gap: 7px; color: var(--metin); font-size: 13.5px; }
+.proje-grup .grup-baslik .grup-sag { margin-left: auto; }
+.proje-grup .proje-ikon svg { width: 15px; height: 15px; color: var(--soluk); }
+.proje-grup .grup-ad { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.grup-sayi { font-size: 11px; font-weight: 500; color: var(--cok-soluk); }
+.proje-grup .grup-ogeler { margin-left: 17px; padding-left: 6px; border-left: 1px solid var(--cizgi); }
+.proje-grup .oturum { font-size: 13.5px; padding: 6px 8px; }
+
+/* ---- sohbet mini haritasi ---- */
+#g-sohbet { position: relative; }
+.mini-harita { position: absolute; left: 10px; top: 24px; bottom: 140px; width: 14px; z-index: 2; }
+.mm-cizgi { position: absolute; left: 0; width: 10px; height: 2px; padding: 0; border: 0; border-radius: 1px; background: var(--cizgi2); cursor: pointer; transition: width .12s, background .12s; }
+.mm-cizgi::before { content: ""; position: absolute; inset: -4px -2px; }
+.mm-cizgi:hover { width: 14px; background: var(--soluk); }
+.mm-cizgi.aktif { width: 14px; background: var(--vurgu); }

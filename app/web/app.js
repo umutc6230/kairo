@@ -19,6 +19,7 @@ import { dockAcKapa, dockKur, degisiklikYenile } from "./dock.js";
 import { gorunumUygula, kisayolEslesir } from "./ayarlar2.js";
 import { rutinleriYukle, rutinlerKur } from "./rutinler.js";
 import { ajanlarKur, ajanlarYukle } from "./ajanlar.js";
+import { miniHaritaKur } from "./minimap.js";
 import { DURUM_ETIKET, gorevDurumlari, oturumDurumu, sabitDegistir, sabitler } from "./oturum_durumu.js";
 import { ajanBloklariniCiz, ajanKayitlariniBirlestir, ajanliOturum, akisVar, calisanOturumId, durdur, mesajlariCiz, sohbetKur, sohbetRunlari, yeniSohbetEkrani } from "./sohbet.js";
 
@@ -269,7 +270,7 @@ function oturumListesiCiz() {
     const projeMi = ad.startsWith("p:");
     const alan = projeMi ? ad.slice(2) : "";
     const baslik = projeMi ? projeAdi(alan) : ad;
-    const grup = el(`<div class="grup ${kapaliGruplar.has(ad) ? "kapali" : ""}"><div class="grup-baslik"><span class="grup-ad" title="${kacir(baslik)}">${kacir(baslik)}</span><span class="grup-sag">${projeMi ? `<button class="ikon-btn grup-yeni" title="${kacir(baslik)}: yeni sohbet" aria-label="${kacir(baslik)} projesinde yeni sohbet" data-ikon="arti"></button>` : ""}<span data-ikon="asagi"></span></span></div><div class="grup-ogeler"></div></div>`);
+    const grup = el(`<div class="grup ${projeMi ? "proje-grup" : ""} ${kapaliGruplar.has(ad) ? "kapali" : ""}"><div class="grup-baslik">${projeMi ? '<span class="proje-ikon" data-ikon="klasor"></span>' : ""}<span class="grup-ad" title="${kacir(baslik)}">${kacir(baslik)}</span>${projeMi && liste.length ? `<span class="grup-sayi">${liste.length}</span>` : ""}<span class="grup-sag">${projeMi ? `<button class="ikon-btn grup-yeni" title="${kacir(baslik)}: yeni sohbet" aria-label="${kacir(baslik)} projesinde yeni sohbet" data-ikon="arti"></button>` : ""}<span data-ikon="asagi"></span></span></div><div class="grup-ogeler"></div></div>`);
     grup.querySelector(".grup-yeni")?.addEventListener("click", async (e) => {
       e.stopPropagation();
       await projeyeGec(alan || KISISEL);
@@ -594,6 +595,7 @@ async function baslat() {
   gorevlerKur();
   ozellestirSekmeleri();
   $("#sp-proje").onclick = () => projeAc();
+  miniHaritaKur();
   sagPanelKur({ baglayiciAc: () => ayarlarAc("mcp"), ayarAc: () => ayarlarAc(), degisiklikAc: () => dockAcKapa("degisiklik", true) });
   uzantiYuzeyleriKur();
   dockKur();
