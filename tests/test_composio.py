@@ -142,3 +142,18 @@ def test_connect_anahtari_mcpye_gider_rest_kullanilmaz(tmp_path):
     assert istekler[-1][2] == "tools/call"
     with pytest.raises(UygulamaHatasi, match="For You"):
         c.baglanti_kes("ca_1")
+
+
+def test_anahtar_diskte_sifreli_ve_eski_duz_kayit_tasinir(tmp_path) -> None:
+    """Anahtar composio.json'da duz metin durmaz; eski duz kayit ilk okumada sifrelenir."""
+    import json
+
+    from app.services.composio import Composio
+
+    yol = tmp_path / "composio.json"
+    yol.write_text(json.dumps({"anahtar": "ck_eskiDuzAnahtar1234567890", "user_id": "u1"}))
+    c = Composio(tmp_path)
+    assert c.anahtar() == "ck_eskiDuzAnahtar1234567890"
+    disk = yol.read_text()
+    assert "ck_eskiDuz" not in disk and "anahtar_sifreli" in disk
+    assert Composio(tmp_path).anahtar() == "ck_eskiDuzAnahtar1234567890"
