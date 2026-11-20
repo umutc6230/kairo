@@ -11,6 +11,7 @@ import json
 import re
 import time
 from collections.abc import AsyncIterator, Awaitable, Callable
+from contextlib import aclosing
 from pathlib import Path
 from typing import Any
 
@@ -1351,8 +1352,9 @@ class SohbetServisi:
         """Tur boyunca bu oturum koordinasyon panosunda gorunur; tur bitince dosyalari birakir."""
         jeton = koord.AKTIF_OTURUM.set(oturum_id)
         try:
-            async for olay in self._mesaj_gonder(oturum_id, istek):
-                yield olay
+            async with aclosing(self._mesaj_gonder(oturum_id, istek)) as akis:
+                async for olay in akis:
+                    yield olay
         finally:
             koord.KOORD.ayril(f"oturum:{oturum_id}")
             koord.AKTIF_OTURUM.reset(jeton)
