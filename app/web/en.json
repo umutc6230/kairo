@@ -1864,5 +1864,7 @@
  "Bu yol bulunamadi.": "This path was not found.",
  "Gecersiz anahtar.": "Invalid key.",
  "Sir adi BUYUK_HARF_VE_ALT_CIZGI olmali.": "Secret name must be UPPER_CASE_AND_UNDERSCORES.",
- "Sir bulunamadi.": "Secret not found."
+ "Sir bulunamadi.": "Secret not found.",
+ "Bu site gömülü gösterime izin vermiyor; ayrı pencerede açıldı.": "This site doesn't allow embedding; it opened in a separate window.",
+ "Bu site gömülü gösterime izin vermiyor ve ayrı pencere açılamadı.": "This site doesn't allow embedding and a separate window couldn't be opened."
 }

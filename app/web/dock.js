@@ -4,6 +4,7 @@ import { diffHtml } from "./inceleme.js";
 import { kacir } from "./md.js";
 import { kacir as _k, md } from "./md.js";
 import { $, $$, api, bildir, sseOku } from "./ortak.js";
+import { t } from "./i18n.js";
 
 // ---- yan sohbet (Claude Desktop "Side chat"): ayri oturum, ana sohbete karismaz ----
 let yanOturum = null;
@@ -139,7 +140,22 @@ function trAc(adres) {
     if (new URL(u).origin === location.origin) return bildir("Uygulamanın kendisi burada açılamaz.", "uyari");
   } catch { return bildir("Geçersiz adres.", "hata"); }
   $("#tr-adres").value = u;
-  $("#tr-cerceve").src = u;
+  const host = new URL(u).hostname;
+  const yerel = host === "localhost" || host.endsWith(".localhost") || /^127\./.test(host) || host === "[::1]";
+  if (!yerel) disAc(u); // dis siteler iframe'e izin vermez (X-Frame-Options): ayri pencere
+  else { $("#tr-cerceve").removeAttribute("srcdoc"); $("#tr-cerceve").src = u; } // srcdoc src'den once gelir
+}
+
+// Google/GitHub gibi siteler gomulu gosterimi yasaklar; Kairo icinden ayri tarayici penceresi acilir
+async function disAc(u) {
+  const f = $("#tr-cerceve");
+  let acildi = false;
+  try { acildi = !!(await window.pywebview?.api?.tarayici_ac(u)); } catch { /* masaustu kopru yok */ }
+  if (!acildi) acildi = !!window.open(u, "_blank", "noopener");
+  f.removeAttribute("src");
+  f.srcdoc = `<body style="margin:0;display:grid;place-items:center;height:100vh;font:14px system-ui;color:#9a9a94;background:transparent;text-align:center;padding:24px">${kacir(acildi
+    ? t("Bu site gömülü gösterime izin vermiyor; ayrı pencerede açıldı.")
+    : t("Bu site gömülü gösterime izin vermiyor ve ayrı pencere açılamadı."))}</body>`;
 }
 
 export function dockKur() {
