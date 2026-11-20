@@ -10,6 +10,8 @@ import { projeDurumu } from "./proje.js";
 import { ikon, ikonlariYerlestir } from "./ikonlar.js";
 import { kacir, md } from "./md.js";
 import { prKartlariKur } from "./pr_kart.js";
+import { DURUM_ETIKET, gorevDurumlari, oturumDurumu } from "./oturum_durumu.js";
+import { t } from "./i18n.js";
 import { dosyaAc } from "./sagpanel.js";
 import {
   $, $$, api, bildir, canliSayac, durum, el, istatistikCipleri, modal, modelAdi, modelProfil, onayla, sayi, sseOku,
@@ -21,6 +23,32 @@ let akisKontrol = null; // AbortController
 export let calisanOturumId = null; // kenar cubugunda animasyonlu gosterilir
 let geriCagri = { oturumlarYenile: async () => {}, baslikAyarla: () => {}, oturumAc: async () => {} };
 let oneriKararlari = {}; // acik oturumun alt oturum onerisi kararlari: kaynak -> alt id | "reddedildi"
+
+// Claude Desktop gibi: acilan alt oturum ana oturumda canli kart olarak durur (durum, son etkinlik)
+function altOturumCanli(id, kap) {
+  const k = el(`<button class="alt-canli" type="button"><span class="alt-canli-nokta"></span><span class="alt-canli-metin"><b></b><span class="soluk kucuk"></span></span><span class="alt-canli-ok" data-ikon="sag"></span></button>`);
+  k.onclick = () => geriCagri.oturumAc(id, true);
+  kap.append(k);
+  ikonlariYerlestir(k);
+  let bekleme = 0;
+  const ciz = async () => {
+    // kart once olusturulup sonra sayfaya eklenir: eklenene kadar kisa aralikla bekle
+    if (!k.isConnected) { if (bekleme++ < 40) setTimeout(ciz, 250); return; }
+    let o;
+    try {
+      const [liste, harita] = await Promise.all([api("/api/oturumlar"), gorevDurumlari()]);
+      o = liste.find((x) => x.id === id);
+      if (!o) { $("b", k).textContent = t("Alt oturum silinmiş"); k.disabled = true; return; }
+      const d = oturumDurumu(o, harita);
+      $("b", k).textContent = o.baslik || t("Alt oturum");
+      $(".soluk", k).textContent = d ? t(DURUM_ETIKET[d]) : (o.son_metin || t("Boşta"));
+      k.querySelector(".alt-canli-nokta").className = `alt-canli-nokta ${d}`;
+      k.title = `${o.baslik || ""}${o.son_metin ? `\n${o.son_metin}` : ""}`;
+      if (d === "calisiyor" || d === "onay") setTimeout(ciz, 4000);
+    } catch { setTimeout(ciz, 8000); }
+  };
+  ciz();
+}
 
 // Claude Code gibi: model alt oturum ONERIR, kullanici onaylarsa acilir ve gorev orada ilk mesaj olur.
 function altOturumKarti(o, kap) {
@@ -34,11 +62,7 @@ function altOturumKarti(o, kap) {
     const karar = oneriKararlari[o.id];
     if (karar === "reddedildi") { sira.innerHTML = '<span class="soluk kucuk">Geçildi</span>'; return; }
     if (karar?.startsWith("is:")) { sira.innerHTML = ""; threadKarti([karar.slice(3)], sira); return; }
-    if (karar) {
-      sira.innerHTML = '<span class="rozet yesil">Açıldı</span><button class="btn kucuk">Alt oturuma git</button>';
-      sira.querySelector("button").onclick = () => geriCagri.oturumAc(karar, true);
-      return;
-    }
+    if (karar) { sira.innerHTML = ""; altOturumCanli(karar, sira); return; }
     sira.innerHTML = '<button class="btn ana kucuk" data-ac>Alt oturumda başlat</button><button class="btn kucuk" data-arka title="Ayrı git dalında, ajan arka planda yapar; bitince incelersin">Arka planda yaptır (ayrı dal)</button><button class="btn kucuk" data-red>Gerek yok</button>';
     sira.querySelector("[data-arka]").onclick = async (e) => {
       e.currentTarget.disabled = true;

@@ -208,6 +208,10 @@ class OturumDeposu:
                     "ajan_sayisi": len(ham.get("ajan_runlari", [])),
                     "son_run": (ham.get("ajan_runlari") or [{}])[-1].get("run", ""),
                     "prlar": _prlar(ham.get("mesajlar", [])),
+                    # ana oturumdaki canli alt oturum karti: son etkinlik satiri (kisa, tek satir)
+                    "son_metin": " ".join(
+                        str((ham.get("mesajlar") or [{}])[-1].get("metin", "")).split()
+                    )[:140],
                     "ust": ham.get("ust", ""),
                     "alan": ham.get("alan", ""),
                 }
