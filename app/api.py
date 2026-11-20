@@ -166,8 +166,12 @@ HAFIZA_ARACI = {
     "type": "function",
     "function": {
         "name": "hafizaya_ekle",
-        "description": "Sonraki oturumlarda isine yarayacak KALICI bir proje bilgisini kaydeder "
-        "(or. 'testler pytest -q ile calisir'). Sir, gecici durum ya da tahmin yazma.",
+        "description": "Sonraki oturumlarda isine yarayacak KALICI bir bilgiyi kaydeder. SU "
+        "DURUMLARDA HEMEN CAGIR: calistir/test/derleme komutunu bulunca, bir hatanin kalici "
+        "cozumunu bulunca, kullanici bir tercih/kural soyleyince ('hep sunu yap', 'bunu "
+        "kullanma'), proje yapisi/onemli dosya yeri ogrenince, bir yol/arac kisitina "
+        "takilip calisan yolu bulunca. Kisa, tek cumle, kendi basina anlasilir yaz. Sir, "
+        "gecici durum ya da tahmin yazma.",
         "parameters": {
             "type": "object",
             "properties": {
@@ -182,6 +186,13 @@ HAFIZA_ARACI = {
         },
     },
 }  # fmt: skip
+
+HAFIZA_TALIMATI = (
+    "\n\n## Kalici hafiza\nOtomatik ogrenme acik. Gorev boyunca kalici ve tekrar kullanilabilir "
+    "bir bilgi ogrendiginde (komut, cozum, kullanici tercihi, proje yapisi, arac kisiti) "
+    "`hafizaya_ekle` ile hemen kaydet; gorevi bitirmeden once de bu gorevde ogrendigin en az "
+    "bir kalici bilgi var mi diye bak. Zaten hafizada olani tekrar yazma."
+)
 
 HAFIZA_YARGI_ARACI = {
     "type": "function",
@@ -450,6 +461,7 @@ def uygulama_olustur(
         sistem, araclar_, isleyiciler, _ = sohbet.baglam_hazirla(a, hedef, [], ajan_gorevi=True)
         if a.otomatik_ogrenme:  # kullanici actiysa ajan kalici not ekleyebilir (dusuk guven)
             araclar_ = [*araclar_, HAFIZA_ARACI]
+            sistem += HAFIZA_TALIMATI
 
             def hafizaya_ekle(metin: str, dayanak: list | None = None) -> dict:
                 try:
