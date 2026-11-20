@@ -965,9 +965,13 @@ class SohbetServisi:
                     isleyiciler |= skl.script_isleyicisi(self.skiller, kapali, ajan_kaydi)
                 mevcut = {a["function"]["name"] for a in araclar}
                 isleyiciler |= skl.arac_isleyicileri(self.skiller, kapali, lambda: mevcut)
-        # always: true skill'ler (or. guvenlik taramasi) skill ayarindan bagimsiz her istekte
+        # always: true YALNIZ uygulamayla gelen skill'de gecerli (guvenlik taramasi); proje/plugin
+        # skill'i bu bayrakla kendini her istege sokamaz (prompt injection)
         for s in self.skiller.kesfet():
-            if s.her_zaman and not s.hata and s.ad != otomatik and s.ad not in ayar.kapali_skiller:
+            if (
+                s.her_zaman and s.kaynak == "yerlesik" and not s.hata and s.ad != otomatik
+                and s.ad not in ayar.kapali_skiller
+            ):  # fmt: skip
                 skill_metni = f"{skill_metni}\n\n{skl.otomatik_metin(s)}".strip()
         talimat = self.talimatlar.sistem_metni(
             claude=ayar.claude_talimatlari, uygulama=ayar.uygulama_talimati
