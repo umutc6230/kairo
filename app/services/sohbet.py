@@ -17,6 +17,7 @@ from typing import Any
 from loguru import logger
 from pydantic import BaseModel, Field
 
+from app.agent import koordinasyon as koord
 from app.agent.arac_bul import ertele
 from app.agent.araclar import KOMUT_SEMALARI, YAZMA_SEMALARI, AjanAracKaydi
 from app.agent.checkpoints import CheckpointDeposu
@@ -1111,6 +1112,14 @@ class SohbetServisi:
         if not ayar.sohbet_araclari and alan.id == VARSAYILAN_ALAN_ID:
             return sistem, [], {}, otomatik  # kullanici sohbette araclari kapatti
         sistem += sirlar.talimat()
+        if ajan_kaydi is not None and "proje_dosya_yaz" in isleyiciler:
+            # oturumlar arasi koordinasyon: yalniz gercek projede (yazma araci varken)
+            kid = koord.kimlik()
+            koord.KOORD.kaydol(kid, alan.id, " ".join(istek_metni.split())[:80] or kid)
+            sistem += koord.KOORD.sistem_notu(kid, alan.id)
+            kapsam = ajan_kaydi.kapsam
+            araclar += koord.SEMALAR
+            isleyiciler |= koord.isleyiciler(alan.id, lambda d: kapsam.goreli(kapsam.coz(d)))
         if self.tarayici_paneli and "tarayici_git" in isleyiciler:
             # panel bir iframe/ayri pencere: model onu dogrudan goremez, kendi tarayicisiyla acar
             sistem += (
@@ -1339,6 +1348,16 @@ class SohbetServisi:
             pass  # isitma basarisizsa sohbet yine calisir, yalniz ilk mesaj yavas olur
 
     async def mesaj_gonder(self, oturum_id: str, istek: MesajIstegi) -> AsyncIterator[Olay]:
+        """Tur boyunca bu oturum koordinasyon panosunda gorunur; tur bitince dosyalari birakir."""
+        jeton = koord.AKTIF_OTURUM.set(oturum_id)
+        try:
+            async for olay in self._mesaj_gonder(oturum_id, istek):
+                yield olay
+        finally:
+            koord.KOORD.ayril(f"oturum:{oturum_id}")
+            koord.AKTIF_OTURUM.reset(jeton)
+
+    async def _mesaj_gonder(self, oturum_id: str, istek: MesajIstegi) -> AsyncIterator[Olay]:
         if not istek.metin.strip() and not istek.ekler:
             raise UygulamaHatasi("Bos mesaj gonderilemez.")
         ekler = [self.ekler.getir(i) for i in istek.ekler]

@@ -16,6 +16,7 @@ import os
 import shutil
 from pathlib import Path
 
+from app.agent import koordinasyon as koord
 from app.agent.checkpoints import Checkpoint, CheckpointDeposu, DosyaDurumu, Islem, dosya_hashi
 from app.agent.dosyalar import MAX_DOSYA_BAYT, KokKapsami, ikili_mi
 from app.agent.policy import Istek, PolitikaMotoru, YanEtki
@@ -61,6 +62,9 @@ class YazmaAraclari:
     def _izin(self, arac: str, yan_etki: YanEtki, yol: Path, ozet: str, *degisiklik: str) -> None:
         # degisiklik islem hash'ine girer: onaylanan yama/icerik degisirse onay gecmez
         imza = hashlib.sha256("\x00".join(degisiklik).encode("utf-8")).hexdigest()[:16]
+        if yan_etki in (YanEtki.yaz, YanEtki.sil):
+            # baska oturum bu dosyada calisiyorsa yazma ONAY SORMADAN reddedilir (DosyaMesgul)
+            koord.KOORD.sahiplen(koord.kimlik(), self.alan.id, self.kapsam.goreli(yol))
         self.politika.uygula(
             Istek(
                 arac=arac, yan_etki=yan_etki, yol=str(yol), komut=f"degisiklik:{imza}", ozet=ozet
