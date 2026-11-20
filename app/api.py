@@ -2487,8 +2487,13 @@ def uygulama_olustur(
 
     @app.delete("/api/projeler/{alan_id}")
     async def proje_sil(alan_id: str) -> dict:
-        projeler.sil(alan_id)
-        return {"silindi": alan_id}
+        """Projeyi Kairo'dan kaldirir + ona bagli sohbetleri siler. Diskteki dosyalara DOKUNMAZ."""
+        projeler.sil(alan_id)  # yoksa 404; sohbetler ancak proje gercekten varsa silinir
+        bagli = [o["id"] for o in oturumlar.liste() if o.get("alan") == alan_id]
+        for oid in bagli:
+            with contextlib.suppress(Bulunamadi):
+                oturumlar.sil(oid)
+        return {"silindi": alan_id, "silinen_sohbet": len(bagli)}
 
     @app.put("/api/projeler/{alan_id}/mod")
     async def proje_mod(alan_id: str, istek: ModIstegi) -> dict:

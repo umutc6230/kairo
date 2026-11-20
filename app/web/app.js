@@ -285,11 +285,15 @@ function oturumListesiCiz() {
     const projeMi = ad.startsWith("p:");
     const alan = projeMi ? ad.slice(2) : "";
     const baslik = projeMi ? projeAdi(alan) : ad;
-    const grup = el(`<div class="grup ${projeMi ? "proje-grup" : ""} ${kapaliGruplar.has(ad) ? "kapali" : ""}"><div class="grup-baslik">${projeMi ? '<span class="proje-ikon" data-ikon="klasor"></span>' : ""}<span class="grup-ad" title="${kacir(baslik)}">${kacir(baslik)}</span>${projeMi && liste.length ? `<span class="grup-sayi">${liste.length}</span>` : ""}<span class="grup-sag">${projeMi ? `<button class="ikon-btn grup-yeni" title="${kacir(baslik)}: yeni sohbet" aria-label="${kacir(baslik)} projesinde yeni sohbet" data-ikon="arti"></button>` : ""}<span data-ikon="asagi"></span></span></div><div class="grup-ogeler"></div></div>`);
+    const grup = el(`<div class="grup ${projeMi ? "proje-grup" : ""} ${kapaliGruplar.has(ad) ? "kapali" : ""}"><div class="grup-baslik">${projeMi ? '<span class="proje-ikon" data-ikon="klasor"></span>' : ""}<span class="grup-ad" title="${kacir(baslik)}">${kacir(baslik)}</span>${projeMi && liste.length ? `<span class="grup-sayi">${liste.length}</span>` : ""}<span class="grup-sag">${projeMi ? `<button class="ikon-btn grup-yeni" title="${kacir(baslik)}: yeni sohbet" aria-label="${kacir(baslik)} projesinde yeni sohbet" data-ikon="arti"></button><button class="ikon-btn grup-menu" title="${kacir(baslik)}: diğer" aria-label="${kacir(baslik)} proje menüsü" data-ikon="daha"></button>` : ""}<span data-ikon="asagi"></span></span></div><div class="grup-ogeler"></div></div>`);
     grup.querySelector(".grup-yeni")?.addEventListener("click", async (e) => {
       e.stopPropagation();
       await projeyeGec(alan || KISISEL);
       git({ tur: "yeni" });
+    });
+    grup.querySelector(".grup-menu")?.addEventListener("click", (e) => {
+      e.stopPropagation();
+      menuAc(e.currentTarget, [{ metin: "Projeyi kaldır", ikon: "cop", eylem: () => projeKaldir(alan, baslik, liste.length) }]);
     });
     grup.querySelector(".grup-baslik").onclick = () => {
       grup.classList.toggle("kapali");
@@ -352,6 +356,19 @@ async function yenidenAdlandir(o) {
     await api(`/api/oturumlar/${o.id}`, { method: "PATCH", govde: { baslik: yeni } });
     if (o.id === durum.oturumId) baslikAyarla(yeni);
     oturumlariYenile();
+  } catch (e) { bildir(e.message, "hata"); }
+}
+
+// Claude/Codex gibi: proje Kairo'dan kaldirilir, bagli sohbetleri de silinir; diskteki dosyalar kalir
+async function projeKaldir(alanId, ad, sayi) {
+  const not = sayi ? ` Bu projeye ait ${sayi} sohbet de kalıcı olarak silinecek.` : "";
+  if (!(await onayla("Projeyi kaldır", `"${ad}" Kairo'dan kaldırılacak.${not} Bilgisayardaki proje dosyalarına dokunulmaz.`, { evet: "Kaldır", tehlike: true }))) return;
+  try {
+    const r = await api(`/api/projeler/${encodeURIComponent(alanId)}`, { method: "DELETE" });
+    if (durum.oturumId && !(await api("/api/oturumlar")).some((o) => o.id === durum.oturumId)) git({ tur: "yeni" });
+    await projeYenile();
+    oturumlariYenile();
+    bildir(`Proje kaldırıldı${r.silinen_sohbet ? `, ${r.silinen_sohbet} sohbet silindi` : ""}.`, "basari");
   } catch (e) { bildir(e.message, "hata"); }
 }
 

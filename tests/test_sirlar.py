@@ -116,3 +116,28 @@ async def test_modeli_bos_proje_varsayilani_kullanir(app, istemci, tmp_path: Pat
     alan = app.state.sohbet.aktif_alan()
     assert (alan.koordinator_model, alan.uygulayici_model) == ("qwen/qwen4-max", "deepseek/x")
     assert app.state.sohbet.projeler.aktif().koordinator_model == ""  # kayit degismedi
+
+
+async def test_proje_kaldirilinca_sohbetleri_silinir_dosyalar_kalir(
+    istemci, tmp_path: Path
+) -> None:
+    """Proje kaldirma: bagli sohbetler gider, baska projenin sohbeti ve diskteki dosya kalir."""
+
+    async def proje(ad: str) -> str:
+        (tmp_path / ad).mkdir()
+        (tmp_path / ad / "kod.py").write_text("x = 1")
+        p = (await istemci.post("/api/projeler", json={"yol": str(tmp_path / ad)})).json()["id"]
+        await istemci.post(f"/api/projeler/{p}/etkin")
+        return p
+
+    a = await proje("a")
+    s1 = (await istemci.post("/api/oturumlar")).json()["id"]
+    b = await proje("b")
+    s2 = (await istemci.post("/api/oturumlar")).json()["id"]
+    r = (await istemci.delete(f"/api/projeler/{a}")).json()
+    assert r["silinen_sohbet"] == 1
+    kalan = {o["id"] for o in (await istemci.get("/api/oturumlar")).json()}
+    assert s1 not in kalan and s2 in kalan
+    assert (tmp_path / "a" / "kod.py").exists()
+    assert b in {p["id"] for p in (await istemci.get("/api/projeler")).json()["alanlar"]}
+    assert (await istemci.delete("/api/projeler/yokboyle")).status_code == 404
