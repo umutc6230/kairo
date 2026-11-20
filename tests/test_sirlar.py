@@ -141,3 +141,20 @@ async def test_proje_kaldirilinca_sohbetleri_silinir_dosyalar_kalir(
     assert (tmp_path / "a" / "kod.py").exists()
     assert b in {p["id"] for p in (await istemci.get("/api/projeler")).json()["alanlar"]}
     assert (await istemci.delete("/api/projeler/yokboyle")).status_code == 404
+
+
+async def test_tarayici_paneli_modele_bildirilir(app, istemci, tmp_path: Path) -> None:
+    """Paneldeki adres sistem notuna girer; gecersiz adres reddedilir, bos adres notu kaldirir."""
+    (tmp_path / "p").mkdir()
+    p = (await istemci.post("/api/projeler", json={"yol": str(tmp_path / "p")})).json()["id"]
+    await istemci.post(f"/api/projeler/{p}/etkin")
+    s = app.state.sohbet
+    for kotu in ("javascript:alert(1)", "file:///C:/x", "http://kul:sifre@host/"):
+        r = await istemci.put("/api/tarayici/panel", json={"adres": kotu})
+        assert r.status_code >= 400
+    await istemci.put("/api/tarayici/panel", json={"adres": "http://localhost:3000/"})
+    ayar = s.yonetici.ayarlar.oku().model_copy(update={"tarayici_acik": True})
+    sistem, _, isl, _ = s.baglam_hazirla(ayar, "panelde ne var", [])
+    assert "tarayici_git" in isl and "http://localhost:3000/" in sistem
+    await istemci.put("/api/tarayici/panel", json={"adres": ""})
+    assert "Tarayici paneli" not in s.baglam_hazirla(ayar, "x", [])[0]

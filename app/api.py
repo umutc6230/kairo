@@ -1850,6 +1850,16 @@ def uygulama_olustur(
     async def tarayici_kapat() -> dict:
         return await asyncio.to_thread(sohbet.tarayici.kapat)
 
+    @app.put("/api/tarayici/panel")
+    async def tarayici_paneli(istek: dict) -> dict:
+        """Arayuzdeki tarayici panelinin adresi; modele sistem notu olarak gider (bos = kapali)."""
+        adres = str(istek.get("adres", "")).strip()[:2000]
+        u = urlsplit(adres)
+        if adres and (u.scheme not in ("http", "https") or not u.hostname or u.username):
+            raise UygulamaHatasi("Gecersiz adres.")
+        sohbet.tarayici_paneli = adres
+        return {"adres": adres}
+
     @app.get("/api/tarayici")
     async def tarayici_durum() -> dict:
         return {"acik": sohbet.tarayici.acik_mi(), "playwright": playwright_var()}

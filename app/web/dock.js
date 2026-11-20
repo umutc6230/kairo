@@ -140,11 +140,15 @@ function trAc(adres) {
     if (new URL(u).origin === location.origin) return bildir("Uygulamanın kendisi burada açılamaz.", "uyari");
   } catch { return bildir("Geçersiz adres.", "hata"); }
   $("#tr-adres").value = u;
+  panelBildir(u);
   const host = new URL(u).hostname;
   const yerel = host === "localhost" || host.endsWith(".localhost") || /^127\./.test(host) || host === "[::1]";
   if (!yerel) disAc(u); // dis siteler iframe'e izin vermez (X-Frame-Options): ayri pencere
   else { $("#tr-cerceve").removeAttribute("srcdoc"); $("#tr-cerceve").src = u; } // srcdoc src'den once gelir
 }
+
+// Model paneli goremez: acik adres sistem notuyla bildirilir, model kendi tarayicisiyla acar
+const panelBildir = (adres) => api("/api/tarayici/panel", { method: "PUT", govde: { adres } }).catch(() => {});
 
 // Google/GitHub gibi siteler gomulu gosterimi yasaklar; Kairo icinden ayri tarayici penceresi acilir
 async function disAc(u) {
@@ -160,7 +164,13 @@ async function disAc(u) {
 
 export function dockKur() {
   $$("[data-dock]").forEach((b) => { b.onclick = () => dockAcKapa(b.dataset.dock); });
-  $$(".dock-panel [data-kapat]").forEach((b) => { b.onclick = () => dockAcKapa(b.closest(".dock-panel").dataset.panel, false); });
+  $$(".dock-panel [data-kapat]").forEach((b) => {
+    b.onclick = () => {
+      const panel = b.closest(".dock-panel").dataset.panel;
+      if (panel === "tarayici") panelBildir(""); // kapali panel artik modele bildirilmez
+      dockAcKapa(panel, false);
+    };
+  });
   $("#tm-girdi").onkeydown = (e) => {
     if (e.key === "Enter" && e.target.value.trim()) { tmGonder(e.target.value); e.target.value = ""; }
   };

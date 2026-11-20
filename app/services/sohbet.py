@@ -761,6 +761,7 @@ class SohbetServisi:
         self.openrouter = None  # OpenRouterDeposu (api baglar): gorsel_uret icin
         self.is_emirleri = None  # (ac, listele) api baglar: sohbetten thread (is emri)
         self.tarayici = None  # Tarayici (api baglar)
+        self.tarayici_paneli = ""  # kullanicinin tarayici panelinde actigi adres (arayuz bildirir)
         self.masaustu = None  # Masaustu (api baglar)
         self.kod_zekasi: dict[str, Any] = {}  # alan id -> KodZekasi (dil sunuculari surer)
         self.web_transport = None  # testlerde sahte web
@@ -1110,6 +1111,13 @@ class SohbetServisi:
         if not ayar.sohbet_araclari and alan.id == VARSAYILAN_ALAN_ID:
             return sistem, [], {}, otomatik  # kullanici sohbette araclari kapatti
         sistem += sirlar.talimat()
+        if self.tarayici_paneli and "tarayici_git" in isleyiciler:
+            # panel bir iframe/ayri pencere: model onu dogrudan goremez, kendi tarayicisiyla acar
+            sistem += (
+                "\n\n## Tarayici paneli\nKullanicinin Kairo tarayici panelinde su sayfa acik: "
+                f"{self.tarayici_paneli}\nKullanici bu sayfadan/ekrandan bahsederse tarayici_git "
+                "ile ac, tarayici_oku ile metni, tarayici_ekran + gorsel_oku ile goruntuyu incele."
+            )
         # MCP semalari baglami dolduruyordu (128 arac ~34K token): ihtiyaca gore yuklenir
         ertele(araclar, isleyiciler, {a.get("ad", "") for m in onceki for a in m.araclar})
         return sistem, araclar, isleyiciler, otomatik
