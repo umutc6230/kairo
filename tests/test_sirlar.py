@@ -101,3 +101,18 @@ def test_oturum_listesinde_pr_linkleri() -> None:
     m = [{"metin": "PR: https://github.com/u/r/pull/9 ve https://github.com/u/r/pull/9"},
          {"metin": "diger https://github.com/u/r/pull/10/files"}]  # fmt: skip
     assert _prlar(m) == ["https://github.com/u/r/pull/9", "https://github.com/u/r/pull/10"]
+
+
+async def test_modeli_bos_proje_varsayilani_kullanir(app, istemci, tmp_path: Path) -> None:
+    """Varsayilanlar sonradan girilse de modeli secilmemis eski proje onlari kullanir."""
+    (tmp_path / "eski").mkdir()
+    p = await istemci.post(
+        "/api/projeler", json={"yol": str(tmp_path / "eski"), "guven": "guvenilir"}
+    )
+    await istemci.post(f"/api/projeler/{p.json()['id']}/etkin")
+    ayar = (await istemci.get("/api/ayarlar")).json()
+    ayar |= {"varsayilan_koordinator": "qwen/qwen4-max", "varsayilan_uygulayici": "deepseek/x"}
+    assert (await istemci.put("/api/ayarlar", json=ayar)).status_code == 200
+    alan = app.state.sohbet.aktif_alan()
+    assert (alan.koordinator_model, alan.uygulayici_model) == ("qwen/qwen4-max", "deepseek/x")
+    assert app.state.sohbet.projeler.aktif().koordinator_model == ""  # kayit degismedi

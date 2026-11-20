@@ -774,6 +774,13 @@ class SohbetServisi:
         """
         alan = self.projeler.aktif() if self.projeler else None
         if alan is not None:
+            # modeli secilmemis proje Ayarlar'daki varsayilan koordinator/uygulayiciyi kullanir
+            # (kopya: kayit bos kalir, varsayilan degisince hemen yansir)
+            a = self.yonetici.ayarlar.oku()
+            k = alan.koordinator_model or a.varsayilan_koordinator
+            u = alan.uygulayici_model or a.varsayilan_uygulayici
+            if (k, u) != (alan.koordinator_model, alan.uygulayici_model):
+                alan = alan.model_copy(update={"koordinator_model": k, "uygulayici_model": u})
             return alan
         return CalismaAlani(
             id=VARSAYILAN_ALAN_ID,
