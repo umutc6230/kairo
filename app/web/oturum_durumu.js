@@ -6,14 +6,15 @@ const CALISAN = new Set(["calisiyor", "sirada"]);
 const ONAY = new Set(["onay_bekliyor", "cevap_bekliyor", "duraklatildi"]);
 const HATA = new Set(["basarisiz"]);
 
-let onbellek = { zaman: 0, harita: new Map() };
+let onbellek = { zaman: 0, harita: new Map(), dallar: new Map() };
 
 // run id -> durum; 3 sn onbellek (liste her yenilemede tekrar istemesin)
 export async function gorevDurumlari(zorla = false) {
   if (!zorla && Date.now() - onbellek.zaman < 3000) return onbellek.harita;
   try {
     const v = await api("/api/gorevler");
-    onbellek = { zaman: Date.now(), harita: new Map((v.gorevler || []).map((r) => [r.id, r.durum])) };
+    const g = v.gorevler || [];
+    onbellek = { zaman: Date.now(), harita: new Map(g.map((r) => [r.id, r.durum])), dallar: new Map(g.filter((r) => r.dal).map((r) => [r.id, r.dal])) };
   } catch { /* sunucu yoksa eski harita */ }
   return onbellek.harita;
 }
@@ -26,6 +27,9 @@ export function oturumDurumu(o, harita) {
   if (HATA.has(d)) return "hata";
   return "";
 }
+
+// Claude Desktop gibi: oturumun son gorevi ayri dalda (worktree) calistiysa dal adi
+export const oturumDali = (o) => (o.son_run && onbellek.dallar.get(o.son_run)) || "";
 
 export const DURUM_ETIKET = { calisiyor: "Çalışıyor", onay: "Onay bekliyor", hata: "Hata" };
 

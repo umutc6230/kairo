@@ -1197,3 +1197,11 @@ a.sp-satir { text-decoration: none; }
 .yol-link { cursor: pointer; color: var(--mavi); text-decoration: underline dotted; text-underline-offset: 3px; overflow-wrap: anywhere; }
 .yol-link:hover, .yol-link:focus-visible { text-decoration-style: solid; outline: none; }
 .yol-link code { color: inherit; }
+
+/* kenar cubugu oturum rozetleri (Claude Desktop gibi): PR ve dal */
+.oturum-rozet { display: inline-flex; align-items: center; gap: 2px; margin-left: 6px; flex-shrink: 0; font-size: 12px; }
+.oturum-rozet svg { width: 14px; height: 14px; }
+.oturum-rozet.pr { color: var(--yesil); }
+.oturum-rozet.dal { color: #a371f7; }
+.grup-uyari { display: inline-flex; color: var(--sari, #d9a03f); margin-right: 4px; }
+.grup-uyari svg { width: 14px; height: 14px; }

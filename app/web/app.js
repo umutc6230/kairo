@@ -20,7 +20,7 @@ import { gorunumUygula, kisayolEslesir } from "./ayarlar2.js";
 import { rutinleriYukle, rutinlerKur } from "./rutinler.js";
 import { ajanlarKur, ajanlarYukle } from "./ajanlar.js";
 import { miniHaritaKur } from "./minimap.js";
-import { DURUM_ETIKET, gorevDurumlari, oturumDurumu, sabitDegistir, sabitler } from "./oturum_durumu.js";
+import { DURUM_ETIKET, gorevDurumlari, oturumDali, oturumDurumu, sabitDegistir, sabitler } from "./oturum_durumu.js";
 import { ajanBloklariniCiz, ajanKayitlariniBirlestir, ajanliOturum, akisVar, calisanOturumId, durdur, mesajlariCiz, sohbetKur, sohbetRunlari, yeniSohbetEkrani } from "./sohbet.js";
 
 const BASLIKLAR = { karsilastir: "Karşılaştır", ocr: "OCR testi", arac: "Araç testi", paket: "Test paketi", eklentiler: "Eklentiler", skiller: "Skill'ler ve talimatlar", modeller: "Modeller", gorevler: "Ajan görevleri", rutinler: "Rutinler", ajanlar: "Ajanlar" };
@@ -301,7 +301,7 @@ function oturumListesiCiz() {
       const kapali = kapaliAltlar.has(o.id) && !cocuk.some((c) => c.id === durum.oturumId);
       const od = o.id === calisanOturumId ? "calisiyor" : oturumDurumu(o, gorevHaritasi);
       const s = el(`<div class="oturum ${alt ? "alt-oturum" : ""} ${durum.gorunum === "sohbet" && o.id === durum.oturumId ? "aktif" : ""} ${od ? `durum-${od}` : ""} ${od === "calisiyor" ? "calisiyor" : ""}" data-id="${o.id}">
-        <span class="calisma-nokta" ${od ? `title="${kacir(DURUM_ETIKET[od])}" role="img" aria-label="${kacir(DURUM_ETIKET[od])}"` : 'aria-hidden="true"'}></span><span class="ad" title="${kacir(o.baslik)}">${kacir(o.baslik)}</span>${cocuk.length ? `<button class="ikon-btn alt-ac ${kapali ? "kapali" : ""}" title="Alt oturumlar (${cocuk.length})" aria-label="Alt oturumları ${kapali ? "göster" : "gizle"}" aria-expanded="${!kapali}" data-ikon="asagi"></button>` : ""}<button class="ikon-btn daha" title="Diger" data-ikon="daha"></button></div>`);
+        <span class="calisma-nokta" ${od ? `title="${kacir(DURUM_ETIKET[od])}" role="img" aria-label="${kacir(DURUM_ETIKET[od])}"` : 'aria-hidden="true"'}></span><span class="ad" title="${kacir(o.baslik)}">${kacir(o.baslik)}</span>${rozetler(o)}${cocuk.length ? `<button class="ikon-btn alt-ac ${kapali ? "kapali" : ""}" title="Alt oturumlar (${cocuk.length})" aria-label="Alt oturumları ${kapali ? "göster" : "gizle"}" aria-expanded="${!kapali}" data-ikon="asagi"></button>` : ""}<button class="ikon-btn daha" title="Diger" data-ikon="daha"></button></div>`);
       s.querySelector(".alt-ac")?.addEventListener("click", (e) => {
         e.stopPropagation();
         kapaliAltlar[kapali ? "delete" : "add"](o.id);
@@ -316,10 +316,20 @@ function oturumListesiCiz() {
       cocuk.forEach((c) => ekle(c, true));
     };
     liste.forEach((o) => ekle(o));
+    if (liste.some((o) => oturumDurumu(o, gorevHaritasi) === "hata")) { // Claude gibi: grupta hatali oturum var
+      grup.querySelector(".grup-sag").insertAdjacentHTML("afterbegin", '<span class="grup-uyari" title="Bu gruptaki bir oturumda görev hatayla bitti" role="img" aria-label="Hatalı oturum var" data-ikon="uyari"></span>');
+    }
     kap.append(grup);
   }
   if (!gruplar.size) kap.append(el(`<div class="ayar-not" style="padding:16px 10px">Henüz sohbet yok.</div>`));
   ikonlariYerlestir(kap);
+}
+
+// Oturum satiri rozetleri: oturumda gecen PR'lar ve son gorevin calistigi dal (worktree)
+function rozetler(o) {
+  const pr = o.prlar?.length ? `<span class="oturum-rozet pr" title="${kacir(o.prlar.join(" · "))}" role="img" aria-label="${o.prlar.length} PR"><span data-ikon="pr"></span>${o.prlar.length > 1 ? o.prlar.length : ""}</span>` : "";
+  const dal = oturumDali(o);
+  return pr + (dal ? `<span class="oturum-rozet dal" title="Dal: ${kacir(dal)}" role="img" aria-label="Dal ${kacir(dal)}"><span data-ikon="dal"></span></span>` : "");
 }
 
 function oturumSatiriBagla(s, o, grup) {

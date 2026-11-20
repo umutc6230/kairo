@@ -93,3 +93,11 @@ def test_always_bayragi_yalniz_yerlesik_skillde(tmp_path: Path) -> None:
     )
     s = next(s for s in SkillDeposu(tmp_path, [("uygulama", kok.parent)]).kesfet())
     assert s.her_zaman and s.kaynak != "yerlesik"  # sohbet.py bu kaynagi yuklemez
+
+
+def test_oturum_listesinde_pr_linkleri() -> None:
+    from app.services.oturumlar import _prlar
+
+    m = [{"metin": "PR: https://github.com/u/r/pull/9 ve https://github.com/u/r/pull/9"},
+         {"metin": "diger https://github.com/u/r/pull/10/files"}]  # fmt: skip
+    assert _prlar(m) == ["https://github.com/u/r/pull/9", "https://github.com/u/r/pull/10"]
