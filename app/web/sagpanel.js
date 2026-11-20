@@ -359,7 +359,11 @@ async function degisikliklerYenile() {
   if (!kap || $("#sag-panel").hidden) return;
   try {
     const d = await api("/api/proje/degisiklikler");
-    if (d.bilgisayar) $("#sp-bilgisayar").textContent = d.bilgisayar;
+    if (d.bilgisayar) {
+      $("#sp-bilgisayar").textContent = d.bilgisayar;
+      $("#kul-ad").textContent = d.bilgisayar; // kenar alti: yuklu oldugu PC adi
+      $("#kul-harf").textContent = d.bilgisayar[0].toUpperCase();
+    }
     $("#sp-dal-satir").hidden = !d.repo;
     if (d.repo) {
       $("#sp-dal").textContent = d.dal || "dal yok";

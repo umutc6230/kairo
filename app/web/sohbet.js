@@ -80,6 +80,7 @@ function altOturumKarti(o, kap) {
 
 export function sohbetKur(cb) {
   geriCagri = cb;
+  kaydirmaTakibiKur();
   const girdi = $("#girdi");
   girdi.addEventListener("input", () => { boyutla(); gonderDurumu(); });
   girdi.addEventListener("keydown", (e) => {
@@ -233,9 +234,37 @@ async function ekYukle(dosya) {
 }
 
 // ---- mesaj cizimi ----
+// Claude Desktop gibi: kullanici en alttaysa icerik buyudukce takip edilir; yukari kaydirinca birakilir
+let yapisik = true;
 function sonaKaydir(zorla = false) {
+  if (zorla) yapisik = true;
+  if (!yapisik) return okDurumu();
   const m = $("#mesajlar");
-  if (zorla || m.scrollHeight - m.scrollTop - m.clientHeight < 160) m.scrollTop = m.scrollHeight;
+  m.scrollTop = m.scrollHeight;
+  okDurumu();
+}
+
+function okDurumu() {
+  const ok = $("#alta-in");
+  if (!ok) return;
+  const m = $("#mesajlar");
+  ok.hidden = m.scrollHeight - m.scrollTop - m.clientHeight < 80;
+  ok.style.bottom = `${m.parentElement.clientHeight - m.offsetTop - m.clientHeight + 16}px`;
+}
+
+function kaydirmaTakibiKur() {
+  const m = $("#mesajlar");
+  const ok = el(`<button class="alta-in" id="alta-in" type="button" aria-label="En alta in" title="En alta in" hidden>${ikon("asagi")}</button>`);
+  ok.onclick = () => sonaKaydir(true);
+  m.after(ok);
+  m.addEventListener("scroll", () => {
+    yapisik = m.scrollHeight - m.scrollTop - m.clientHeight < 40;
+    okDurumu();
+  }, { passive: true });
+  const takip = () => sonaKaydir(); // MutationObserver degisiklikleri zaten topluyor
+  new MutationObserver(takip).observe(m, { childList: true, subtree: true, characterData: true, attributes: true, attributeFilter: ["style", "open", "hidden"] });
+  m.addEventListener("load", takip, true); // resim/iframe sonradan yuklenince yukseklik degisir
+  new ResizeObserver(takip).observe(m);
 }
 
 function sutun() {

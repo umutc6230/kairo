@@ -1160,3 +1160,8 @@ a.sp-satir { text-decoration: none; }
 .oturum.durum-onay .calisma-nokta { background: var(--sari); box-shadow: 0 0 0 3px color-mix(in srgb, var(--sari) 25%, transparent); }
 .oturum.durum-hata .calisma-nokta { background: var(--kirmizi); }
 .oturum.aktif .calisma-nokta:not([title]) { background: var(--soluk); }
+/* sohbet: en alta in oku (kullanici yukari kaydirinca gorunur) */
+.alta-in { position: absolute; left: 50%; transform: translateX(-50%); z-index: 5; width: 36px; height: 36px; border-radius: 50%; display: grid; place-items: center; background: var(--yuzey2); border: 1px solid var(--cizgi2); color: var(--metin); cursor: pointer; box-shadow: 0 4px 14px rgba(0,0,0,.3); }
+.alta-in:hover { background: var(--yuzey3); }
+.alta-in[hidden] { display: none; }
+.alta-in svg { width: 18px; height: 18px; }
