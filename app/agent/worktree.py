@@ -42,6 +42,20 @@ def depo_koku(proje: Path) -> Path:
     return Path(cikti)
 
 
+def worktree_dogrula(proje: Path, yol: Path, dal: str) -> None:
+    def ortak_dizin(klasor: Path) -> Path:
+        kod, cikti = _git(klasor, "rev-parse", "--path-format=absolute", "--git-common-dir")
+        if kod != 0:
+            raise UygulamaHatasi("Worktree deposu dogrulanamadi.")
+        return Path(cikti).resolve()
+
+    if ortak_dizin(proje) != ortak_dizin(yol):
+        raise UygulamaHatasi("Bu worktree acik projeye ait degil.")
+    kod, etkin_dal = _git(yol, "symbolic-ref", "--short", "HEAD")
+    if kod != 0 or etkin_dal != dal:
+        raise UygulamaHatasi("Worktree artik bu gorevin dalinda degil.")
+
+
 def git_mi(proje: Path) -> bool:
     """Klasor en az bir commit'i olan bir git deposunda mi (worktree HEAD ister)."""
     try:
@@ -87,12 +101,17 @@ def entegre_et(proje: Path, yol: Path, dal: str, mesaj: str, test_komutu: str = 
     if not yol.is_dir():
         raise UygulamaHatasi("Bu gorevin worktree'si bulunamadi (zaten entegre ya da silinmis).")
     # 1) worktree'deki degisiklikler ajan dalina commit
-    _git(yol, "add", "-A")
+    kod, cikti = _git(yol, "add", "-A")
+    if kod != 0:
+        raise UygulamaHatasi(f"Ajan degisiklikleri hazirlanamadi: {cikti[:300]}")
     kod, cikti = _git(yol, "-c", "user.name=Kairo", "-c", "user.email=ajan@yerel",
                       "commit", "-m", mesaj[:200] or "ajan degisikligi")  # fmt: skip
     if kod != 0 and "nothing to commit" not in cikti:
         raise UygulamaHatasi(f"Ajan dalina commit yapilamadi: {cikti[:300]}")
-    degisen = _git(kok, "diff", "--name-only", f"HEAD...{dal}")[1].splitlines()
+    kod, cikti = _git(kok, "diff", "--name-only", f"HEAD...{dal}")
+    if kod != 0:
+        raise UygulamaHatasi(f"Ajan dali karsilastirilamadi: {cikti[:300]}")
+    degisen = cikti.splitlines()
     if not degisen:
         return {"durum": "degisiklik_yok", "dosyalar": []}
     # 2) ortak test worktree'de
@@ -123,6 +142,10 @@ def entegre_et(proje: Path, yol: Path, dal: str, mesaj: str, test_komutu: str = 
 def at(proje: Path, yol: Path, dal: str) -> dict:
     """Izole calismayi birlestirmeden siler (ana agaca dokunmaz)."""
     kok = depo_koku(proje)
-    _git(kok, "worktree", "remove", "--force", str(yol))
-    _git(kok, "branch", "-D", dal)
+    kod, cikti = _git(kok, "worktree", "remove", "--force", str(yol))
+    if kod != 0:
+        raise UygulamaHatasi(f"Worktree kaldirilamadi: {cikti[:300]}")
+    kod, cikti = _git(kok, "branch", "-D", dal)
+    if kod != 0:
+        raise UygulamaHatasi(f"Worktree kaldirildi ancak dal silinemedi: {cikti[:300]}")
     return {"durum": "atildi"}
