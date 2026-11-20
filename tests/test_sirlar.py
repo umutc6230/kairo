@@ -143,6 +143,23 @@ async def test_proje_kaldirilinca_sohbetleri_silinir_dosyalar_kalir(
     assert (await istemci.delete("/api/projeler/yokboyle")).status_code == 404
 
 
+@pytest.mark.parametrize("grup, alan", [("projesiz", ""), ("kisisel", "0" * 12)])
+async def test_proje_disi_grup_silme_yalniz_kendi_sohbetlerini_siler(
+    app, istemci, grup: str, alan: str
+) -> None:
+    oturumlar = app.state.sohbet.oturumlar
+    sohbetler = {
+        kimlik: oturumlar.olustur(kimlik).id for kimlik in ("", "0" * 12, "abcdef123456")
+    }
+
+    r = await istemci.delete(f"/api/oturumlar/grup/{grup}")
+    assert r.status_code == 200
+    assert r.json()["silinen_sohbet"] == 1
+    assert (await istemci.delete(f"/api/oturumlar/grup/{grup}")).json()["silinen_sohbet"] == 0
+    kalan = {o["id"] for o in (await istemci.get("/api/oturumlar")).json()}
+    assert kalan == set(sohbetler.values()) - {sohbetler[alan]}
+
+
 async def test_tarayici_paneli_modele_bildirilir(app, istemci, tmp_path: Path) -> None:
     """Paneldeki adres sistem notuna girer; gecersiz adres reddedilir, bos adres notu kaldirir."""
     (tmp_path / "p").mkdir()

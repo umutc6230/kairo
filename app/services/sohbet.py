@@ -51,7 +51,6 @@ from app.services.sohbet_araclari import (
     is_emri_isleyicileri,
     plan_isleyici,
     sonuc_ozeti,
-    varsayilan_kokler,
 )
 from app.services.sohbet_araclari import ARACLAR as SOHBET_ARACLARI
 from app.services.talimatlar import TalimatDeposu
@@ -770,11 +769,7 @@ class SohbetServisi:
         self._kilitler: dict[str, asyncio.Lock] = {}
 
     def aktif_alan(self) -> CalismaAlani:
-        """Aktif proje; yoksa kisisel klasorlerle sinirli varsayilan alan (A1.1).
-
-        Proje acilmadiginda da kok DISI erisim yoktur: kokler masaustu/belgeler/indirilenler/
-        resimler ile sinirlidir. Once tum ev dizini ve her mutlak yol okunabiliyordu.
-        """
+        """Aktif proje; proje yoksa kullanicinin ev dizinindeki onayli kisisel alan."""
         alan = self.projeler.aktif() if self.projeler else None
         if alan is not None:
             # modeli secilmemis proje Ayarlar'daki varsayilan koordinator/uygulayiciyi kullanir
@@ -788,7 +783,7 @@ class SohbetServisi:
         return CalismaAlani(
             id=VARSAYILAN_ALAN_ID,
             ad="Kisisel klasorler",
-            kokler=[str(k) for k in varsayilan_kokler()],
+            kokler=[str(Path.home().resolve())],
             guven=Guven.sinirli,
             # Claude Code gibi: proje acik olmasa da ajan calisir; yan etkili her islem onay ister
             mod=Mod.onayli,

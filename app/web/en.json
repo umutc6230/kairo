@@ -1852,6 +1852,8 @@
  "{0}: diğer": "{0}: more",
  "{0} proje menüsü": "{0} project menu",
  "Projeyi kaldır": "Remove project",
+ "Grubun sohbetlerini sil": "Delete group chats",
+ "Grubun sohbetleri silindi.": "Group chats deleted.",
  "\"{0}\" Kairo'dan kaldırılacak. Bilgisayardaki proje dosyalarına dokunulmaz.": "\"{0}\" will be removed from Kairo. Project files on your computer are not touched.",
  "\"{0}\" Kairo'dan kaldırılacak. Bu projeye ait {1} sohbet de kalıcı olarak silinecek. Bilgisayardaki proje dosyalarına dokunulmaz.": "\"{0}\" will be removed from Kairo. Its {1} chats will also be permanently deleted. Project files on your computer are not touched.",
  "Proje kaldırıldı.": "Project removed.",
