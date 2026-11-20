@@ -1167,3 +1167,24 @@ a.sp-satir { text-decoration: none; }
 .alta-in:hover { background: var(--yuzey3); }
 .alta-in[hidden] { display: none; }
 .alta-in svg { width: 18px; height: 18px; }
+
+/* sohbetteki GitHub PR cipi ve karti (Claude Desktop gibi) */
+.pr-cip { display: inline-flex; align-items: center; gap: 4px; vertical-align: bottom; max-width: 100%; }
+.pr-cip svg { width: 14px; height: 14px; flex-shrink: 0; color: var(--yesil); }
+.pr-cip span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pr-kart { display: grid; grid-template-columns: auto 1fr; gap: 8px 12px; margin: 10px 0 4px; padding: 14px 16px; max-width: 560px; border: 1px solid var(--cizgi2); border-radius: 12px; background: var(--yuzey); color: var(--metin); text-decoration: none; }
+.pr-kart:hover { border-color: var(--soluk); }
+.pr-kart-ikon { grid-row: span 2; color: var(--turuncu); }
+.pr-kart-ikon svg { width: 22px; height: 22px; }
+.pr-kart-ust { display: flex; align-items: center; gap: 8px; font-size: 12.5px; min-width: 0; flex-wrap: wrap; }
+.pr-durum { display: inline-flex; align-items: center; gap: 4px; padding: 2px 8px; border-radius: 999px; font-size: 12px; background: var(--yuzey2); }
+.pr-durum svg { width: 12px; height: 12px; }
+.pr-durum.acik { color: var(--yesil); background: color-mix(in srgb, var(--yesil) 15%, transparent); }
+.pr-durum.birlesti { color: #a371f7; background: color-mix(in srgb, #a371f7 15%, transparent); }
+.pr-durum.kapali { color: var(--kirmizi); background: color-mix(in srgb, var(--kirmizi) 15%, transparent); }
+.pr-kart-alt { display: flex; align-items: center; justify-content: space-between; gap: 10px; min-width: 0; }
+.pr-kart-alt b { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 600; }
+.pr-sayilar { display: flex; gap: 6px; flex-shrink: 0; font-size: 12px; }
+.pr-sayilar > span { padding: 2px 8px; border-radius: 6px; background: var(--yuzey2); }
+.pr-fark .arti { color: var(--yesil); }
+.pr-fark .eksi { color: var(--kirmizi); }

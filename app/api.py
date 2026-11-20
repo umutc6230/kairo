@@ -187,6 +187,10 @@ HAFIZA_ARACI = {
     },
 }  # fmt: skip
 
+# Sohbetteki PR karti: gh pr view --json alanlari ve kabul edilen adres bicimi
+PR_ALANLARI = "number,title,url,state,isDraft,additions,deletions,changedFiles,author,createdAt"
+PR_URL = re.compile(r"https://github\.com/[\w.-]+/[\w.-]+/pull/\d+")
+
 HAFIZA_TALIMATI = (
     "\n\n## Kalici hafiza\nOtomatik ogrenme acik. Gorev boyunca kalici ve tekrar kullanilabilir "
     "bir bilgi ogrendiginde (komut, cozum, kullanici tercihi, proje yapisi, arac kisiti) "
@@ -1663,6 +1667,26 @@ def uygulama_olustur(
             pass
         pr_onbellek[(klasor, dal)] = (time.monotonic(), pr)
         return pr
+
+    @app.get("/api/github/pr")
+    async def github_pr(url: str) -> dict:
+        """Sohbetteki PR linki icin kart bilgisi (gh). Yalniz github.com PR adresi kabul edilir."""
+        if not PR_URL.fullmatch(url):
+            raise UygulamaHatasi("Gecersiz PR adresi.")
+        kayit = pr_onbellek.get(("url", url))
+        if kayit and time.monotonic() - kayit[0] < 120:
+            return kayit[1] or {}
+
+        def _getir() -> dict | None:
+            try:
+                kod, cikti = sa.gh("pr", "view", url, "--json", PR_ALANLARI, sure=15)
+                return json.loads(cikti) if kod == 0 else None
+            except (UygulamaHatasi, subprocess.TimeoutExpired, OSError, ValueError):
+                return None
+
+        pr = await asyncio.to_thread(_getir)
+        pr_onbellek[("url", url)] = (time.monotonic(), pr)
+        return pr or {}
 
     @app.get("/api/proje/degisiklikler")
     async def proje_degisiklikler() -> dict:

@@ -9,6 +9,7 @@ import { komutListesi, komutMu } from "./komutlar.js";
 import { projeDurumu } from "./proje.js";
 import { ikon, ikonlariYerlestir } from "./ikonlar.js";
 import { kacir, md } from "./md.js";
+import { prKartlariKur } from "./pr_kart.js";
 import {
   $, $$, api, bildir, canliSayac, durum, el, istatistikCipleri, modal, modelAdi, modelProfil, onayla, sayi, sseOku,
   ekResimleriYukle,
@@ -81,6 +82,7 @@ function altOturumKarti(o, kap) {
 export function sohbetKur(cb) {
   geriCagri = cb;
   kaydirmaTakibiKur();
+  prKartlariKur();
   const girdi = $("#girdi");
   girdi.addEventListener("input", () => { boyutla(); gonderDurumu(); });
   girdi.addEventListener("keydown", (e) => {
