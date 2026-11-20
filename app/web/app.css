@@ -1188,3 +1188,7 @@ a.sp-satir { text-decoration: none; }
 .pr-sayilar > span { padding: 2px 8px; border-radius: 6px; background: var(--yuzey2); }
 .pr-fark .arti { color: var(--yesil); }
 .pr-fark .eksi { color: var(--kirmizi); }
+
+/* sohbette tek kaydirma gostergesi: soldaki mesaj haritasi; yerel cubuk gizli (kaydirma calisir) */
+#mesajlar { scrollbar-width: none; }
+#mesajlar::-webkit-scrollbar { display: none; }
