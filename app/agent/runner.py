@@ -183,6 +183,14 @@ class Kullanim(BaseModel):
     # Claude Code /cost karsiligi: saglayicinin bildirdigi maliyet ve onbellekten okunan token
     maliyet_usd: float = 0.0
     onbellek_token: int = 0
+    # model adi -> {cagri, token, maliyet_usd}: koordinator/uygulayici harcamasi ayri gorunur
+    model_dokumu: dict[str, dict] = {}
+
+    def dokume_ekle(self, model: str, cagri: int, token: int, maliyet: float) -> None:
+        d = self.model_dokumu.setdefault(model or "?", {"cagri": 0, "token": 0, "maliyet_usd": 0.0})
+        d["cagri"] += cagri
+        d["token"] += token
+        d["maliyet_usd"] = round(d["maliyet_usd"] + maliyet, 6)
 
 
 class PlanAdimi(BaseModel):
@@ -268,6 +276,7 @@ class Run(BaseModel):
     sure_doldu: bool = False  # sure butcesi doldu, kullanicidan "devam" bekleniyor
     sure_dilimi: int = 0  # ilk sure butcesi; her "devam" bu kadar sure ekler
     yeni_dosya_soruldu: bool = False  # bitirirken ozette olmayan yeni dosyalar bir kez soruldu
+    plan_soruldu: bool = False  # bitiste acik plan maddesi bir kez soruldu
     kopya_bildirim: dict[str, int] = {}  # kalip -> uyarildigindaki kopya sayisi (tekrar uyarma)
     parent: str = ""  # alt ajan ise ebeveyn run kimligi
     izinli_araclar: list[str] = []  # alt ajanin dar arac seti
@@ -573,10 +582,10 @@ class AgentRunner:
         self.bekleme = bekleme
         self.yetenek = yetenek
         self.profil_yetenegi: Callable[[str], ModelYetenegi] | None = None
-        self.hafiza = hafiza or (lambda: "")
+        self.hafiza = hafiza or (lambda _proje_id="": "")
         self.hooks = hooks
         self.gorev_baglami: Callable[[Run], Awaitable[tuple]] | None = None
-        self.kok: Callable[[], str] | None = None  # aktif proje koku: hook'larin cwd'si
+        self.kok: Callable[[str], str] | None = None  # gorevin (yoksa aktif) proje koku: hook cwd
         self.dersler: Any = None  # DersDefteri (api baglar): gorevler arasi hatalardan ogrenme
         # D (Chimera): async (run) -> inceleme dict | None; api baglar (ayar + git diff + model)
         self.inceleyici: Callable[[Run], Any] | None = None
@@ -599,7 +608,7 @@ class AgentRunner:
         # calisir; yerel tek modelde sira korunur (api baglar).
         self.paralel_model: Callable[[], bool] = lambda: False
         # aktif projenin uygulayici modeli (api baglar): alt ajanlar bununla calisir; bos: ebeveynin
-        self.uygulayici_model: Callable[[], str] = lambda: ""
+        self.uygulayici_model: Callable[[str], str] = lambda _proje_id="": ""
 
     # ---------------------------------------------------------------- kontrol
     def calisiyor_mu(self, run_id: str) -> bool:
@@ -663,7 +672,7 @@ class AgentRunner:
         return run
 
     def _hook_kok(self, run: Run) -> Path | None:
-        kok = run.calisma_koku or (self.kok() if self.kok else "")
+        kok = run.calisma_koku or (self.kok(run.proje_id) if self.kok else "")
         return Path(kok) if kok else None
 
     async def _hook(self, olay: str, veri: dict, cwd: Path | None = None) -> HookSonucu:
@@ -942,7 +951,7 @@ class AgentRunner:
             }
             if bul is not None and onceki:
                 bul(f"select:{','.join(sorted(onceki))}")
-            if hafiza := self.hafiza():
+            if hafiza := self.hafiza(run.proje_id):
                 sistem = f"{sistem}\n\n{hafiza}".strip()
             if run.ek_sistem:  # kalici ajan kimligi + talimati + notlari
                 sistem = f"{run.ek_sistem}\n\n{sistem}".strip()
@@ -1290,16 +1299,15 @@ class AgentRunner:
             # Cevap sinirda kesildi (genelde cok uzun dosya icerigi): modele bolmesini soyle
             mesaj = {**mesaj, "_kesildi": True}
         if kullanim.get("prompt_tokens"):  # saglayicinin gercek sayimi tahminden iyidir
-            run.kullanim.token += int(kullanim["prompt_tokens"]) + int(
-                kullanim.get("completion_tokens") or 0
-            )
+            token = int(kullanim["prompt_tokens"]) + int(kullanim.get("completion_tokens") or 0)
         else:
-            run.kullanim.token += tahmini_token(json.dumps(gonderilen, ensure_ascii=False)) + (
+            token = tahmini_token(json.dumps(gonderilen, ensure_ascii=False)) + (
                 tahmini_token(json.dumps(mesaj, ensure_ascii=False))
             )
-        run.kullanim.maliyet_usd = round(
-            run.kullanim.maliyet_usd + float(kullanim.get("cost") or 0), 6
-        )
+        maliyet = float(kullanim.get("cost") or 0)
+        run.kullanim.token += token
+        run.kullanim.maliyet_usd = round(run.kullanim.maliyet_usd + maliyet, 6)
+        run.kullanim.dokume_ekle(run.son_model, 1, token, maliyet)
         run.kullanim.onbellek_token += int(
             (kullanim.get("prompt_tokens_details") or {}).get("cached_tokens") or 0
         )
@@ -1630,7 +1638,9 @@ class AgentRunner:
         # model cok dusuk butce isteyebiliyor (canli: 5); alt sinir 8, ust sinir ebeveynin kalani
         # 25 arastirma alt ajanlarina yetmiyordu (karsilastirma: 2/4 alt ajan butcede durdu)
         istenen = max(int(g.get("max_adim") or 50), ALT_AJAN_MIN_ADIM)
-        uygulayici = "" if run.ajan_id else (run.uygulayici_model or self.uygulayici_model())
+        uygulayici = (
+            "" if run.ajan_id else (run.uygulayici_model or self.uygulayici_model(run.proje_id))
+        )
         profil_modeli = profil.get("model", "")
         if profil_modeli and profil_modeli != "inherit":
             uygulayici = profil_modeli
@@ -1710,6 +1720,8 @@ class AgentRunner:
             run.kullanim.token += c.kullanim.token
             run.kullanim.maliyet_usd = round(run.kullanim.maliyet_usd + c.kullanim.maliyet_usd, 6)
             run.kullanim.onbellek_token += c.kullanim.onbellek_token
+            for m, d in c.kullanim.model_dokumu.items():
+                run.kullanim.dokume_ekle(m, d["cagri"], d["token"], d["maliyet_usd"])
         a.devredilen_model = c.son_model or a.devredilen_model
         sonuc = {
             "alt_ajan": c.id,
@@ -1827,6 +1839,18 @@ class AgentRunner:
                  f"{son_degisiklik}; kanit bundan SONRA basarili bir adim olmali (or. testi "
                  "tekrar calistir). Kanitin yoksa kanit_adimlari=[] ile bitir."},
             )  # fmt: skip
+            self.depo.kaydet(run)
+            return
+        acik = [p.baslik for p in run.plan if p.durum in ("bekliyor", "suruyor")]
+        if acik and not run.plan_soruldu:
+            # bitmemis madde sessizce kalmasin; tamam diye isaretlemek modele birakilir
+            run.plan_soruldu = True
+            a.durum = AdimDurum.hata
+            self._arac_mesaji(run, a, {"hata": (
+                "Planda acik maddeler var: " + "; ".join(acik[:10]) + ". plan_guncelle ile "
+                "her maddeye gercek durumunu yaz (tamam/atlandi, kanitiyla); bitmeyeni tamam "
+                "isaretleme, ozette belirt. Sonra gorevi_bitir'i tekrar cagir."
+            )})  # fmt: skip
             self.depo.kaydet(run)
             return
         if not run.yeni_dosya_soruldu and (kalan := self._ozetsiz_yeni_dosyalar(run, ozet)):

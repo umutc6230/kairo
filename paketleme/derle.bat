@@ -21,6 +21,7 @@ copy /y paketleme\BENIOKU.txt dist\Kairo\ >nul
 copy /y paketleme\Sunucu.bat dist\Kairo\ >nul
 copy /y paketleme\Sunucu-Durdur.bat dist\Kairo\ >nul
 copy /y paketleme\Claude-Yerel.bat dist\Kairo\ >nul
+powershell -NoProfile -ExecutionPolicy Bypass -File paketleme\smoke.ps1 dist\Kairo || exit /b 1
 echo.
 echo Derlendi (portable): dist\Kairo\Baslat.bat
 endlocal

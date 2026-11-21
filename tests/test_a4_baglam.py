@@ -53,7 +53,8 @@ def _okumalar(n: int) -> list:
 @pytest.mark.parametrize(("baglam", "okuma"), [(8192, 14), (16384, 24), (32768, 34)])
 async def test_baglam_butcesi_asilmaz_ve_ozet_hedefi_korur(tmp_path, proje, baglam, okuma):
     senaryo = [
-        cagri("plan_guncelle", adimlar=[{"baslik": "Dosyayi incele"}, {"baslik": "Raporla"}]),
+        # plan kapali yazildi: test baglam butcesini olcer, bitisteki acik plan sorusunu degil
+        cagri("plan_guncelle", adimlar=[{"baslik": "Dosyayi incele", "durum": "tamam"}]),
         *_okumalar(okuma),
         cagri("proje_dosya_oku", yol="src/kucuk.py"),
         lambda m: cagri("gorevi_bitir", ozet="incelendi", kanit_adimlari=[okuma + 2]),
@@ -236,7 +237,7 @@ def test_hafiza_kayit_kapsam_gecerlilik_ve_sir(tmp_path) -> None:
 
 async def test_hafiza_ajan_sistemine_girer(tmp_path, proje) -> None:
     model = SahteModel([cagri("gorevi_bitir", ozet="x", kanit_adimlari=[])])
-    runner, *_ = kur(tmp_path, proje, model, hafiza=lambda: "HAFIZA:\n- testler pytest ile")
+    runner, *_ = kur(tmp_path, proje, model, hafiza=lambda _="": "HAFIZA:\n- testler pytest ile")
     await bitir(runner, (await runner.baslat("x")).id)
     assert "testler pytest ile" in model.gorulen[0][0]["content"]
 

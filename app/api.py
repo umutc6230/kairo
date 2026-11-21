@@ -554,6 +554,15 @@ def uygulama_olustur(
     run_deposu = RunDeposu(veri_dizini)
     run_deposu.kurtar()  # onceki oturumda yarim kalanlar: belirsiz yan etki kullaniciya sorulur
 
+    def gorev_alani(proje_id: str = "") -> CalismaAlani:
+        """Gorevin kaydettigi proje; proje sonradan silindiyse aktif alan."""
+        if proje_id:
+            try:
+                return projeler.getir(proje_id)
+            except Bulunamadi:
+                logger.warning("Gorevin projesi bulunamadi: {}", proje_id)
+        return sohbet.aktif_alan()
+
     async def gorev_baglami(run: Run) -> tuple[str, list, dict]:
         secim = run.skill_adi
         ayar = ayarlar.oku()
@@ -609,15 +618,15 @@ def uygulama_olustur(
         onay_durumu,
         yetenek=model_yetenegi,
         hooks=hooklar,
-        hafiza=lambda: (
-            hafiza.sistem_metni(sohbet.aktif_alan().id) if ayarlar.oku().hafiza_acik else ""
+        hafiza=lambda proje_id="": (
+            hafiza.sistem_metni(gorev_alani(proje_id).id) if ayarlar.oku().hafiza_acik else ""
         ),
     )
     ajan.gorev_baglami = gorev_baglami
     ajan.profil_yetenegi = model_yetenegi
-    ajan.kok = lambda: next(iter(sohbet.aktif_alan().kokler), "")
+    ajan.kok = lambda proje_id="": next(iter(gorev_alani(proje_id).kokler), "")
     ajan.paralel_model = lambda: ayarlar.oku().saglayici == "openrouter"
-    ajan.uygulayici_model = lambda: sohbet.aktif_alan().uygulayici_model
+    ajan.uygulayici_model = lambda proje_id="": gorev_alani(proje_id).uygulayici_model
 
     def _proje_modeli(rol: str) -> dict:
         """Aktif projenin 'koordinator' / 'uygulayici' modeli; secilmemisse aktif model."""
