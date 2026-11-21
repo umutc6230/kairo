@@ -358,3 +358,18 @@ def test_profile_model_effort_and_permissions(tmp_path) -> None:
     assert not model.araclar[1] & {"proje_dosya_yaz", "komut_calistir"}
     assert modeller == [None, "test/reviewer", "test/reviewer", None]
     assert effort == [None, "derin", "derin", None]
+
+
+def test_model_dokumu_modelleri_ayri_toplar() -> None:
+    from app.agent.runner import Kullanim
+
+    ebeveyn, cocuk = Kullanim(), Kullanim()
+    ebeveyn.dokume_ekle("buyuk/model", 1, 100, 0.01)
+    cocuk.dokume_ekle("kucuk/model", 2, 50, 0.002)
+    for m, d in cocuk.model_dokumu.items():  # runner alt ajan sonunda boyle birlestirir
+        ebeveyn.dokume_ekle(m, d["cagri"], d["token"], d["maliyet_usd"])
+    ebeveyn.dokume_ekle("buyuk/model", 1, 10, 0.0)
+    assert ebeveyn.model_dokumu == {
+        "buyuk/model": {"cagri": 2, "token": 110, "maliyet_usd": 0.01},
+        "kucuk/model": {"cagri": 2, "token": 50, "maliyet_usd": 0.002},
+    }
