@@ -213,6 +213,48 @@ def test_proje_modeli_lider_koordinator_alt_ajan_uygulayici(tmp_path) -> None:
     assert istenen[0] == "buyuk/model" and "kucuk/model" in istenen and None not in istenen
 
 
+def test_cli_uygulayici_alt_ajani_abonelik_cli_ile_calistirir(tmp_path) -> None:
+    """Uygulayici 'cli:claude:sonnet': alt ajan LLM'e gitmez, CLI'ya proje kokunde gider."""
+    from app.agent.cli_ajan import CliSonuc
+
+    proje = tmp_path / "proje"
+    proje.mkdir()
+    model = SahteModel([
+        cagri("alt_ajan", gorev="a.txt yaz", araclar=["proje_listele"], max_adim=8),
+        cagri("proje_listele"),
+        cagri("gorevi_bitir", ozet="tamam", kanit_adimlari=[2]),
+    ])  # fmt: skip
+    runner, depo, *_ = kur(tmp_path, proje, model)
+
+    @asynccontextmanager
+    async def llm(m=None):
+        assert not str(m).startswith("cli:")  # CLI modeli LLM'e hic gitmez
+        yield model
+
+    runner.llm = llm
+    runner.kok = lambda _="": str(proje)
+    runner.uygulayici_model = lambda _="": "cli:claude:sonnet"
+    runner.cli_tam_yetki = lambda: True
+    cagrilar: list = []
+
+    async def sahte_cli(saglayici, mesaj, klasor, *, tam_yetki, model, canli):
+        cagrilar.append((saglayici, klasor, tam_yetki, model, "a.txt yaz" in mesaj))
+        return CliSonuc(durum="basarili", ozet="a.txt yazildi", maliyet_usd=0.0)
+
+    runner.cli_calistir = sahte_cli
+
+    async def calistir():
+        run = await runner.baslat("x", model="buyuk/model", model_sabit=True)
+        return await bitir(runner, run.id)
+
+    run = asyncio.run(calistir())
+    cocuk = depo.getir(run.cocuklar[0])
+    assert cagrilar == [("claude", proje, True, "sonnet", True)]
+    assert cocuk.durum is RunDurum.basarili and cocuk.sonuc.ozet == "a.txt yazildi"
+    # koordinator yazma araclarini goremez, alt_ajan ile devreder
+    assert "a.txt yazildi" in json.dumps(depo.getir(run.id).mesajlar, ensure_ascii=False)
+
+
 def test_ayni_adli_arac_modele_bir_kez_gider() -> None:
     """Gemini ayni adli iki arac tanimini 400 ile reddediyor (canli bulgu)."""
     from app.agent.runner import _tekil

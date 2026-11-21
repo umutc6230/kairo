@@ -29,6 +29,7 @@ from typing import Any
 from loguru import logger
 from pydantic import BaseModel, Field
 
+from app.agent import cli_ajan
 from app.agent import koordinasyon as koord
 from app.agent.arac_bul import ARAC_BUL
 from app.agent.hooks import HookSonucu
@@ -402,6 +403,7 @@ ALT_AJAN_ARACI = _f(
 ALT_AJAN_MIN_ADIM = 15
 YAZAN_ARACLAR = DEGISTIREN
 
+CLI_ONEK = "cli:"  # uygulayici modeli "cli:claude" / "cli:codex[:model]" = abonelik CLI'i
 KOORDINATOR_OKUMA = {
     "proje_dosya_oku",
     "proje_listele",
@@ -609,6 +611,9 @@ class AgentRunner:
         self.paralel_model: Callable[[], bool] = lambda: False
         # aktif projenin uygulayici modeli (api baglar): alt ajanlar bununla calisir; bos: ebeveynin
         self.uygulayici_model: Callable[[str], str] = lambda _proje_id="": ""
+        # "cli:<saglayici>" modelli gorevler abonelik CLI'ina gider; tam yetki ayarini api baglar
+        self.cli_tam_yetki: Callable[[], bool] = lambda: False
+        self.cli_calistir = cli_ajan.calistir  # testte sahte calistirici takilir
 
     # ---------------------------------------------------------------- kontrol
     def calisiyor_mu(self, run_id: str) -> bool:
@@ -932,6 +937,9 @@ class AgentRunner:
         run = self.depo.getir(run_id)
         bas = time.monotonic() - run.kullanim.sure_sn
         try:
+            if run.model.startswith(CLI_ONEK):
+                await self._cli_ile_calistir(run)
+                return
             # Arac baglami MCP sunucularini baslatabilir (soguk acilis dakikalar surebilir):
             # olay dongusunu kilitlememek icin is parcaciginda hazirlanir
             jeton = AKTIF_RUN.set(run_id)  # koordinasyon: baglam bu gorev adina kaydolur
@@ -1175,6 +1183,41 @@ class AgentRunner:
                     self.uzantilar.olay, "run_bitis",
                     {"run": run.id, "durum": str(run.durum), "ozet": run.sonuc.ozet[:500]},
                 )  # fmt: skip
+
+    async def _cli_ile_calistir(self, run: Run) -> None:
+        """Uygulayici `cli:claude[:model]` / `cli:codex[:model]`: gorevin tamami kullanicinin
+        aboneligiyle CLI'da tek seferde calisir; Kairo token gormez, sonucu ozet olarak doner.
+        shortcut: CLI oturumu (resume) saklanmiyor, her atama yeni oturum; is emri devami gerekirse
+        CliSonuc.oturum run'a yazilip komut_kur(oturum=...) ile surdurulmeli."""
+        _, saglayici, *model = run.model.split(":", 2)
+        kok = run.calisma_koku or (self.kok(run.proje_id) if self.kok else "")
+        if saglayici not in cli_ajan.SAGLAYICILAR or saglayici == "kairo" or not kok:
+            run.durum = RunDurum.basarisiz
+            run.hata = f"CLI uygulayici calistirilamadi: saglayici '{saglayici}', klasor '{kok}'."
+            return
+        # run.mesajlar Kairo'nun alt ajan sarmalayicisi (Kairo arac adlari, "salt okunur"): CLI
+        # bunlara harfiyen uyup isi yapmiyordu (canli 2026-11-21); CLI'a yalniz gorevin kendisi
+        mesaj = run.hedef
+        run.durum = RunDurum.calisiyor
+        run.son_model = run.model
+        self.depo.kaydet(run)
+        try:
+            s = await self.cli_calistir(
+                saglayici, mesaj, Path(kok), tam_yetki=self.cli_tam_yetki(),
+                model=model[0] if model else "", canli=run.guncellemeler,
+            )  # fmt: skip
+        except RuntimeError as e:  # CLI kurulu degil
+            run.durum, run.hata = RunDurum.basarisiz, str(e)
+            return
+        run.kullanim.dokume_ekle(run.model, 1, 0, s.maliyet_usd)
+        run.kullanim.maliyet_usd = round(run.kullanim.maliyet_usd + s.maliyet_usd, 6)
+        ozet = sirlar.maskele(s.ozet)
+        run.sonuc = Sonuc(ozet=ozet)
+        if s.durum == "basarili":
+            # Kairo CLI'nin adimlarini goremez: kanit yok, koordinator git farkiyla dogrular
+            run.durum = RunDurum.basarili
+        else:
+            run.durum, run.hata = RunDurum.basarisiz, ozet or "CLI basarisiz."
 
     def _adim_olustur(self, run: Run, c: dict) -> Adim:
         ad = (c.get("function") or {}).get("name", "")
