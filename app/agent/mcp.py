@@ -702,9 +702,9 @@ class McpYoneticisi:
         isleyiciler: dict = {}
         hazir = self._paralel_hazirla(
             [
-                s for s in self.tum()
-                if s.aktif and not s.eksik_degiskenler
-                and (sunucular is None or s.ad in sunucular)
+                s
+                for s in self.tum()
+                if s.aktif and not s.eksik_degiskenler and (sunucular is None or s.ad in sunucular)
             ]
         )
         for s, b in hazir:

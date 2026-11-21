@@ -21,6 +21,7 @@ async def test_api_guvenilmeyen_projede_proje_skill_yok(istemci, tmp_path) -> No
     t = (await istemci.get("/api/skiller/kotu/test")).json()
     assert t["skill"]["kaynak"] == "proje" and "talimat" in t["model_gorur"]
 
+
 async def test_worktree_ilk_model_adimindan_once_skill_secer(
     app, istemci, skill_klasoru, tmp_path, monkeypatch
 ) -> None:

@@ -888,9 +888,7 @@ class SohbetServisi:
                     alan,
                 )
 
-            mcp_sema, mcp_isl = self.mcp.semalar_ve_isleyiciler(
-                mcp_izin, sunucular=mcp_sunuculari
-            )
+            mcp_sema, mcp_isl = self.mcp.semalar_ve_isleyiciler(mcp_izin, sunucular=mcp_sunuculari)
             araclar += mcp_sema
             isleyiciler |= mcp_isl
         if self.uzantilar is not None and self.politika is not None:  # A7.6 uzanti araclari

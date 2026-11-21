@@ -463,15 +463,23 @@ def uygulama_olustur(
     sohbet.hafiza = hafiza
 
     def ajan_baglami(
-        hedef: str, model_secimi: str | None = None, *,
-        alan: CalismaAlani | None = None, mcp_sunuculari: set[str] | None = None,
+        hedef: str,
+        model_secimi: str | None = None,
+        *,
+        alan: CalismaAlani | None = None,
+        mcp_sunuculari: set[str] | None = None,
     ) -> tuple[str, list, dict, str | None]:
         alan = alan or sohbet.aktif_alan()
         if sohbet.ajan_araclari(alan) is None:
             raise UygulamaHatasi("Ajan araclari hazir degil.")
         a = ayarlar.oku()
         sistem, araclar_, isleyiciler, skill_adi = sohbet.baglam_hazirla(
-            a, hedef, [], model_secimi, ajan_gorevi=True, alan=alan,
+            a,
+            hedef,
+            [],
+            model_secimi,
+            ajan_gorevi=True,
+            alan=alan,
             mcp_sunuculari=mcp_sunuculari,
         )
         if a.otomatik_ogrenme:  # kullanici actiysa ajan kalici not ekleyebilir (dusuk guven)
@@ -1052,6 +1060,7 @@ def uygulama_olustur(
 
     ajan.takim = TakimPanosu(veri_dizini)
     ajan.uzantilar = uzantilar
+
     def ajan_profilleri(run: Run) -> dict:
         profiller = pluginler.ajan_profilleri()
         alan = projeler.getir(run.proje_id) if run.proje_id else sohbet.aktif_alan()
