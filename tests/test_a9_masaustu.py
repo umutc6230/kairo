@@ -3,6 +3,7 @@ engeli; acil durdurma; tiklama gercek izin motorunda onay ister."""
 
 from __future__ import annotations
 
+import os
 import subprocess
 import sys
 import time
@@ -54,6 +55,10 @@ def _ref(oku: dict, ad: str) -> str:
     return next(e["ref"] for e in oku["elemanlar"] if e["ad"] == ad or e["kimlik"] == ad)
 
 
+@pytest.mark.skipif(
+    os.environ.get("GITHUB_ACTIONS") == "true",
+    reason="CI runner'inda UI Automation (COM) gercek pencereye erisemiyor",
+)
 def test_izinli_programda_yaz_tikla_ve_engeller(form, tmp_path) -> None:
     izinli = ["powershell.exe"]
     m = ms.Masaustu(lambda: izinli)
