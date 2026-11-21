@@ -1,6 +1,7 @@
 """OpenAI uyumlu saglayicilar: anahtar saklama, model listesi, yonlendirme, hata siniflama.
 Ag cagrilari MockTransport ile; gercek anahtar/istek yok."""
 
+import asyncio
 import json
 
 import httpx
@@ -113,3 +114,14 @@ async def test_model_yonetici_uyumlu_yonlendirir(tmp_path):
     assert a.oku().aktif_model == "groq:llama-3"
     async with y.kullan() as llm:
         assert isinstance(llm, UyumluLLM) and llm.model == "llama-3"
+
+
+def test_nvidia_nim_model_listesi_ve_sohbet(tmp_path):
+    istekler: list = []
+    d = _depo(tmp_path, istekler)
+    d.kaydet("nvidia", "nvapi-gizli1234567890abcd")
+    veri = asyncio.run(d.modeller("nvidia"))
+    assert veri["modeller"][0]["id"] == "llama-3"
+    assert str(istekler[0].url) == "https://integrate.api.nvidia.com/v1/models"
+    assert istekler[0].headers["authorization"] == "Bearer nvapi-gizli1234567890abcd"
+    assert d.istemci("nvidia:meta/llama-3.1-8b-instruct").model == "meta/llama-3.1-8b-instruct"

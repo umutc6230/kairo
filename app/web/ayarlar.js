@@ -134,6 +134,8 @@ export function ayarlarAc(sekme = "ai") {
       <div class="ayar-not">Proje açık olmasa da model Claude Code gibi iş yapar. Okuma serbesttir; dosya yazma, komut, bağlayıcı (GitHub vb.) ve web, <b>Tam yetki</b> kapalıyken senin onayınla çalışır.</div>
       <div class="anahtar-satir tam-yetki"><div><div>Tam yetki <span class="rozet sari">onaysız</span></div><div class="ayar-not">Açıkken ajan dosya yazar, komut çalıştırır, bağlayıcıları (GitHub, MCP) ve web'i <b>sormadan</b> kullanır. Yine de sorulanlar: disk/sürücü silme, biçimlendirme, bilgisayarı kapatma, zorla git push gibi geri alınamaz komutlar ve gönderme, paylaşma, yayınlama, ödeme gibi dış etkili eylemler (onay kartında "Her zaman izin ver" dersen o tür bir daha sorulmaz). Gizli dosyalar (.env, ssh anahtarı) hiç okunmaz. Planla modu salt okunur kalır.</div></div>
         <label class="anahtar"><input type="checkbox" id="ay-tam-yetki" ${a.tam_yetki ? "checked" : ""}><span></span></label></div>
+      <div class="anahtar-satir"><div><div>Abonelik CLI uygulayıcısında tam yetki <span class="rozet sari">onaysız</span></div><div class="ayar-not">Uygulayıcı modeli <code>cli:claude</code> / <code>cli:codex</code> olan projelerde CLI komutları sormadan çalıştırır. Kapalıyken yalnız dosya düzenler. Kairo'nun Tam yetki ayarından ayrıdır.</div></div>
+        <label class="anahtar"><input type="checkbox" id="ay-cli-tam-yetki" ${a.cli_tam_yetki ? "checked" : ""}><span></span></label></div>
       <div class="anahtar-satir"><div><div>Sohbette araçlar</div><div class="ayar-not">Model dosyaları listeleyip okuyabilir ve arayabilir; yazma, silme ve komut Tam yetki kapalıyken onay ister. .env, ssh anahtarı, parola dosyaları hiç okunmaz.</div></div>
         <label class="anahtar"><input type="checkbox" id="ay-araclar" ${a.sohbet_araclari ? "checked" : ""}><span></span></label></div>
       <div class="anahtar-satir"><div><div>İnternet erişimi</div><div class="ayar-not">Açıkken model web'de arama yapabilir ve sayfa okuyabilir (<code>web_ara</code>, <code>web_getir</code>). Tam yetki kapalıyken her istek onay ister; yerel ağ adresleri okunmaz. Kurum politikası kapattıysa açılamaz.</div></div>
@@ -988,6 +990,15 @@ export function ayarlarAc(sekme = "ai") {
   alanKaydet("#ay-ag", "ag_acik");
   $("#ay-dikte-bulut", govde).onchange = async (e) => { await kaydet({ dikte_bulut: e.target.checked }); dikteDurumuYenile(); };
   $("#ay-dikte-model", govde).onchange = async (e) => { await kaydet({ dikte_model: e.target.value.trim() }); dikteDurumuYenile(); };
+  $("#ay-cli-tam-yetki", govde).onchange = async (e) => {
+    const g = e.target;
+    if (g.checked && !(await onayla(
+      "CLI uygulayıcısına tam yetki verilsin mi?",
+      "Claude Code / Codex, proje klasöründe komutları sana sormadan çalıştıracak. Kairo'nun güvenlik kontrolleri bu CLI'ların içinde çalışmaz.",
+      { evet: "Aç", tehlike: true },
+    ))) { g.checked = false; return; }
+    await kaydet({ cli_tam_yetki: g.checked });
+  };
   // Tam yetki: acarken tek seferlik onay (openbot ilk acilis onayi gibi); kapatmak serbest
   $("#ay-tam-yetki", govde).onchange = async (e) => {
     const g = e.target;

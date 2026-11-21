@@ -111,7 +111,7 @@ export function projeAc() {
         <label class="proje-alan">Uygulayıcı modeli (thread'ler ve alt ajanlar: koordinatörün verdiği işleri yapar; boş: aktif model)
           <input class="alan" id="proje-uygulayici" list="proje-model-liste" value="${kacir(aktif.uygulayici_model || "")}" placeholder="Aktif model" spellcheck="false">
         </label>
-        <datalist id="proje-model-liste">${modelOnerileri.map((id) => `<option value="${kacir(id)}"></option>`).join("")}</datalist>
+        <datalist id="proje-model-liste">${["cli:claude", "cli:codex", ...modelOnerileri].map((id) => `<option value="${kacir(id)}"></option>`).join("")}</datalist>
         <label class="proje-alan" style="flex-direction:row;align-items:center;gap:8px">
           <input type="checkbox" id="proje-gizli" ${aktif.gizli_proje ? "checked" : ""}> Gizli proje (yalnız yerel model)
         </label>
@@ -208,7 +208,7 @@ export function projeAc() {
     if (!modelOnerileri.length) oneriler.then((idler) => { // ciz() modali yeniden kurar: listeyi sakla
       modelOnerileri = idler;
       const dl = $("#proje-model-liste", govde);
-      if (dl) dl.innerHTML = idler.map((id) => `<option value="${kacir(id)}"></option>`).join("");
+      if (dl) dl.innerHTML = ["cli:claude", "cli:codex", ...idler].map((id) => `<option value="${kacir(id)}"></option>`).join("");
     });
     for (const id of ["#proje-koordinator", "#proje-uygulayici"]) {
       $(id, govde).onchange = () =>

@@ -213,6 +213,48 @@ def test_proje_modeli_lider_koordinator_alt_ajan_uygulayici(tmp_path) -> None:
     assert istenen[0] == "buyuk/model" and "kucuk/model" in istenen and None not in istenen
 
 
+def test_cli_uygulayici_alt_ajani_abonelik_cli_ile_calistirir(tmp_path) -> None:
+    """Uygulayici 'cli:claude:sonnet': alt ajan LLM'e gitmez, CLI'ya proje kokunde gider."""
+    from app.agent.cli_ajan import CliSonuc
+
+    proje = tmp_path / "proje"
+    proje.mkdir()
+    model = SahteModel([
+        cagri("alt_ajan", gorev="a.txt yaz", araclar=["proje_listele"], max_adim=8),
+        cagri("proje_listele"),
+        cagri("gorevi_bitir", ozet="tamam", kanit_adimlari=[2]),
+    ])  # fmt: skip
+    runner, depo, *_ = kur(tmp_path, proje, model)
+
+    @asynccontextmanager
+    async def llm(m=None):
+        assert not str(m).startswith("cli:")  # CLI modeli LLM'e hic gitmez
+        yield model
+
+    runner.llm = llm
+    runner.kok = lambda _="": str(proje)
+    runner.uygulayici_model = lambda _="": "cli:claude:sonnet"
+    runner.cli_tam_yetki = lambda: True
+    cagrilar: list = []
+
+    async def sahte_cli(saglayici, mesaj, klasor, *, oturum, tam_yetki, model, canli):
+        cagrilar.append((saglayici, klasor, tam_yetki, model, "a.txt yaz" in mesaj))
+        return CliSonuc(durum="basarili", ozet="a.txt yazildi", maliyet_usd=0.0)
+
+    runner.cli_calistir = sahte_cli
+
+    async def calistir():
+        run = await runner.baslat("x", model="buyuk/model", model_sabit=True)
+        return await bitir(runner, run.id)
+
+    run = asyncio.run(calistir())
+    cocuk = depo.getir(run.cocuklar[0])
+    assert cagrilar == [("claude", proje, True, "sonnet", True)]
+    assert cocuk.durum is RunDurum.basarili and cocuk.sonuc.ozet == "a.txt yazildi"
+    # koordinator yazma araclarini goremez, alt_ajan ile devreder
+    assert "a.txt yazildi" in json.dumps(depo.getir(run.id).mesajlar, ensure_ascii=False)
+
+
 def test_ayni_adli_arac_modele_bir_kez_gider() -> None:
     """Gemini ayni adli iki arac tanimini 400 ile reddediyor (canli bulgu)."""
     from app.agent.runner import _tekil
@@ -375,3 +417,47 @@ def test_model_dokumu_modelleri_ayri_toplar() -> None:
         "buyuk/model": {"cagri": 2, "token": 110, "maliyet_usd": 0.01},
         "kucuk/model": {"cagri": 2, "token": 50, "maliyet_usd": 0.002},
     }
+
+
+def test_cli_uygulayici_git_farki_dogrulama_ve_oturum_devami(tmp_path) -> None:
+    """Is emri: dosya degismezse dogrulanmadi; degisirse listelenir; devam ayni oturumda."""
+    import subprocess
+
+    from app.agent.cli_ajan import CliSonuc
+    from app.agent.runner import Run
+
+    proje = tmp_path / "proje"
+    proje.mkdir()
+    subprocess.run(["git", "init", "-q"], cwd=proje, check=True)
+    runner, depo, *_ = kur(tmp_path, proje, SahteModel([]))
+    runner.cli_tam_yetki = lambda: False
+    gelen: list = []
+
+    async def sahte_cli(saglayici, mesaj, klasor, *, oturum, tam_yetki, model, canli):
+        gelen.append(oturum)
+        if "yaz" in mesaj:
+            (klasor / "yeni.txt").write_text("x", encoding="utf-8")
+        if "ekle" in mesaj:  # zaten izlenmeyen dosyaya ekleme de degisiklik sayilir
+            (klasor / "yeni.txt").write_text("xy", encoding="utf-8")
+        return CliSonuc(durum="basarili", ozet="bitti", oturum="otr-1")
+
+    runner.cli_calistir = sahte_cli
+    ortak = {"model": "cli:codex", "calisma_koku": str(proje), "dal": "is/1"}
+    bos = Run(hedef="bak", **ortak)
+    depo.kaydet(bos)
+    asyncio.run(runner._cli_ile_calistir(bos))
+    depo.kaydet(bos)  # _dongu finally kaydeder
+    assert bos.durum is RunDurum.dogrulanmadi and bos.cli_oturum == "otr-1"
+
+    devam = Run(hedef="yaz", onceki=bos.id, **ortak)
+    depo.kaydet(devam)
+    asyncio.run(runner._cli_ile_calistir(devam))
+    assert gelen == ["", "otr-1"]  # ikinci atama ayni CLI oturumunu surdurur
+    assert devam.durum is RunDurum.basarili and devam.sonuc.dogrulandi
+    assert "yeni.txt" in devam.sonuc.ozet
+    depo.kaydet(devam)
+
+    ek = Run(hedef="ekle", onceki=devam.id, **ortak)
+    depo.kaydet(ek)
+    asyncio.run(runner._cli_ile_calistir(ek))
+    assert ek.durum is RunDurum.basarili and "yeni.txt" in ek.sonuc.ozet

@@ -657,6 +657,7 @@ def uygulama_olustur(
     ajan.kok = lambda proje_id="": next(iter(gorev_alani(proje_id).kokler), "")
     ajan.paralel_model = lambda: ayarlar.oku().saglayici == "openrouter"
     ajan.uygulayici_model = lambda proje_id="": gorev_alani(proje_id).uygulayici_model
+    ajan.cli_tam_yetki = lambda: ayarlar.oku().cli_tam_yetki
 
     def _proje_modeli(rol: str) -> dict:
         """Aktif projenin 'koordinator' / 'uygulayici' modeli; secilmemisse aktif model."""
@@ -2762,6 +2763,16 @@ def uygulama_olustur(
             for m in (istek.koordinator_model, istek.uygulayici_model):
                 if m.strip() in MODELLER:  # kullan() bunu her mesajda reddederdi; burada soyle
                     raise UygulamaHatasi(f"OpenRouter seçili; yerel model ({m}) kullanılamaz.")
+        if istek.koordinator_model.strip().startswith("cli:"):
+            raise UygulamaHatasi("Abonelik CLI'ı (cli:...) yalnızca uygulayıcı olabilir.")
+        if (u := istek.uygulayici_model.strip()).startswith("cli:"):
+            from app.agent import cli_ajan
+
+            ad = u.split(":")[1] if u.count(":") else ""
+            if not cli_ajan.durum().get(ad):
+                raise UygulamaHatasi(
+                    f"'{ad}' CLI'ı kurulu değil; cli:claude, cli:codex ya da cli:antigravity seçin."
+                )
         return projeler.modeller_ayarla(
             alan_id, istek.koordinator_model, istek.uygulayici_model
         ).model_dump(mode="json")
