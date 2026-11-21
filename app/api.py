@@ -45,7 +45,7 @@ from app.agent.hooks import HookDeposu
 from app.agent.izolasyon import adaptor_olustur
 from app.agent.masaustu import Masaustu
 from app.agent.mcp import McpYoneticisi
-from app.agent.policy import Istek, PolitikaMotoru, YanEtki, maskele, yerel_host_mu
+from app.agent.policy import Istek, Karar, PolitikaMotoru, YanEtki, maskele, yerel_host_mu
 from app.agent.runner import BITMIS as BITMIS_RUN
 from app.agent.runner import YAZAN_ARACLAR, AgentRunner, Butce, Run, RunDeposu, RunDurum, olay_akisi
 from app.agent.takim import TakimPanosu
@@ -83,6 +83,8 @@ from app.services.oneriler import oneriler as oneriler_hesapla
 from app.services.openrouter import OpenRouterDeposu
 from app.services.oturumlar import Mesaj, OturumDeposu
 from app.services.pluginler import PluginDeposu
+from app.services.saglayicilar import SaglayiciDeposu
+from app.services.saglayicilar import ayir as saglayici_ayir
 from app.services.skiller import SKILL_KAYDET_ARACI, SkillDeposu
 from app.services.sohbet import VARSAYILAN_ALAN_ID, MesajIstegi, SohbetServisi, tahmini_token
 from app.services.talimatlar import TalimatDeposu
@@ -268,6 +270,11 @@ class GirdiIstegi(BaseModel):
     metin: str = Field(max_length=10000)
 
 
+class KartKomutIstegi(BaseModel):
+    komut: str = Field(min_length=1, max_length=2000)
+    onay: bool = False  # arayuz modalinda kullanici "Calistir" dedi
+
+
 class AdIstegi(BaseModel):
     baslik: str
 
@@ -313,6 +320,11 @@ class OneriRedIstegi(BaseModel):
 
 class AnahtarIstegi(BaseModel):
     anahtar: str = Field(max_length=300)
+
+
+class SaglayiciIstegi(BaseModel):
+    anahtar: str = Field(default="", max_length=400)
+    adres: str = Field(default="", max_length=300)
 
 
 class ModelIstegi(BaseModel):
@@ -391,7 +403,8 @@ def uygulama_olustur(
         transport=ollama_transport,
         site_transport=ollama_transport,
     )
-    yonetici = ModelYonetici(ayarlar, fabrika, uzak=openrouter, ollama=ollama)
+    saglayicilar = SaglayiciDeposu(veri_dizini, transport=or_transport)
+    yonetici = ModelYonetici(ayarlar, fabrika, uzak=openrouter, ollama=ollama, uyumlu=saglayicilar)
     talimatlar = TalimatDeposu(veri_dizini)
     skiller = skill_deposu or SkillDeposu(veri_dizini)
     projeler = WorkspaceDeposu(veri_dizini)
@@ -527,7 +540,16 @@ def uygulama_olustur(
     def model_yetenegi(model: str = "") -> ModelYetenegi:
         """model: projenin koordinator modeli (bos: aktif model). MODELLER disi = uzak."""
         a = ayarlar.oku()
-        model = model or (a.aktif_model if a.saglayici == "ollama" else "")
+        model = model or (a.aktif_model if a.saglayici in ("ollama", "uyumlu") else "")
+        if saglayici_ayir(model):
+            # shortcut: /models yetenek vermiyor; buyuk saglayicilarin sohbet modelleri arac
+            # destekler varsayilir, baglam listede varsa oradan.
+            m = saglayicilar.model_bilgisi(model) or {}
+            return ModelYetenegi(
+                model=model, saglayici="uyumlu", araclar=True, json_cikti=True, goruntu=False,
+                baglam=int(m.get("baglam") or 32768), dusunme=False, tokenizer="tahmin",
+                not_="Yetenekler varsayılan; model araç desteklemiyorsa hata verir.",
+            )  # fmt: skip
         if model.startswith("ollama:"):
             y = ollama.yetenekler.get(model.removeprefix("ollama:")) or {}
             return ModelYetenegi(
@@ -1539,6 +1561,27 @@ def uygulama_olustur(
     @app.post("/api/model/durdur")
     async def model_durdur(istek: DurdurIstegi) -> dict:
         return await yonetici.durdur(harici=istek.harici)
+
+    # ---- OpenAI uyumlu saglayicilar (anahtar backend'de; arayuze maskeli) ----
+    @app.get("/api/saglayicilar")
+    async def saglayici_liste() -> list[dict]:
+        return saglayicilar.durum()
+
+    @app.put("/api/saglayicilar/{sid}")
+    async def saglayici_kaydet(sid: str, istek: SaglayiciIstegi) -> list[dict]:
+        return saglayicilar.kaydet(sid, istek.anahtar, istek.adres)
+
+    @app.delete("/api/saglayicilar/{sid}")
+    async def saglayici_sil(sid: str) -> list[dict]:
+        return saglayicilar.sil(sid)
+
+    @app.get("/api/saglayicilar/{sid}/modeller")
+    async def saglayici_modeller(sid: str, yenile: bool = False) -> dict:
+        return await saglayicilar.modeller(sid, yenile)
+
+    @app.post("/api/saglayicilar/test")
+    async def saglayici_test(istek: ModelIstegi) -> dict:
+        return await saglayicilar.test(istek.model or ayarlar.oku().uyumlu_model)
 
     # ---- OpenRouter (anahtar backend'de kalir; arayuze yalniz maskeli hali gider) ----
     @app.get("/api/openrouter/anahtar")
@@ -3272,6 +3315,25 @@ def uygulama_olustur(
     @app.post("/api/komutlar/{is_id}/girdi")
     async def komut_girdi_ucu(is_id: str, istek: GirdiIstegi) -> dict:
         return await komutlar.girdi_gonder(is_id, istek.metin)
+
+    # ---- mini arayuz kopru: kart -> ana sayfa (kaynak/tur/oran denetimi) -> burada politika ----
+    @app.post("/api/kart-komut")
+    async def kart_komut(istek: KartKomutIstegi) -> dict:
+        alan = sohbet.aktif_alan()
+        if politika.mod(alan) is Mod.planla:
+            raise YetkiYok("Planla modunda karttan komut calistirilmaz.")
+        kok = alan.izinli_kokler[0]
+        sonuc = politika.degerlendir(
+            Istek(arac="kart_komut", yan_etki=YanEtki.komut, yol=str(kok), komut=istek.komut,
+                  ozet=f"Kart komutu: {istek.komut}"), alan
+        )  # fmt: skip
+        if sonuc.karar is Karar.ret:
+            raise YetkiYok(sonuc.neden)
+        if not istek.onay:  # kart komutu her zaman kullanici onayi ister (tam yetkide de)
+            raise YetkiYok("Kart komutu kullanici onayi olmadan calistirilmaz.")
+        is_ = await komutlar.baslat(istek.komut, Path(kok), timeout=30, kok=Path(kok))
+        await komutlar.bekle(is_)
+        return komutlar.ozet(is_)
 
     # ---- calisan komutlar ----
     @app.get("/api/komutlar")

@@ -74,8 +74,9 @@ orijinaline geri yuklenir. Ayni hedef metni, adim siniri ve 600 sn sure siniri.
 
 ## Degerlendirme
 
-- Genel fark **+0.0 puan**. Onceden belirlenen esdegerlik olcutu (fark <= 5 puan ve
-  kritik kategoride gerileme yok) **SAGLANMADI**. Gerileyen kategoriler: yok.
+- Genel fark **+0.0 puan**. Onceden belirlenen esdegerlik olcutu (|fark| <= 5 puan ve
+  tum mevcut kategorilerde gerileme yok) **SAGLANDI**. Gerileyen kategoriler: yok.
+- Bu esik yalnizca bu benchmarkin raporlama kapisidir; genel urun esdegerligi iddiasi degildir.
 - Fark urun ile modelin TOPLAMIDIR (farkli modeller). Ayni guclu modelle Kairo
   olculmeden farkin urun payi AYRISTIRILAMAZ.
 - Yerel ilk surum kapisi (>= %80): GECTI (%100.0). Yanlis basari beyani 0 kosu.
