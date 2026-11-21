@@ -57,7 +57,21 @@ export function ayarlarAc(sekme = "ai") {
         <label class="ay-sag-hap"><input type="radio" name="ay-sag" value="yerel" ${a.saglayici === "yerel" ? "checked" : ""}><span>Bu bilgisayar</span><small>internetsiz · ücretsiz</small></label>
         <label class="ay-sag-hap"><input type="radio" name="ay-sag" value="openrouter" ${a.saglayici === "openrouter" ? "checked" : ""}><span>OpenRouter</span><small>bulut · yüzlerce model</small></label>
         <label class="ay-sag-hap"><input type="radio" name="ay-sag" value="ollama" ${a.saglayici === "ollama" ? "checked" : ""}><span>Ollama</span><small>yerel · ollama.com modelleri</small></label>
+        <label class="ay-sag-hap"><input type="radio" name="ay-sag" value="uyumlu" ${a.saglayici === "uyumlu" ? "checked" : ""}><span>Diğer bulut</span><small>OpenAI · Gemini · Groq · …</small></label>
       </div>
+      <div class="ayar-grup" id="ay-uy" ${a.saglayici === "uyumlu" ? "" : "hidden"}>
+        <div class="satir"><label for="ay-uy-sid" class="ay-etiket">Sağlayıcı</label><select class="secim" id="ay-uy-sid" style="flex:1"></select></div>
+        <div class="ay-anahtar-satir"><span class="ay-etiket">API anahtarı</span><span id="ay-uy-anahtar"></span>
+          <span class="ay-sag-dugme"><button class="btn kucuk tehlike" id="ay-uy-sil">Sil</button></span></div>
+        <div class="satir" id="ay-uy-adres-satir" hidden><input class="alan" id="ay-uy-adres" placeholder="Base URL (ör. http://127.0.0.1:1234/v1)" style="flex:1"></div>
+        <div class="satir"><input class="alan" id="ay-uy-yeni" type="password" autocomplete="off" placeholder="Anahtarı yapıştır (değiştirmek için)" style="flex:1">
+          <button class="btn ana" id="ay-uy-kaydet">Kaydet</button></div>
+        <div class="ay-secici-ust"><input class="alan" id="ay-uy-ara" placeholder="Model ara…" style="flex:1">
+          <button class="btn kucuk" id="ay-uy-yenile">Yenile</button><button class="btn kucuk ana" id="ay-uy-test">Dene</button></div>
+        <div class="soluk kucuk" id="ay-uy-uyari"></div>
+        <div id="ay-uy-modeller" class="ay-model-liste" role="listbox" aria-label="Sağlayıcı modelleri"></div>
+        <div class="ayar-not" id="ay-uy-sonuc"></div>
+        <div class="ayar-not">Anahtar bu bilgisayarda şifreli saklanır, arayüze geri gönderilmez. Düşünme seviyesi bu sağlayıcılara gönderilmez; modelin varsayılanı kullanılır.</div></div>
       <div class="ayar-grup" id="ay-ol" ${a.saglayici === "ollama" ? "" : "hidden"}>
         <div class="ay-anahtar-satir"><span class="ay-etiket">Ollama</span><span id="ay-ol-durum" class="soluk kucuk">Denetleniyor…</span>
           <span class="ay-sag-dugme"><button class="btn kucuk" id="ay-ol-magaza" title="ollama.com'da ara, indir, sil">Model mağazası</button></span></div>
@@ -711,6 +725,9 @@ export function ayarlarAc(sekme = "ai") {
       ad = durum.ayarlar.ollama_model || "Model seçilmedi";
       alt = m ? [m.parametre, m.niceleme, `${sayi(m.boyut_gb)} GB`, ...olYetenek(m.yetenek)] : ["Ollama"];
       if (m?.yetenek && !m.yetenek.araclar) alt.push("⚠ araç kullanamaz: ajan işleri çalışmaz");
+    } else if (durum.ayarlar.saglayici === "uyumlu") {
+      ad = durum.ayarlar.uyumlu_model || "Model seçilmedi";
+      alt = ["bulut · OpenAI uyumlu"];
     } else if (or) {
       const m = orListe.find((x) => x.id === durum.ayarlar.or_model);
       ad = m ? m.ad : durum.ayarlar.or_model || "Model seçilmedi";
@@ -722,17 +739,17 @@ export function ayarlarAc(sekme = "ai") {
       ad = m ? m.ad || m.anahtar : durum.ayarlar.model;
       alt = ["bu bilgisayarda", m && !m.dosya_var ? "⚠ dosya indirilmemiş" : "internetsiz"];
     }
-    k.innerHTML = `<div class="ay-aktif-sol"><div class="soluk kucuk">Kullanılan model · ${ol ? "Ollama" : or ? "OpenRouter" : "Bu bilgisayar"}</div>
+    k.innerHTML = `<div class="ay-aktif-sol"><div class="soluk kucuk">Kullanılan model · ${ol ? "Ollama" : or ? "OpenRouter" : durum.ayarlar.saglayici === "uyumlu" ? "Diğer bulut" : "Bu bilgisayar"}</div>
       <div class="ay-aktif-ad">${kacir(ad)}</div><div class="ay-aktif-alt">${alt.filter(Boolean).map((x) => `<span class="${String(x).startsWith("⚠") ? "uyari-metin" : ""}">${kacir(x)}</span>`).join(" · ")}</div>
       <div id="ay-aktif-sonuc" class="ayar-not"></div></div>
       <div class="ay-aktif-sag"><button class="btn kucuk" id="ay-aktif-degistir">Değiştir</button><button class="btn kucuk ana" id="ay-aktif-dene"><span data-ikon="oynat"></span>Dene</button></div>`;
     ikonlariYerlestir(k);
     $("#ay-aktif-degistir", k).onclick = () => {
-      const hedef = ol ? $("#ay-ol", govde) : or ? $("#ay-or-secici", govde) : $("#ay-modeller", govde);
+      const hedef = ol ? $("#ay-ol", govde) : durum.ayarlar.saglayici === "uyumlu" ? $("#ay-uy", govde) : or ? $("#ay-or-secici", govde) : $("#ay-modeller", govde);
       if (or) { hedef.open = true; setTimeout(() => $("#ay-or-ara", govde).focus(), 50); }
       hedef.scrollIntoView({ behavior: "smooth", block: "start" });
     };
-    $("#ay-aktif-dene", k).onclick = () => (or ? $("#ay-or-test", govde) : $("#ay-test", govde)).click();
+    $("#ay-aktif-dene", k).onclick = () => (or ? $("#ay-or-test", govde) : durum.ayarlar.saglayici === "uyumlu" ? $("#ay-uy-test", govde) : $("#ay-test", govde)).click();
   }
   const orListeYukle = async (yenile = false) => {
     $("#ay-or-uyari", govde).innerHTML = '<span class="parilti">Model listesi alınıyor…</span>';
@@ -754,8 +771,11 @@ export function ayarlarAc(sekme = "ai") {
     const ol = durum.ayarlar.saglayici === "ollama";
     $("#ay-or", govde).hidden = !acik;
     $("#ay-ol", govde).hidden = !ol;
-    $$("[data-yerel]", govde).forEach((x) => { x.hidden = acik || ol; });
-    $("#ay-test", govde).closest(".ayar-grup").hidden = acik; // Test: yerel + Ollama
+    const uy = durum.ayarlar.saglayici === "uyumlu";
+    $("#ay-uy", govde).hidden = !uy;
+    if (uy) uyPanelCiz();
+    $$("[data-yerel]", govde).forEach((x) => { x.hidden = acik || ol || uy; });
+    $("#ay-test", govde).closest(".ayar-grup").hidden = acik || uy; // Test: yerel + Ollama
     $("#ay-baglam", govde)?.closest(".ayar-grup")?.classList.remove("arama-gizli");
     if ($("#ay-baglam", govde)) $("#ay-baglam", govde).closest(".ayar-grup").hidden = acik; // Ollama da baglam_token kullanir
     if (ol) olPanelCiz();
@@ -800,6 +820,84 @@ export function ayarlarAc(sekme = "ai") {
     try {
       const t = await api("/api/openrouter/test", { method: "POST", govde: {} });
       sonuc.innerHTML = `<span class="rozet yesil">başarılı</span> "${kacir(t.cevap)}" · ${sayi(t.sure_sn)} sn · maliyet $${t.maliyet_usd}${t.arac_cagrisi ? " · araç çağırdı" : ""}`;
+    } catch (err) {
+      sonuc.innerHTML = `<span class="rozet kirmizi">hata</span> ${kacir(err.message)}`;
+    } finally { b.disabled = false; }
+  };
+  // ---- Diger bulut (OpenAI uyumlu) ----
+  let uyDurum = [], uyListe = [];
+  const uySid = () => $("#ay-uy-sid", govde).value;
+  async function uyPanelCiz() {
+    uyDurum = await api("/api/saglayicilar").catch(() => []);
+    const sec = $("#ay-uy-sid", govde);
+    const onceki = sec.value || (durum.ayarlar.uyumlu_model || "").split(":")[0] || "openai";
+    sec.innerHTML = uyDurum.map((s) => `<option value="${kacir(s.id)}">${kacir(s.ad)}${s.anahtar.var ? " ✓" : ""}</option>`).join("");
+    sec.value = onceki;
+    uyAnahtarCiz();
+    uyListeYukle();
+  }
+  function uyAnahtarCiz() {
+    const s = uyDurum.find((x) => x.id === uySid());
+    if (!s) return;
+    const k = s.anahtar;
+    $("#ay-uy-anahtar", govde).innerHTML = k.var
+      ? `<code>${kacir(k.maskeli)}</code> <span class="rozet yesil">${k.kaynak === "ortam" ? `ortam değişkeni (${kacir(s.ortam)})` : "kayıtlı"}</span>`
+      : s.anahtar_gerekli ? '<span class="rozet kirmizi">yok</span>' : '<span class="soluk kucuk">gerekmez</span>';
+    $("#ay-uy-sil", govde).hidden = k.kaynak !== "kayitli";
+    const adresli = ["ozel", "lmstudio"].includes(s.id);
+    $("#ay-uy-adres-satir", govde).hidden = !adresli;
+    $("#ay-uy-adres", govde).value = adresli ? s.adres : "";
+  }
+  async function uyListeYukle(yenile = false) {
+    uyListe = [];
+    $("#ay-uy-uyari", govde).innerHTML = '<span class="parilti">Model listesi alınıyor…</span>';
+    try {
+      const v = await api(`/api/saglayicilar/${uySid()}/modeller${yenile ? "?yenile=true" : ""}`);
+      uyListe = v.modeller;
+      $("#ay-uy-uyari", govde).textContent = v.uyari || `${uyListe.length} model · liste ${new Date(v.zaman * 1000).toLocaleString("tr-TR")}`;
+    } catch (err) {
+      $("#ay-uy-uyari", govde).innerHTML = `<span class="rozet kirmizi">hata</span> ${kacir(err.message)}`;
+    }
+    uyModelleriCiz();
+  }
+  function uyModelleriCiz() {
+    const ara = $("#ay-uy-ara", govde).value.toLowerCase();
+    const secili = durum.ayarlar.uyumlu_model;
+    const liste = uyListe.filter((m) => !ara || `${m.ad} ${m.id}`.toLowerCase().includes(ara));
+    const kutu = $("#ay-uy-modeller", govde);
+    kutu.innerHTML = liste.slice(0, 200).map((m) => {
+      const id = `${uySid()}:${m.id}`;
+      return `<button type="button" class="ay-model-satir ${id === secili ? "secili" : ""}" role="option" aria-selected="${id === secili}" data-uy="${kacir(id)}">
+        <span class="ay-model-ad">${kacir(m.ad)}</span><span class="ay-model-meta">${m.baglam ? `${ctx(m.baglam)} bağlam` : ""}</span>${id === secili ? '<span class="ay-tik" aria-hidden="true">✓</span>' : ""}</button>`;
+    }).join("") || '<div class="ayar-not">Model yok; anahtarı kaydedip Yenile düğmesine bas.</div>';
+    $$("[data-uy]", kutu).forEach((b) => {
+      b.onclick = async () => { await kaydet({ uyumlu_model: b.dataset.uy }, true); uyModelleriCiz(); aktifCiz(); bildir("Model seçildi", "basari", 1200); };
+    });
+  }
+  $("#ay-uy-sid", govde).onchange = () => { uyAnahtarCiz(); uyListeYukle(); };
+  $("#ay-uy-ara", govde).oninput = uyModelleriCiz;
+  $("#ay-uy-yenile", govde).onclick = () => uyListeYukle(true);
+  $("#ay-uy-kaydet", govde).onclick = async () => {
+    const g = $("#ay-uy-yeni", govde);
+    try {
+      uyDurum = await api(`/api/saglayicilar/${uySid()}`, { method: "PUT", govde: { anahtar: g.value, adres: $("#ay-uy-adres", govde).value } });
+      g.value = "";
+      bildir("Kaydedildi", "basari", 1500);
+      uyAnahtarCiz(); uyListeYukle(true);
+    } catch (err) { bildir(err.message, "hata"); }
+  };
+  $("#ay-uy-sil", govde).onclick = async () => {
+    if (!(await onayla("Anahtarı sil", "Bu sağlayıcının API anahtarı bu bilgisayardan silinsin mi?", { evet: "Sil", tehlike: true }))) return;
+    uyDurum = await api(`/api/saglayicilar/${uySid()}`, { method: "DELETE" });
+    uyAnahtarCiz(); uyListeYukle();
+  };
+  $("#ay-uy-test", govde).onclick = async (e) => {
+    const b = e.currentTarget, sonuc = $("#ay-uy-sonuc", govde);
+    b.disabled = true;
+    sonuc.innerHTML = '<span class="parilti">Deneniyor…</span>';
+    try {
+      const t = await api("/api/saglayicilar/test", { method: "POST", govde: {} });
+      sonuc.innerHTML = `<span class="rozet yesil">başarılı</span> "${kacir(t.cevap)}" · ${sayi(t.sure_sn)} sn${t.token ? ` · ${t.token} token` : ""}${t.arac_cagrisi ? " · araç çağırdı" : ""}${t.finish_reason === "length" ? " · ⚠ çıktı sınıra takıldı" : ""}`;
     } catch (err) {
       sonuc.innerHTML = `<span class="rozet kirmizi">hata</span> ${kacir(err.message)}`;
     } finally { b.disabled = false; }

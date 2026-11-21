@@ -90,7 +90,8 @@ class KullaniciAyarlari(BaseModel):
     sistem_istemi: str = Field(default="", max_length=4000)
     sicaklik: float = Field(default=0.2, ge=0.0, le=2.0)
     max_tokens: int = Field(default=1024, ge=16, le=8192)
-    saglayici: Literal["yerel", "openrouter", "ollama"] = "yerel"
+    saglayici: Literal["yerel", "openrouter", "ollama", "uyumlu"] = "yerel"
+    uyumlu_model: str = Field(default="", max_length=240)  # <saglayici>:<model> (or. groq:x)
     or_model: str = Field(default="", max_length=200)  # OpenRouter model id (or. x/y:free)
     ollama_model: str = Field(default="", max_length=200)  # Ollama model adi (or. qwen3:8b)
     # Kairo'nun kendi gecidi 11434'te; Kairo'nun baslattigi Ollama ayri portta calisir
@@ -150,6 +151,8 @@ class KullaniciAyarlari(BaseModel):
     def aktif_model(self) -> str:
         if self.saglayici == "ollama" and self.ollama_model:
             return f"ollama:{self.ollama_model}"
+        if self.saglayici == "uyumlu" and self.uyumlu_model:
+            return self.uyumlu_model
         return self.or_model if self.saglayici == "openrouter" and self.or_model else self.model
 
     @field_validator("uzak_port")
