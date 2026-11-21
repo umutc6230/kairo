@@ -86,9 +86,7 @@ def test_tarihsel_girdiler_esdegerlik_raporu_uret() -> None:
     kok = Path(__file__).resolve().parents[1]
     yerel = json.loads(
         (
-            kok
-            / "degerlendirme/rapor-2026-11-18/kairo-x3-96f8a2a"
-            / "rapor-20261118T180926Z.json"
+            kok / "degerlendirme/rapor-2026-11-18/kairo-x3-96f8a2a" / "rapor-20261118T180926Z.json"
         ).read_text(encoding="utf-8")
     )
     cc = json.loads(
