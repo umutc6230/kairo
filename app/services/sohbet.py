@@ -62,6 +62,7 @@ from app.services.yerel_llm import (
     YerelLLM,
     resmi_kucult,
 )
+from app.services.yonlendirici import model_sec
 
 # Baglam butcesi (llama-server -c 8192). Tahminler kasitli olarak comert: tasarsa sunucu hata verir.
 BAGLAM_TOKEN = 8192
@@ -742,6 +743,7 @@ class SohbetServisi:
         politika: PolitikaMotoru | None = None,
         checkpointler: CheckpointDeposu | None = None,
         komutlar: KomutServisi | None = None,
+        gunluk_maliyet: Callable[[], float] | None = None,
     ) -> None:
         self.yonetici = yonetici
         self.oturumlar = oturumlar
@@ -752,6 +754,7 @@ class SohbetServisi:
         self.politika = politika
         self.checkpointler = checkpointler
         self.komutlar = komutlar or KomutServisi()
+        self.gunluk_maliyet = gunluk_maliyet
         self.hafiza = None  # HafizaDeposu (api baglar)
         self.mcp = None  # McpYoneticisi (api baglar)
         self.uzantilar = None  # UzantiYoneticisi (api baglar)
@@ -1383,7 +1386,12 @@ class SohbetServisi:
         yield {"tur": "kullanici_mesaji", "mesaj": kullanici.model_dump(), "baslik": baslik}
 
         ayar = self.yonetici.ayarlar.oku()
-        model = self.aktif_alan().koordinator_model or ayar.aktif_model  # proje: koordinator
+        alan = self.aktif_alan()
+        istenen_model = alan.koordinator_model or ayar.aktif_model  # proje: koordinator
+        bugun_usd = self.gunluk_maliyet() if self.gunluk_maliyet is not None else 0.0
+        model, yonlendirme_uyari = model_sec(istenen_model, ayar, alan, bugun_usd)
+        if yonlendirme_uyari:
+            yield {"tur": "uyari", "kod": "model_yonlendirildi", "metin": yonlendirme_uyari}
         asistan = Mesaj(rol="asistan", model=model)
         yarim: list[str] = []
         yarim_dusunce: list[str] = []

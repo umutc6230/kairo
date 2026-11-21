@@ -13,11 +13,14 @@ ajan gorevleri birbirini gorur, ayni dosyaya ayni anda yazmaz, mesajlasir, bekle
 from __future__ import annotations
 
 import contextvars
+import json
 import threading
 import time
 from dataclasses import dataclass, field
+from pathlib import Path
 
 from app.exceptions import UygulamaHatasi
+from app.services.depo import json_yaz
 
 KIRA_SN = 600
 EN_FAZLA_BEKLE = 300
@@ -60,13 +63,118 @@ class Mesaj:
 
 
 class Koordinasyon:
-    def __init__(self, saat=time.time) -> None:
+    def __init__(self, saat=time.time, dosya: Path | None = None) -> None:
         self.saat = saat
+        self.dosya: Path | None = dosya
+        self._son_mtime: float = -1.0
+        self._son_ham: str | None = None
         self._k: dict[str, Katilimci] = {}
         self._kutu: list[Mesaj] = []
         self._kosul = threading.Condition()
+        if dosya is not None:
+            with self._kosul:
+                self._yukle()
+
+    def bagla(self, dosya: Path | None) -> None:
+        """Kalici pano dosyasini baglar (ya da bellek ici moda doner)."""
+        with self._kosul:
+            self.dosya = dosya
+            self._k.clear()
+            self._kutu.clear()
+            self._son_mtime = -1.0
+            self._son_ham = None
+            if dosya is not None:
+                self._yukle()
 
     # ---- ic ----
+    def _yukle(self) -> None:
+        if self.dosya is None:
+            return
+        try:
+            st = self.dosya.stat()
+            ham_metin = self.dosya.read_text(encoding="utf-8")
+        except OSError:
+            self._son_mtime = -1.0
+            self._son_ham = None
+            return
+        if st.st_mtime == self._son_mtime and ham_metin == self._son_ham:
+            return
+        try:
+            ham = json.loads(ham_metin) or {}
+        except ValueError:
+            return
+        if not isinstance(ham, dict):
+            return
+        katilimcilar: dict[str, Katilimci] = {}
+        for d in ham.get("katilimcilar", []):
+            try:
+                k = Katilimci(
+                    kimlik=str(d["kimlik"]),
+                    proje=str(d["proje"]),
+                    ad=str(d.get("ad", "")),
+                    son=float(d["son"]),
+                    dosyalar={str(y): float(b) for y, b in (d.get("dosyalar") or {}).items()},
+                    bekliyor=str(d.get("bekliyor", "")),
+                )
+                katilimcilar[k.kimlik] = k
+            except (KeyError, TypeError, ValueError):
+                continue
+        mesajlar: list[Mesaj] = []
+        for m in ham.get("mesajlar", []):
+            try:
+                mesajlar.append(
+                    Mesaj(
+                        kimden=str(m["kimden"]),
+                        kimden_ad=str(m.get("kimden_ad", "")),
+                        kime=str(m["kime"]),
+                        metin=str(m["metin"]),
+                        tur=str(m.get("tur", "mesaj")),
+                        zaman=float(m.get("zaman", 0.0)),
+                    )
+                )
+            except (KeyError, TypeError, ValueError):
+                continue
+        self._k = katilimcilar
+        self._kutu = mesajlar
+        self._son_mtime = st.st_mtime
+        self._son_ham = ham_metin
+        self._temizle()
+
+    def _kaydet(self) -> None:
+        if self.dosya is None:
+            return
+        veri = {
+            "katilimcilar": [
+                {
+                    "kimlik": k.kimlik,
+                    "proje": k.proje,
+                    "ad": k.ad,
+                    "son": k.son,
+                    "dosyalar": k.dosyalar,
+                    "bekliyor": k.bekliyor,
+                }
+                for k in self._k.values()
+            ],
+            "mesajlar": [
+                {
+                    "kimden": m.kimden,
+                    "kimden_ad": m.kimden_ad,
+                    "kime": m.kime,
+                    "metin": m.metin,
+                    "tur": m.tur,
+                    "zaman": m.zaman,
+                }
+                for m in self._kutu
+            ],
+        }
+        json_yaz(self.dosya, veri)
+        try:
+            self._son_mtime = self.dosya.stat().st_mtime
+            self._son_ham = self.dosya.read_text(encoding="utf-8")
+        except OSError:
+            self._son_mtime = -1.0
+            self._son_ham = None
+
     def _temizle(self) -> None:
         simdi = self.saat()
         for kid, k in list(self._k.items()):
@@ -85,17 +193,23 @@ class Koordinasyon:
         if not kid or not proje:
             return
         with self._kosul:
+            self._yukle()
             k = self._k.get(kid)
             if k is None or k.proje != proje:
                 self._k[kid] = Katilimci(kid, proje, ad[:120], self.saat())
             else:
                 k.son = self.saat()
                 k.ad = ad[:120] or k.ad
+            self._temizle()
+            self._kaydet()
 
     def ayril(self, kid: str) -> None:
         """Tur/gorev bitti: dosyalarini birakir (bekleyenler uyanir)."""
         with self._kosul:
+            self._yukle()
             self._k.pop(kid, None)
+            self._temizle()
+            self._kaydet()
             self._kosul.notify_all()
 
     # ---- dosya ----
@@ -103,6 +217,7 @@ class Koordinasyon:
         if not kid or not proje:
             return  # arayuzden dogrudan yapilan islem: koordinasyon disi
         with self._kosul:
+            self._yukle()
             self._temizle()
             diger = self._sahip(proje, yol, kid)
             if diger is not None:
@@ -116,15 +231,19 @@ class Koordinasyon:
                 k = self._k[kid] = Katilimci(kid, proje, ad[:120] or kid, self.saat())
             k.son = self.saat()
             k.dosyalar[yol] = self.saat() + KIRA_SN
+            self._temizle()
+            self._kaydet()
 
     def bekle(self, kid: str, proje: str, yol: str, sure: float) -> dict:
         """Dosya serbest kalana ya da sure dolana kadar bekler (en fazla EN_FAZLA_BEKLE sn)."""
         bitis = time.monotonic() + max(1.0, min(float(sure), EN_FAZLA_BEKLE))
         with self._kosul:
+            self._yukle()
             if kid in self._k:
                 self._k[kid].bekliyor = yol
             try:
                 while True:
+                    self._yukle()
                     self._temizle()
                     diger = self._sahip(proje, yol, kid)
                     if diger is None:
@@ -132,7 +251,7 @@ class Koordinasyon:
                     kalan = bitis - time.monotonic()
                     if kalan <= 0:
                         return {"serbest": False, "dosya": yol, "sahip": diger.ad}
-                    self._kosul.wait(timeout=min(kalan, 5.0))
+                    self._kosul.wait(timeout=min(kalan, 0.2 if self.dosya else 5.0))
             finally:
                 if kid in self._k:
                     self._k[kid].bekliyor = ""
@@ -145,6 +264,7 @@ class Koordinasyon:
         if not metin:
             raise UygulamaHatasi("Bos mesaj gonderilemez.")
         with self._kosul:
+            self._yukle()
             self._temizle()
             gonderen, alici = self._k.get(kid), self._k.get(kime)
             if gonderen is None or gonderen.proje != proje:
@@ -154,17 +274,23 @@ class Koordinasyon:
                     f"'{kime}' bu projede aktif degil; oturumlari_gor ile guncel listeye bak."
                 )
             self._kutu.append(Mesaj(kid, gonderen.ad, kime, metin, tur))
+            self._kaydet()
         return {"gonderildi": True, "kime": kime}
 
     def teslim_al(self, kid: str) -> list[Mesaj]:
         with self._kosul:
+            self._yukle()
             gelen = [m for m in self._kutu if m.kime == kid]
-            self._kutu = [m for m in self._kutu if m.kime != kid]
+            if gelen:
+                self._kutu = [m for m in self._kutu if m.kime != kid]
+                self._temizle()
+                self._kaydet()
             return gelen
 
     # ---- gorunum ----
     def aktifler(self, proje: str, haric: str = "") -> list[dict]:
         with self._kosul:
+            self._yukle()
             self._temizle()
             return [
                 {"kimlik": k.kimlik, "ad": k.ad, "dosyalar": sorted(k.dosyalar),
@@ -176,6 +302,7 @@ class Koordinasyon:
     def tumu(self) -> list[dict]:
         """Kenar cubugu rozetleri: tum projelerdeki katilimcilarin ozet durumu."""
         with self._kosul:
+            self._yukle()
             self._temizle()
             return [
                 {"kimlik": k.kimlik, "dosya": len(k.dosyalar), "bekliyor": k.bekliyor}

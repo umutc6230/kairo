@@ -101,6 +101,7 @@ from app.services.testler import (
 from app.services.uyanik import Uyanik
 from app.services.uzantilar import ONIZLEME_CSP, UzantiYoneticisi
 from app.services.yerel_llm import DUSUNME_SECENEKLERI, MODELLER, YerelLLM
+from app.services.yonlendirici import gunluk_maliyet_usd
 
 UPLOAD_PARCA_BAYT = 1024 * 1024  # upload akisinda tek seferde okunan parca
 OTURUM_BASLIGI = "x-yas-oturum"  # loopback API'de oturum kimligi (A1.9)
@@ -123,6 +124,10 @@ class ModIstegi(BaseModel):
 
 class GuvenIstegi(BaseModel):
     guven: Guven
+
+
+class GizliProjeIstegi(BaseModel):
+    gizli_proje: bool
 
 
 class ModellerIstegi(BaseModel):
@@ -408,6 +413,7 @@ def uygulama_olustur(
     talimatlar = TalimatDeposu(veri_dizini)
     skiller = skill_deposu or SkillDeposu(veri_dizini)
     projeler = WorkspaceDeposu(veri_dizini)
+    koord.KOORD.bagla(veri_dizini / "koordinasyon.json")
     _adaptorler: dict[tuple[str, str], Any] = {}
 
     def izolasyon() -> Any:
@@ -978,6 +984,7 @@ def uygulama_olustur(
     sohbet.goruntu_var = lambda: model_yetenegi(sohbet.aktif_alan().koordinator_model).goruntu
     sohbet.model_baglami = lambda: model_yetenegi(sohbet.aktif_alan().koordinator_model).baglam
     sohbet.openrouter = openrouter
+    sohbet.gunluk_maliyet = lambda: gunluk_maliyet_usd(run_deposu)
 
     async def _is_baslat(is_: sa.IsEmri) -> None:
         """Bir atama: ilk atamada worktree + dal olusur; sonrakiler ayni dalda onceki ozetle."""
@@ -2755,6 +2762,20 @@ def uygulama_olustur(
     @app.put("/api/projeler/{alan_id}/guven")
     async def proje_guven(alan_id: str, istek: GuvenIstegi) -> dict:
         return projeler.guven_ayarla(alan_id, istek.guven).model_dump(mode="json")
+
+    @app.put("/api/projeler/{alan_id}/gizli")
+    async def proje_gizli(alan_id: str, istek: GizliProjeIstegi) -> dict:
+        return projeler.gizli_ayarla(alan_id, istek.gizli_proje).model_dump(mode="json")
+
+    @app.get("/api/maliyet/durum")
+    async def maliyet_durum() -> dict:
+        bugun = gunluk_maliyet_usd(run_deposu)
+        sinir = ayarlar.oku().gunluk_butce_usd
+        return {
+            "bugun_usd": bugun,
+            "gunluk_butce_usd": sinir,
+            "asildi": bool(sinir > 0 and bugun >= sinir),
+        }
 
     @app.post("/api/projeler/{alan_id}/kok")
     async def proje_kok_ekle(alan_id: str, istek: YolIstegi) -> dict:
