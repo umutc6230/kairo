@@ -199,7 +199,7 @@ def test_proje_modeli_lider_koordinator_alt_ajan_uygulayici(tmp_path) -> None:
         yield model
 
     runner.llm = llm
-    runner.uygulayici_model = lambda: "kucuk/model"
+    runner.uygulayici_model = lambda _="": "kucuk/model"
 
     async def calistir():
         run = await runner.baslat("x", model="buyuk/model", model_sabit=True)
@@ -287,7 +287,7 @@ def test_model_router_rapor_yazimini_uygulayiciya_devreder(tmp_path) -> None:
         yield model
 
     runner.llm = llm
-    runner.uygulayici_model = lambda: "baska/model"
+    runner.uygulayici_model = lambda _="": "baska/model"
 
     async def calistir():
         run = await runner.baslat(

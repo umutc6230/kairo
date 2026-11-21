@@ -166,10 +166,27 @@ async def test_claude_hooklari_brain_baglami_ve_kayit(tmp_path) -> None:
     hooks.ekle({"ad": "s", "olay": "run_bitis", "bicim": "claude", "komut": bitis})
     model = SahteModel([cagri("gorevi_bitir", ozet="giris ekrani bitti", kanit_adimlari=[])])
     runner, *_ = kur(tmp_path, proje, model, hooks=hooks)
-    runner.kok = lambda: str(proje)
+    runner.kok = lambda _="": str(proje)
     run = await bitir(runner, (await runner.baslat("giris ekranini yap")).id)
     assert "DURUM: siradaki madde X" in run.ek_sistem
     govde = json.loads(iz.read_bytes().decode("utf-8"))
     assert govde["hook_event_name"] == "Stop" and Path(govde["cwd"]) == proje
     assert govde["prompt"] == "giris ekranini yap"
     assert govde["last_assistant_message"] == "giris ekrani bitti"
+
+
+async def test_hook_cwd_gorevin_projesinden_gelir(tmp_path) -> None:
+    """Aktif proje degisse de gorevin hook cwd'si kaydedilen projenin koku kalir."""
+    proje = tmp_path / "proje"
+    proje.mkdir()
+    iz = tmp_path / "stop.json"
+    bitis = _betik(
+        tmp_path, "s", f"import sys; open({str(iz)!r},'wb').write(sys.stdin.buffer.read())"
+    )
+    hooks = HookDeposu(tmp_path / "h")
+    hooks.ekle({"ad": "s", "olay": "run_bitis", "bicim": "claude", "komut": bitis})
+    model = SahteModel([cagri("gorevi_bitir", ozet="tamam", kanit_adimlari=[])])
+    runner, *_ = kur(tmp_path, proje, model, hooks=hooks)
+    runner.kok = lambda proje_id="": str(proje) if proje_id == "p1" else str(tmp_path)
+    await bitir(runner, (await runner.baslat("x", proje_id="p1")).id)
+    assert Path(json.loads(iz.read_bytes().decode("utf-8"))["cwd"]) == proje
