@@ -36,7 +36,7 @@ def gecit(veri, llm_dizin, sunucu: SahteSunucu):
 @pytest.fixture
 async def gi(gecit):
     async with httpx.AsyncClient(
-        transport=httpx.ASGITransport(app=gecit), base_url="http://g"
+        transport=httpx.ASGITransport(app=gecit), base_url="http://127.0.0.1:11434"
     ) as c:
         yield c
 
@@ -308,3 +308,24 @@ async def test_anthropic_uclari_claude_code_icin(gi, sunucu, gecit, monkeypatch)
         "/v1/messages", json={**govde, "model": "deepseek-heretic", "stream": True}
     )
     assert akis.text.startswith("event: error")
+
+
+async def test_agecidi_guvenlik_ve_kenar_durumlari(gi, gecit) -> None:
+    # Host DNS rebinding / dis Origin engeli
+    assert (await gi.get("/api/tags", headers={"host": "evil.test"})).status_code == 403
+    assert (
+        await gi.post("/api/chat", json={}, headers={"origin": "https://evil.test"})
+    ).status_code == 403
+    # DELETE /api/delete desteklenmiyor (400)
+    assert (await gi.delete("/api/delete")).status_code == 400
+    # thinking: null AttributeError vermemeli
+    r = await gi.post(
+        "/v1/messages",
+        json={
+            "model": "gemma4-e4b-heretic",
+            "max_tokens": 50,
+            "thinking": None,
+            "messages": [{"role": "user", "content": "selam"}],
+        },
+    )
+    assert r.status_code == 200

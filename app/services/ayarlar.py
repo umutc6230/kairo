@@ -25,12 +25,8 @@ YEREL_HATA = (
 IZINLI_SCHEME = ("http", "https")
 
 
-def yerel_adres_dogrula(ham: str) -> str:
-    """Adresi AYRISTIRARAK yalniz loopback hedeflerini kabul eder; `.../v1` ile dondurur.
-
-    startswith kontrolu yetersizdi: `http://localhost.example.invalid` ve
-    `http://127.0.0.1@example.invalid` gercek hostname'i uzakta birakiyordu (A0.2).
-    """
+def _yerel_adres_coz(ham: str, v1_ekle: bool = True) -> str:
+    """Adresi ayristirarak yalniz loopback hedeflerini kabul eder."""
     v = (ham or "").strip().rstrip("/")
     if not v:
         raise ValueError(YEREL_HATA)
@@ -55,9 +51,23 @@ def yerel_adres_dogrula(ham: str) -> str:
     konak = f"[{host}]" if ":" in host else host
     netloc = f"{konak}:{port}" if port is not None else konak
     yol = ayri.path.rstrip("/")
-    if not yol.endswith("/v1"):
+    if v1_ekle and not yol.endswith("/v1"):
         yol = f"{yol}/v1"
     return f"{ayri.scheme}://{netloc}{yol}"
+
+
+def yerel_adres_dogrula(ham: str) -> str:
+    """Adresi AYRISTIRARAK yalniz loopback hedeflerini kabul eder; `.../v1` ile dondurur.
+
+    startswith kontrolu yetersizdi: `http://localhost.example.invalid` ve
+    `http://127.0.0.1@example.invalid` gercek hostname'i uzakta birakiyordu (A0.2).
+    """
+    return _yerel_adres_coz(ham, v1_ekle=True)
+
+
+def ollama_adres_dogrula(ham: str) -> str:
+    """Ollama sunucu adresini yalniz loopback olacak sekilde dogrular (`/v1` eklemez)."""
+    return _yerel_adres_coz(ham, v1_ekle=False)
 
 
 UZAK_PORT = 8765  # 8443 Tailscale'in kendi portuyla cakisiyordu
@@ -174,6 +184,11 @@ class KullaniciAyarlari(BaseModel):
     @classmethod
     def _adres(cls, v: str) -> str:
         return yerel_adres_dogrula(v)
+
+    @field_validator("ollama_adres")
+    @classmethod
+    def _ollama_adres(cls, v: str) -> str:
+        return ollama_adres_dogrula(v)
 
 
 class AyarDeposu:

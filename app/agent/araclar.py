@@ -21,6 +21,7 @@ from app.agent.policy import Istek, Karar, PolitikaMotoru, YanEtki
 from app.agent.terminal import AKTIF_RUN, KomutServisi
 from app.agent.workspaces import CalismaAlani
 from app.agent.yazma import YazmaAraclari, sonuc_veya_hata
+from app.exceptions import YetkiYok
 
 
 def _calisan_loop() -> asyncio.AbstractEventLoop | None:
@@ -220,61 +221,83 @@ class AjanAracKaydi:
         self._yuklu_talimat: set[Path] = set()  # bu gorevde eklenen alt klasor talimatlari
 
     # ---- gorunurluk ----
-    def _acik_mi(self, arac: str, yan_etki: YanEtki) -> bool:
-        """Politika bu yan etkiyi KESIN reddediyorsa arac modele sunulmaz."""
-        sonuc = self.politika.degerlendir(Istek(arac=arac, yan_etki=yan_etki, ozet=arac), self.alan)
+    def _acik_mi(self, arac: str, yan_etki: YanEtki, host: str | None = None) -> bool:
+        """Politika bu arac/yan etkiyi KESIN reddediyorsa arac modele sunulmaz."""
+        sonuc = self.politika.degerlendir(
+            Istek(arac=arac, yan_etki=yan_etki, host=host, ozet=arac), self.alan
+        )
         return sonuc.karar is not Karar.ret
 
+    def _oku_izinli(
+        self, arac: str, fonk: Callable[..., Any], yol_alani: str
+    ) -> Callable[..., Any]:
+        def sarili(**kw: Any) -> Any:
+            try:
+                p = self.kapsam.coz(kw.get(yol_alani), varsayilan=".")
+                self.politika.okuma_yolu(self.alan, arac, str(p))
+            except YetkiYok as e:
+                return {"hata": str(e), "karar": "ret"}
+            return fonk(**kw)
+
+        return sarili
+
     def semalar(self) -> list[dict]:
-        semalar = list(OKUMA_SEMALARI)
-        if self._acik_mi("proje_dosya_yaz", YanEtki.yaz):
-            semalar += YAZMA_SEMALARI
-        if self._acik_mi("github_pr_olustur", YanEtki.dis):
-            semalar += GITHUB_YAZMA_SEMALARI
-        if self._acik_mi("komut_calistir", YanEtki.komut):
-            semalar += KOMUT_SEMALARI
-        if self._acik_mi("git_commit", YanEtki.git):
-            semalar += GIT_SEMALARI
+        semalar: list[dict] = []
+        for s in OKUMA_SEMALARI:
+            ad = s["function"]["name"]
+            if ad == "github_issue_oku":
+                if self._acik_mi(ad, YanEtki.ag, "api.github.com"):
+                    semalar.append(s)
+            elif self._acik_mi(ad, YanEtki.oku):
+                semalar.append(s)
+        for s in YAZMA_SEMALARI:
+            ad = s["function"]["name"]
+            etki = YanEtki.sil if ad == "proje_dosya_sil" else YanEtki.yaz
+            if self._acik_mi(ad, etki):
+                semalar.append(s)
+        for s in GITHUB_YAZMA_SEMALARI:
+            if self.politika.ag_acik() and self._acik_mi(s["function"]["name"], YanEtki.dis):
+                semalar.append(s)
+        for s in KOMUT_SEMALARI:
+            if self._acik_mi(s["function"]["name"], YanEtki.komut):
+                semalar.append(s)
+        for s in GIT_SEMALARI:
+            if self._acik_mi(s["function"]["name"], YanEtki.git):
+                semalar.append(s)
         return semalar
 
     # ---- isleyiciler ----
     def isleyiciler(self) -> dict[str, Callable[..., Any]]:
-        h: dict[str, Callable[..., Any]] = {
-            "proje_dosya_oku": self.okuma.dosya_oku,
-            "proje_listele": self.okuma.klasor_listele,
-            "proje_glob": self.okuma.glob_bul,
-            "proje_ara": self.okuma.icerik_ara,
-            "git_durum": self.git.git_durum,
-            "git_diff": self.git.git_diff,
-            "git_gecmis": self.git.git_gecmis,
-            "notebook_oku": lambda **kw: sonuc_veya_hata(self.notebook.notebook_oku, **kw),
+        tum: dict[str, Callable[..., Any]] = {
+            "proje_dosya_oku": self._oku_izinli("proje_dosya_oku", self.okuma.dosya_oku, "yol"),
+            "proje_listele": self._oku_izinli("proje_listele", self.okuma.klasor_listele, "yol"),
+            "proje_glob": self._oku_izinli("proje_glob", self.okuma.glob_bul, "klasor"),
+            "proje_ara": self._oku_izinli("proje_ara", self.okuma.icerik_ara, "klasor"),
+            "git_durum": self._oku_izinli("git_durum", self.git.git_durum, "klasor"),
+            "git_diff": self._oku_izinli("git_diff", self.git.git_diff, "klasor"),
+            "git_gecmis": self._oku_izinli("git_gecmis", self.git.git_gecmis, "klasor"),
+            "notebook_oku": self._oku_izinli(
+                "notebook_oku",
+                lambda **kw: sonuc_veya_hata(self.notebook.notebook_oku, **kw),
+                "yol",
+            ),
             "github_issue_oku": lambda **kw: sonuc_veya_hata(self.github.issue_oku, **kw),
+            "proje_dosya_yaz": lambda **kw: sonuc_veya_hata(self.yazma.dosya_yaz, **kw),
+            "proje_dosya_yama": lambda **kw: sonuc_veya_hata(self.yazma.dosya_yama, **kw),
+            "proje_dosya_tasi": lambda **kw: sonuc_veya_hata(self.yazma.dosya_tasi, **kw),
+            "proje_dosya_sil": lambda **kw: sonuc_veya_hata(self.yazma.dosya_sil, **kw),
+            "notebook_duzenle": lambda **kw: sonuc_veya_hata(self.notebook.notebook_duzenle, **kw),
+            "github_pr_olustur": lambda **kw: sonuc_veya_hata(self.github.pr_olustur, **kw),
+            "github_pr_yorum": lambda **kw: sonuc_veya_hata(self.github.pr_yorum, **kw),
+            "komut_calistir": self.komut_calistir,
+            "komut_durumu": self.komut_durumu,
+            "komut_durdur": self.komut_durdur,
+            "komut_girdi": self.komut_girdi,
+            "git_dal": self.git_dal,
+            "git_commit": self.git_commit,
         }
         acik = {s["function"]["name"] for s in self.semalar()}
-        if "proje_dosya_yaz" in acik:
-            h |= {
-                "proje_dosya_yaz": lambda **kw: sonuc_veya_hata(self.yazma.dosya_yaz, **kw),
-                "proje_dosya_yama": lambda **kw: sonuc_veya_hata(self.yazma.dosya_yama, **kw),
-                "proje_dosya_tasi": lambda **kw: sonuc_veya_hata(self.yazma.dosya_tasi, **kw),
-                "proje_dosya_sil": lambda **kw: sonuc_veya_hata(self.yazma.dosya_sil, **kw),
-                "notebook_duzenle": lambda **kw: sonuc_veya_hata(
-                    self.notebook.notebook_duzenle, **kw
-                ),
-            }
-        if "github_pr_olustur" in acik:
-            h |= {
-                "github_pr_olustur": lambda **kw: sonuc_veya_hata(self.github.pr_olustur, **kw),
-                "github_pr_yorum": lambda **kw: sonuc_veya_hata(self.github.pr_yorum, **kw),
-            }
-        if "komut_calistir" in acik:
-            h |= {
-                "komut_calistir": self.komut_calistir,
-                "komut_durumu": self.komut_durumu,
-                "komut_durdur": self.komut_durdur,
-                "komut_girdi": self.komut_girdi,
-            }
-        if "git_commit" in acik:
-            h |= {"git_dal": self.git_dal, "git_commit": self.git_commit}
+        h = {ad: fonk for ad, fonk in tum.items() if ad in acik}
         for ad in ("proje_dosya_oku", "proje_dosya_yaz", "proje_dosya_yama", "notebook_oku"):
             if ad in h:
                 h[ad] = self._alt_talimatla(h[ad])

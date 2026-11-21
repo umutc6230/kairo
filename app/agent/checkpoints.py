@@ -251,6 +251,8 @@ class CheckpointDeposu:
         gecici = p.with_suffix(p.suffix + ".geri-tmp")
         shutil.copyfile(kopya, gecici)
         gecici.replace(p)
+        if d.islem is Islem.tasi and d.hedef:
+            Path(d.hedef).unlink(missing_ok=True)
 
     def temizle(self, saklanan: int = MAX_CHECKPOINT) -> int:
         """Kayit disi kalan snapshot dosyalarini siler; kac dosya silindigini dondurur."""

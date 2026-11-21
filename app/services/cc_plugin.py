@@ -207,6 +207,9 @@ def komut_dosyalari(dizin: Path) -> list[dict]:
     return sonuc
 
 
+YASAK_ORTAM = frozenset({"YAS_OPENROUTER_ANAHTARI", "YAS_OTURUM"})
+
+
 def degisken_ac(metin: str, kok: Path) -> str:
     """${CLAUDE_PLUGIN_ROOT}, ${VAR} ve ${VAR:-varsayilan} (Claude Code ile ayni)."""
 
@@ -214,6 +217,8 @@ def degisken_ac(metin: str, kok: Path) -> str:
         ad, vars_ = m.group(1), m.group(3)
         if ad == "CLAUDE_PLUGIN_ROOT":
             return str(kok)
+        if ad.upper() in YASAK_ORTAM:
+            return vars_ if vars_ is not None else ""
         return os.environ.get(ad) or (vars_ if vars_ is not None else "")
 
     return re.sub(r"\$\{([A-Za-z_][A-Za-z0-9_]*)(:-([^}]*))?\}", yerine, metin)
@@ -234,16 +239,17 @@ def hook_komutu(komut: str, kok: Path) -> str:
 
 def komut_genislet(govde: str, arg: str, kok: Path) -> str:
     parcalar = arg.split()
-    metin = govde.replace("$ARGUMENTS", arg)
+    metin = govde.replace("${CLAUDE_PLUGIN_ROOT}", str(kok))
+    metin = metin.replace("$ARGUMENTS", arg)
     for i in range(9, 0, -1):
         metin = metin.replace(f"${i}", parcalar[i - 1] if len(parcalar) >= i else "")
-    return degisken_ac(metin, kok)
+    return metin
 
 
 def eksik_degiskenler(metin: str) -> list[str]:
     """Varsayilani olmayan ve bu bilgisayarda tanimli olmayan ${DEGISKEN}'ler."""
     return [m.group(1) for m in re.finditer(r"\$\{([A-Za-z_][A-Za-z0-9_]*)\}", metin)
-            if m.group(1) != "CLAUDE_PLUGIN_ROOT" and not os.environ.get(m.group(1))]  # fmt: skip
+            if m.group(1) != "CLAUDE_PLUGIN_ROOT" and m.group(1).upper() not in YASAK_ORTAM and not os.environ.get(m.group(1))]  # fmt: skip
 
 
 def mcp_donustur(ad: str, ham: dict, kok: Path) -> dict | None:
@@ -285,7 +291,10 @@ def marketplace_oku(kok: Path) -> dict:
             continue
         src = x.get("source")
         if isinstance(src, str):
-            kaynak = {"tur": "yol", "yol": str((kok / src).resolve())}
+            hedef = (kok / src).resolve()
+            if not hedef.is_relative_to(kok.resolve()):
+                continue
+            kaynak = {"tur": "yol", "yol": str(hedef)}
         elif isinstance(src, dict) and src.get("source") in ("github", "git", "url"):
             url = src.get("url") or f"https://github.com/{src.get('repo', '')}.git"
             kaynak = {"tur": "git", "url": url, "ref": src.get("ref") or src.get("sha") or ""}

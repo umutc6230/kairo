@@ -60,6 +60,8 @@ class Cihaz(BaseModel):
     ad: str
     rol: Rol
     token_ozet: str
+    onceki_token_ozet: str = ""
+    onceki_son: float = 0
     eslesme: float
     son_kullanma: float
     son_gorulme: float = 0
@@ -96,6 +98,7 @@ class UzakDeposu:
         self.denetim_yolu = veri_dizini / "uzak-denetim.jsonl"
         self.saat = saat
         self._kilit = threading.Lock()
+        self._denetim_sayaci = 0
 
     def _oku(self) -> dict:
         v = json_oku(self.yol, {}) or {}
@@ -139,19 +142,25 @@ class UzakDeposu:
         with self._kilit:
             v = self._oku()
             for i, ham in enumerate(v["cihazlar"]):
-                if secrets.compare_digest(ham["token_ozet"], ozet):
+                eslesti = secrets.compare_digest(ham["token_ozet"], ozet) or (
+                    bool(ham.get("onceki_token_ozet"))
+                    and simdi <= float(ham.get("onceki_son") or 0)
+                    and secrets.compare_digest(ham["onceki_token_ozet"], ozet)
+                )
+                if eslesti:
                     c = Cihaz(**ham)
                     if c.iptal:
                         raise UzakHata("Bu cihazin eslesmesi iptal edildi.", 401)
                     if c.son_kullanma <= simdi:
                         raise UzakHata("Oturum suresi doldu; yeniden eslestirin.", 401)
-                    c.son_gorulme = simdi
-                    v["cihazlar"][i] = c.model_dump()
-                    self._yaz(v)
+                    if simdi - c.son_gorulme >= 60:
+                        c.son_gorulme = simdi
+                        v["cihazlar"][i] = c.model_dump()
+                        self._yaz(v)
                     return c
         raise UzakHata("Gecersiz token.", 401)
 
-    def yenile(self, token: str) -> dict:
+    def yenile(self, token: str, gecis_sn: float = 0) -> dict:
         c = self.dogrula(token)
         simdi = self.saat()
         if simdi - c.eslesme >= CIHAZ_OMRU:
@@ -161,7 +170,13 @@ class UzakDeposu:
             v = self._oku()
             for i, ham in enumerate(v["cihazlar"]):
                 if ham["id"] == c.id:
-                    ham["token_ozet"] = _ozet(yeni)  # eski token artik gecersiz
+                    if gecis_sn > 0:
+                        ham["onceki_token_ozet"] = ham["token_ozet"]
+                        ham["onceki_son"] = simdi + gecis_sn
+                    else:
+                        ham["onceki_token_ozet"] = ""
+                        ham["onceki_son"] = 0
+                    ham["token_ozet"] = _ozet(yeni)
                     ham["son_kullanma"] = min(simdi + TOKEN_OMRU, c.eslesme + CIHAZ_OMRU)
                     v["cihazlar"][i] = ham
             self._yaz(v)
@@ -179,12 +194,21 @@ class UzakDeposu:
             self._yaz(v)
 
     def liste(self) -> list[dict]:
-        return [{k: x for k, x in c.items() if k != "token_ozet"} for c in self._oku()["cihazlar"]]
+        gizli = {"token_ozet", "onceki_token_ozet", "onceki_son"}
+        return [{k: x for k, x in c.items() if k not in gizli} for c in self._oku()["cihazlar"]]
 
     def denetle(self, cihaz: str, ip: str, yol: str, sonuc: int) -> None:
         kayit = {"zaman": self.saat(), "cihaz": cihaz, "ip": ip, "yol": yol[:200], "sonuc": sonuc}
-        with self._kilit, self.denetim_yolu.open("a", encoding="utf-8") as f:
-            f.write(json.dumps(kayit, ensure_ascii=False) + "\n")
+        with self._kilit:
+            with self.denetim_yolu.open("a", encoding="utf-8") as f:
+                f.write(json.dumps(kayit, ensure_ascii=False) + "\n")
+            self._denetim_sayaci += 1
+            if self._denetim_sayaci % 100 == 0 or self.denetim_yolu.stat().st_size > 512 * 1024:
+                satirlar = self.denetim_yolu.read_text(encoding="utf-8").splitlines()
+                if len(satirlar) > 2000:
+                    gecici = self.denetim_yolu.with_suffix(".tmp")
+                    gecici.write_text("\n".join(satirlar[-1000:]) + "\n", encoding="utf-8")
+                    gecici.replace(self.denetim_yolu)
 
     def denetim(self, son: int = 100) -> list[dict]:
         if not self.denetim_yolu.exists():
@@ -498,7 +522,7 @@ def tam_erisim_asgi(
         yeni_token = ""
         if c.son_kullanma - depo.saat() < 3 * 3600:  # sessiz yeniden baglanma: token dondur
             try:
-                yeni_token = depo.yenile(token)["token"]
+                yeni_token = depo.yenile(token, gecis_sn=60)["token"]
             except UzakHata:
                 yeni_token = ""
         yeni = [(k, v) for k, v in scope["headers"] if k.decode("latin-1").lower() not in atla]
@@ -506,16 +530,21 @@ def tam_erisim_asgi(
                  (b"x-yas-uzak-cihaz", c.id.encode())]  # fmt: skip
         ic = dict(scope, headers=yeni, client=("127.0.0.1", 0), scheme="http",
                   server=("127.0.0.1", 80))  # fmt: skip
-        if yol.startswith("/api") or scope["method"] != "GET":
-            depo.denetle(c.id, ip_, f"{scope['method']} {yol}", 0)
+        durum_kodu = [0]
 
         async def gonder(mesaj: dict) -> None:
-            if mesaj["type"] == "http.response.start" and yeni_token:
-                h = [*mesaj.get("headers", []), (b"set-cookie", cerez(yeni_token).encode())]
-                mesaj = dict(mesaj, headers=h)
+            if mesaj["type"] == "http.response.start":
+                durum_kodu[0] = int(mesaj.get("status", 200))
+                if yeni_token:
+                    h = [*mesaj.get("headers", []), (b"set-cookie", cerez(yeni_token).encode())]
+                    mesaj = dict(mesaj, headers=h)
             await send(mesaj)
 
-        return await ana_app(ic, receive, gonder)
+        try:
+            return await ana_app(ic, receive, gonder)
+        finally:
+            if yol.startswith("/api") or scope["method"] != "GET":
+                depo.denetle(c.id, ip_, f"{scope['method']} {yol}", durum_kodu[0] or 500)
 
     return uygulama
 

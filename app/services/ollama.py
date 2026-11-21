@@ -24,6 +24,7 @@ from typing import Any
 import httpx
 from loguru import logger
 
+from app.agent.policy import yerel_host_mu
 from app.services.yerel_llm import ModelCevapHatasi, YerelLLM
 
 ONEK = "ollama:"
@@ -239,10 +240,12 @@ class Ollama:
         if not exe:
             raise OllamaHatasi("Ollama kurulu değil. https://ollama.com/download adresinden kur.")
         url = httpx.URL(self.adres())
-        if url.host not in ("127.0.0.1", "localhost"):
+        if not yerel_host_mu(url.host):
             raise OllamaHatasi(f"{self.adres()} adresindeki Ollama'ya ulaşılamıyor.")
+        konak = f"[{url.host}]" if ":" in (url.host or "") else url.host
+        port = url.port or 11434
         ortam = os.environ | {
-            "OLLAMA_HOST": f"{url.host}:{url.port}",
+            "OLLAMA_HOST": f"{konak}:{port}",
             "OLLAMA_CONTEXT_LENGTH": str(self.baglam()),  # varsayilan 4K ajan talimatina yetmez
         }
         self._surec = subprocess.Popen(
@@ -354,6 +357,9 @@ class Ollama:
                 self._istemci(None) as c,
                 c.stream("POST", "/api/pull", json={"model": i.ad, "stream": True}) as r,
             ):
+                if r.status_code >= 400:
+                    await r.aread()
+                    raise OllamaHatasi(f"İndirme hatası ({r.status_code}): {r.text[:200]}")
                 async for satir in r.aiter_lines():
                     if not satir.strip():
                         continue
@@ -399,7 +405,11 @@ class Ollama:
         return {"sonuclar": sonuclar, "daha": daha}
 
     async def etiketler(self, model_ad: str) -> list[dict]:
-        if not re.fullmatch(r"[\w./-]{1,100}", model_ad):
+        if (
+            not re.fullmatch(r"[\w./-]{1,100}", model_ad)
+            or ".." in model_ad
+            or model_ad.startswith("/")
+        ):
             raise OllamaHatasi("Geçersiz model adı.")
         try:
             r = await self._site.get(f"{SITE}/library/{model_ad}/tags", headers={"HX-Request": ""})

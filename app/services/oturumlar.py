@@ -112,6 +112,8 @@ class OturumDeposu:
         kopya = Oturum(
             baslik=f"{asil.baslik} (dal)"[:120] if mesaj_id else f"{asil.baslik} (kopya)"[:120],
             mesajlar=mesajlar,
+            alan=asil.alan,
+            ajan_runlari=[] if mesaj_id else [dict(r) for r in asil.ajan_runlari],
         )
         return self.kaydet(kopya)
 
@@ -147,9 +149,11 @@ class OturumDeposu:
         return self.kaydet(o), metin
 
     def temizle(self, oturum_id: str) -> Oturum:
-        """Mesajlari siler, oturum kalir. Kalici hafizaya DOKUNMAZ (A4.5)."""
+        """Mesajlari ve tur kayitlarini siler, oturum kalir. Kalici hafizaya DOKUNMAZ (A4.5)."""
         o = self.getir(oturum_id)
         o.mesajlar = []
+        o.ajan_runlari = []
+        o.oneri_kararlari = {}
         return self.kaydet(o)
 
     def disa_aktar_md(self, oturum_id: str) -> str:

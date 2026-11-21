@@ -11,12 +11,15 @@ Bot token'i yalniz <veri>/telegram.json'da durur; arayuze maskeli gider, modele 
 from __future__ import annotations
 
 import asyncio
+import re
 from pathlib import Path
 from typing import Any
 
 import httpx
 from loguru import logger
 
+from app.agent.policy import maskele as sir_maskele
+from app.services import dpapi
 from app.services.depo import json_oku, json_yaz
 
 API = "https://api.telegram.org"
@@ -37,21 +40,41 @@ class TelegramKanali:
 
     # ---- ayar ----
     def ayar(self) -> dict:
-        return json_oku(self.yol, {}) or {}
+        a = json_oku(self.yol, {}) or {}
+        if sif := a.get("token_sifreli"):
+            try:
+                a["token"] = dpapi.coz(str(sif))
+            except (OSError, ValueError):
+                a["token"] = ""
+        elif duz := a.get("token"):  # eski duz kaydi ilk okumada DPAPI ile sifrele
+            a_disk = dict(a)
+            a_disk["token_sifreli"] = dpapi.sifrele(str(duz))
+            a_disk.pop("token", None)
+            json_yaz(self.yol, a_disk)
+        return a
+
+    def _yaz(self, a: dict) -> None:
+        disk = dict(a)
+        if tok := disk.pop("token", ""):
+            disk["token_sifreli"] = dpapi.sifrele(str(tok))
+        json_yaz(self.yol, disk)
 
     def kaydet(self, veri: dict) -> dict:
         a = self.ayar()
         if "token" in veri and veri["token"]:
             a["token"] = str(veri["token"]).strip()
+            self.bot_adi = ""
         if veri.get("token_sil"):
             a.pop("token", None)
+            a.pop("token_sifreli", None)
+            self.bot_adi = ""
         if "izinli" in veri:
             a["izinli"] = sorted({int(x) for x in veri["izinli"] if str(x).lstrip("-").isdigit()})
         if "ajan" in veri:
             a["ajan"] = str(veri["ajan"] or "")
         if "aktif" in veri:
             a["aktif"] = bool(veri["aktif"])
-        json_yaz(self.yol, a)
+        self._yaz(a)
         return self.durum()
 
     def durum(self) -> dict:
@@ -108,7 +131,7 @@ class TelegramKanali:
                     )
                     self.son_hata = ""
                 except Exception as e:  # noqa: BLE001 - ag/token hatasi: bekle, tekrar dene
-                    self.son_hata = str(e)[:200]
+                    self.son_hata = re.sub(r"/bot[^/\s]+/", "/bot***/", sir_maskele(str(e)))[:200]
                     await asyncio.sleep(10)
                     continue
                 for g in guncellemeler:
@@ -121,14 +144,14 @@ class TelegramKanali:
                     await self._isle(c, int(chat), metin, m, mesaj_isle)
                 a = self.ayar()
                 a["ofset"] = ofset
-                json_yaz(self.yol, a)
+                self._yaz(a)
 
     async def _isle(self, c, chat: int, metin: str, m: dict, mesaj_isle) -> None:
         a = self.ayar()
         if chat not in a.get("izinli", []):
             bekleyen = [x for x in a.get("bekleyen", []) if x != chat] + [chat]
             a["bekleyen"] = bekleyen[-10:]
-            json_yaz(self.yol, a)
+            self._yaz(a)
             await self._cagir(c, "sendMessage", chat_id=chat, text=(
                 f"Bu sohbet Kairo'da izinli degil. Sohbet kimligin: {chat}\n"
                 "Kairo > Ajanlar > Telegram bolumunde izin listesine ekle."))  # fmt: skip

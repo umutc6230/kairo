@@ -203,6 +203,7 @@ class YazmaAraclari:
     def dosya_tasi(self, kaynak: str, hedef: str) -> dict:
         k = self.kapsam.coz(kaynak)
         h = self.kapsam.coz(hedef)
+        self.politika.okuma_yolu(self.alan, "dosya_tasi", str(k))
         self._izin(
             "dosya_tasi",
             YanEtki.yaz,

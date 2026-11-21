@@ -252,14 +252,14 @@ export function ayarlarAc(sekme = "ai") {
   // Ayar aramasi (openbot gibi): eslesmeyen satirlar ve sekmeler gizlenir, ilk eslesen sekme acilir
   const ara = el(`<input class="alan ayar-ara" type="search" placeholder="Ayarlarda ara…" aria-label="Ayarlarda ara">`);
   $(".sekmeler", govde).prepend(ara);
-  const SATIR = ":scope > .anahtar-satir, :scope > .ayar-grup, :scope > .ay-bolum, :scope > .ayar-not, :scope > .satir";
+  const SATIR = ":scope > .anahtar-satir, :scope > .ayar-grup, :scope > .ay-bolum, :scope > .ayar-not, :scope > .satir, :scope > .satir-iki, :scope > .ay-sag-sec, :scope > .ay-aktif, :scope > .ek-bolum-baslik, :scope > .ek-liste, :scope > .ek-ekle";
   ara.oninput = () => {
     const q = ara.value.trim().toLocaleLowerCase("tr-TR");
     let ilk = null;
     $$("[data-panel]", govde).forEach((p) => {
       let var_ = false;
       p.querySelectorAll(SATIR).forEach((r) => {
-        if (r.matches("[data-yerel]") && durum.ayarlar.saglayici !== "yerel") return;
+        if (r.hidden) return;
         const uy = !q || r.textContent.toLocaleLowerCase("tr-TR").includes(q);
         r.classList.toggle("arama-gizli", !uy);
         if (uy && q && !r.classList.contains("ay-bolum")) var_ = true;
@@ -635,7 +635,7 @@ export function ayarlarAc(sekme = "ai") {
 
   const modelleriCiz = () => {
     $("#ay-modeller", govde).innerHTML = modelKartlari($("#ay-ara", govde).value);
-    $$("input[name=ay-model]", govde).forEach((r) => {
+    $$("input[name=ayar-model]", govde).forEach((r) => {
       r.onchange = async () => { await kaydet({ model: r.value }); modelleriCiz(); aktifCiz(); };
     });
     $$("[data-sil]", govde).forEach((b) => {
@@ -756,6 +756,8 @@ export function ayarlarAc(sekme = "ai") {
     $("#ay-ol", govde).hidden = !ol;
     $$("[data-yerel]", govde).forEach((x) => { x.hidden = acik || ol; });
     $("#ay-test", govde).closest(".ayar-grup").hidden = acik; // Test: yerel + Ollama
+    $("#ay-baglam", govde)?.closest(".ayar-grup")?.classList.remove("arama-gizli");
+    if ($("#ay-baglam", govde)) $("#ay-baglam", govde).closest(".ayar-grup").hidden = acik; // Ollama da baglam_token kullanir
     if (ol) olPanelCiz();
     dusunmeCiz();
     aktifCiz();

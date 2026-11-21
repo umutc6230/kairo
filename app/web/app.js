@@ -22,6 +22,7 @@ import { ajanlarKur, ajanlarYukle } from "./ajanlar.js";
 import { miniHaritaKur } from "./minimap.js";
 import { DURUM_ETIKET, gorevDurumlari, oturumDali, oturumDurumu, oturumKoord, sabitDegistir, sabitler } from "./oturum_durumu.js";
 import { ajanBloklariniCiz, ajanKayitlariniBirlestir, ajanliOturum, akisVar, calisanOturumId, durdur, mesajlariCiz, sohbetKur, sohbetRunlari, yeniSohbetEkrani } from "./sohbet.js";
+import { komutlarKur } from "./komutlar.js";
 
 const BASLIKLAR = { karsilastir: "Karşılaştır", ocr: "OCR testi", arac: "Araç testi", paket: "Test paketi", eklentiler: "Eklentiler", skiller: "Skill'ler ve talimatlar", modeller: "Modeller", gorevler: "Ajan görevleri", rutinler: "Rutinler", ajanlar: "Ajanlar" };
 const gecmis = [];
@@ -133,13 +134,17 @@ function baslikAyarla(metin) {
   baglamYenile();
 }
 
+let oturumIstekSayaci = 0;
 async function oturumAc(id, kaydetme = false) {
   if (!kaydetme) return git({ tur: "oturum", id });
+  const istekNo = ++oturumIstekSayaci;
   if (akisVar() && durum.oturumId !== id) durdur();
   try {
     const o = await api(`/api/oturumlar/${id}`);
+    if (istekNo !== oturumIstekSayaci) return;
     // sohbet projeye ozgu: baska projenin sohbeti acilinca o proje etkin olur
     if (o.alan && o.alan !== projeDurumu.etkin?.id) await projeyeGec(o.alan);
+    if (istekNo !== oturumIstekSayaci) return;
     durum.oturumId = o.id;
     document.getElementById("girdi").dispatchEvent(new Event("oturum-degisti"));
     gorunumGoster("sohbet");
@@ -656,6 +661,7 @@ async function baslat() {
   gorevBildirimIzle();
   await durumYenile();
   sohbetKur({ oturumlarYenile: oturumlariYenile, baslikAyarla, oturumAc });
+  komutlarKur({ git: (tur) => git({ tur }) });
   ayarlarKur(hepsiniYenile, (sekme) => {
     git({ tur: "modeller" });
     if (sekme === "ollama") setTimeout(() => $("#ol-kart")?.scrollIntoView({ behavior: "smooth" }), 300);
@@ -718,6 +724,7 @@ async function baslat() {
   $("#agecidi-hapi").onclick = () => { ayarlarAc(); setTimeout(() => document.getElementById("ay-agecidi")?.scrollIntoView({ behavior: "smooth" }), 50); };
 
   document.addEventListener("keydown", (e) => {
+    if (document.querySelector("#modal-kok .modal-arka")) return;
     if (kisayolEslesir(e, durum.ayarlar?.dikte_kisayolu)) { e.preventDefault(); $("#btn-dikte")?.click(); return; }
     if (!e.ctrlKey) return;
     const k = e.key.toLowerCase();

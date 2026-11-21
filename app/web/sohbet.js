@@ -133,7 +133,12 @@ export function sohbetKur(cb) {
     if (e.key === "Enter" && !e.shiftKey && !e.isComposing) { e.preventDefault(); gonder(); }
   });
   girdiYardimKur(komutListesi);
-  girdi.addEventListener("oturum-degisti", () => oneriTemizle()); // baska sohbetin onerisi kalmasin
+  girdi.addEventListener("oturum-degisti", () => {
+    oneriTemizle(); // baska sohbetin onerisi kalmasin
+    siradakiler.length = 0;
+    siraCiz();
+    window.speechSynthesis?.cancel();
+  });
   girdi.addEventListener("paste", (e) => {
     const dosyalar = [...(e.clipboardData?.files || [])];
     if (dosyalar.length) { e.preventDefault(); dosyalar.forEach(ekYukle); return; }
@@ -271,7 +276,11 @@ function ekleriCiz() {
     const c = el(`<div class="ek-cip ${e.yukleniyor ? "yukleniyor" : ""}">${gorsel}
       <span class="ad" title="${kacir(e.ad)}">${kacir(e.ad)}</span>
       <button title="Kaldir" data-ikon="x"></button></div>`);
-    c.querySelector("button").onclick = () => { bekleyenEkler.splice(i, 1); ekleriCiz(); };
+    c.querySelector("button").onclick = () => {
+      if (e.onizleme) URL.revokeObjectURL(e.onizleme);
+      bekleyenEkler.splice(i, 1);
+      ekleriCiz();
+    };
     kap.append(c);
   });
   gonderDurumu();
@@ -291,6 +300,7 @@ async function ekYukle(dosya) {
     const ek = await api("/api/ekler", { method: "POST", form });
     Object.assign(kayit, { id: ek.id, tur: ek.tur, yukleniyor: false });
   } catch (e) {
+    if (kayit.onizleme) URL.revokeObjectURL(kayit.onizleme);
     bekleyenEkler.splice(bekleyenEkler.indexOf(kayit), 1);
     bildir(e.message, "hata");
   }
@@ -730,18 +740,20 @@ function asistanMesaji() {
   return o;
 }
 
+let okumaSayaci = 0;
 // Sesli oku: tarayicinin kendi Turkce sesi (ek paket/ag yok). Ayni dugme durdurur.
 function sesliOkuBagla(b, metin) {
   if (!("speechSynthesis" in window)) { b.hidden = true; return; }
   b.onclick = () => {
     const s = window.speechSynthesis;
     const bu = b.getAttribute("aria-pressed") === "true";
+    const buId = ++okumaSayaci;
     s.cancel();
     document.querySelectorAll('.sesli-oku[aria-pressed="true"]').forEach((x) => x.setAttribute("aria-pressed", "false"));
     if (bu) return;
     const u = new SpeechSynthesisUtterance((metin() || "").replace(/\s+/g, " ").trim());
     u.lang = "tr-TR";
-    u.onend = u.onerror = () => b.setAttribute("aria-pressed", "false");
+    u.onend = u.onerror = () => { if (buId === okumaSayaci) b.setAttribute("aria-pressed", "false"); };
     b.setAttribute("aria-pressed", "true");
     s.speak(u);
   };
@@ -806,6 +818,10 @@ export function yeniSohbetEkrani({ girdiyiKoru = false } = {}) {
   durdur();
   durum.oturumId = null;
   oneriTemizle();
+  siradakiler.length = 0;
+  siraCiz();
+  bekleyenEkler.splice(0).forEach((e) => { if (e.onizleme) URL.revokeObjectURL(e.onizleme); });
+  ekleriCiz();
   mesajlariCiz(null);
   if (!girdiyiKoru) $("#girdi").value = ""; // acilista kullanicinin o ana dek yazdigi silinmesin
   boyutla();
@@ -813,77 +829,87 @@ export function yeniSohbetEkrani({ girdiyiKoru = false } = {}) {
   setTimeout(() => $("#girdi").focus(), 0);
 }
 
+let gonderKilit = false;
 // ---- gonderme / akis ----
 export async function gonder() {
+  if (gonderKilit) return;
+  gonderKilit = true;
   oneriTemizle();
   const girdi = $("#girdi");
-  let metin;
+  let oturumId = null;
   try {
-    metin = await anahtarCoz(girdi.value.trim()); // anahtar kasaya, mesaja yalniz adi
-  } catch (e) {
-    bildir(`Anahtar kasaya kaydedilemedi, mesaj gönderilmedi: ${e.message}`, "hata");
-    return;
-  }
-  if (komutMu(metin, (istem) => { $("#girdi").value = istem; gonder(); })) { // yerel slash komut: modele mesaj olarak gitmez
-    girdi.value = "";
-    boyutla();
-    return;
-  }
-  if (akisKontrol && girdi.value.trim()) { // Claude Code gibi: yanit surerken yazilan mesaj siraya girer
-    siradakiler.push(girdi.value);
-    girdi.value = "";
-    boyutla();
-    siraCiz();
-    return;
-  }
-  if (akisKontrol || (!metin && !bekleyenEkler.length) || bekleyenEkler.some((e) => e.yukleniyor)) return;
-  // Claude Code kisayollari (tek satir, eksiz): "!komut" kabukta calisir, "#not" hafizaya yazilir
-  if (!bekleyenEkler.length && !metin.includes("\n")) {
-    if (/^!\s*\S/.test(metin)) { girdi.value = ""; boyutla(); gonderDurumu(); kabukCalistir(metin.slice(1).trim()); return; }
-    if (/^#\s*[^#\s]/.test(metin)) { girdi.value = ""; boyutla(); gonderDurumu(); hafizaNotu(metin.slice(1).trim()); return; }
-  }
-  if (duzenlenen) { // duzenlenen mesaj ve cevabi once kesilir, sonra yeni metin normal gonderilir
-    const { m, oid } = duzenlenen;
-    duzenlenen = null;
-    if (oid === durum.oturumId) {
-      try {
-        await api(`/api/oturumlar/${oid}/geri-sar`, { method: "POST", govde: m.id ? { mesaj_id: m.id } : { run: m.run } });
-        await geriCagri.oturumAc(oid, true);
-      } catch (e) { bildir(e.message, "hata"); return; }
-    }
-  }
-  const ekler = bekleyenEkler.splice(0);
-  girdi.value = "";
-  boyutla();
-  ekleriCiz();
-  try {
-    if (!durum.oturumId) {
-      const o = await api("/api/oturumlar", { method: "POST" });
-      durum.oturumId = o.id;
-    }
-  } catch (e) {
-    bildir(e.message, "hata");
-    return;
-  }
-  const oturumId = durum.oturumId;
-  // Claude Code gibi: proje aciksa (ve mod sohbet degilse) mesaj AJAN olarak calisir; adimlar,
-  // onaylar ve diff bu sohbetin icinde gorunur. Ekli mesajlar normal sohbet yolundan gider.
-  if (ajanModu() && !ekler.length) {
-    ajanGonderiliyor = true;
+    let metin;
     try {
-      await ajanaGonder(oturumId, metin);
+      metin = await anahtarCoz(girdi.value.trim()); // anahtar kasaya, mesaja yalniz adi
     } catch (e) {
-      if (durum.oturumId === oturumId && !girdi.value) {
-        girdi.value = metin;
-        boyutla();
-      }
-      bildir(e.message, "hata");
-    } finally {
-      ajanGonderiliyor = false;
-      gonderDurumu();
+      bildir(`Anahtar kasaya kaydedilemedi, mesaj gönderilmedi: ${e.message}`, "hata");
+      return;
     }
-    return;
+    if (komutMu(metin, (istem) => { gonderKilit = false; $("#girdi").value = istem; gonder(); })) { // yerel slash komut
+      girdi.value = "";
+      boyutla();
+      return;
+    }
+    if (akisKontrol && girdi.value.trim()) { // Claude Code gibi: yanit surerken yazilan mesaj siraya girer
+      siradakiler.push(girdi.value);
+      girdi.value = "";
+      boyutla();
+      siraCiz();
+      return;
+    }
+    if (akisKontrol || (!metin && !bekleyenEkler.length) || bekleyenEkler.some((e) => e.yukleniyor)) return;
+    // Claude Code kisayollari (tek satir, eksiz): "!komut" kabukta calisir, "#not" hafizaya yazilir
+    if (!bekleyenEkler.length && !metin.includes("\n")) {
+      if (/^!\s*\S/.test(metin)) { girdi.value = ""; boyutla(); gonderDurumu(); kabukCalistir(metin.slice(1).trim()); return; }
+      if (/^#\s*[^#\s]/.test(metin)) { girdi.value = ""; boyutla(); gonderDurumu(); hafizaNotu(metin.slice(1).trim()); return; }
+    }
+    if (duzenlenen) { // duzenlenen mesaj ve cevabi once kesilir, sonra yeni metin normal gonderilir
+      const { m, oid } = duzenlenen;
+      duzenlenen = null;
+      if (oid === durum.oturumId) {
+        try {
+          await api(`/api/oturumlar/${oid}/geri-sar`, { method: "POST", govde: m.id ? { mesaj_id: m.id } : { run: m.run } });
+          await geriCagri.oturumAc(oid, true);
+        } catch (e) { bildir(e.message, "hata"); return; }
+      }
+    }
+    const ekler = bekleyenEkler.splice(0);
+    ekler.forEach((e) => { if (e.onizleme) URL.revokeObjectURL(e.onizleme); });
+    girdi.value = "";
+    boyutla();
+    ekleriCiz();
+    try {
+      if (!durum.oturumId) {
+        const o = await api("/api/oturumlar", { method: "POST" });
+        durum.oturumId = o.id;
+      }
+    } catch (e) {
+      bildir(e.message, "hata");
+      return;
+    }
+    oturumId = durum.oturumId;
+    // Claude Code gibi: proje aciksa (ve mod sohbet degilse) mesaj AJAN olarak calisir
+    if (ajanModu() && !ekler.length) {
+      ajanGonderiliyor = true;
+      try {
+        await ajanaGonder(oturumId, metin);
+      } catch (e) {
+        if (durum.oturumId === oturumId && !girdi.value) {
+          girdi.value = metin;
+          boyutla();
+        }
+        bildir(e.message, "hata");
+      } finally {
+        ajanGonderiliyor = false;
+        gonderDurumu();
+      }
+      return;
+    }
+    var akisBasliyor = { metin, ekler };
+  } finally {
+    gonderKilit = false;
   }
+  const { metin, ekler } = akisBasliyor;
   const s = sutun();
   const yanit = asistanMesaji();
   yanit.canliBaslat(durum.ayarlar?.model);
@@ -952,10 +978,13 @@ export async function gonder() {
     document.querySelectorAll(".oturum.calisiyor").forEach((x) => x.classList.remove("calisiyor"));
     gonderDurumu();
     geriCagri.oturumlarYenile();
-    if (siradakiler.length) { // sirada bekleyen ilk mesaj sonraki tur olarak gider
+    if (siradakiler.length && durum.oturumId === oturumId) { // sirada bekleyen ilk mesaj sonraki tur olarak gider
       $("#girdi").value = siradakiler.shift();
       siraCiz();
       gonder();
+    } else if (siradakiler.length) {
+      siradakiler.length = 0;
+      siraCiz();
     } else sonrakiOneri();
   }
 }

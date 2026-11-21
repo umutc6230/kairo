@@ -148,9 +148,7 @@ async def test_proje_disi_grup_silme_yalniz_kendi_sohbetlerini_siler(
     app, istemci, grup: str, alan: str
 ) -> None:
     oturumlar = app.state.sohbet.oturumlar
-    sohbetler = {
-        kimlik: oturumlar.olustur(kimlik).id for kimlik in ("", "0" * 12, "abcdef123456")
-    }
+    sohbetler = {kimlik: oturumlar.olustur(kimlik).id for kimlik in ("", "0" * 12, "abcdef123456")}
 
     r = await istemci.delete(f"/api/oturumlar/grup/{grup}")
     assert r.status_code == 200

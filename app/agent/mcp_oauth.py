@@ -17,6 +17,8 @@ from urllib.parse import urlencode, urlsplit
 
 import httpx
 
+from app.agent.policy import yerel_host_mu
+from app.agent.web import yerel_hedef_mi
 from app.exceptions import UygulamaHatasi
 
 ZAMAN = 20
@@ -27,11 +29,15 @@ def _kok(url: str) -> str:
     return f"{u.scheme}://{u.netloc}"
 
 
-def _https(url: str) -> str:
+def _https(url: str, yerel_izin: bool = True) -> str:
     u = urlsplit(url or "")
-    yerel = u.hostname in ("127.0.0.1", "localhost", "::1")
-    if u.scheme != "https" and not (u.scheme == "http" and yerel):
+    if u.username or u.password:
         raise UygulamaHatasi(f"Guvensiz OAuth adresi reddedildi: {url[:120]}")
+    yerel = u.hostname in ("127.0.0.1", "localhost", "::1")
+    if u.scheme != "https" and not (u.scheme == "http" and yerel and yerel_izin):
+        raise UygulamaHatasi(f"Guvensiz OAuth adresi reddedildi: {url[:120]}")
+    if not yerel_izin and yerel_hedef_mi(u.hostname or ""):
+        raise UygulamaHatasi(f"Yerel OAuth adresi reddedildi: {url[:120]}")
     return url
 
 
@@ -45,13 +51,14 @@ def _json(c: httpx.Client, url: str) -> dict | None:
 
 def kesif(sunucu_url: str, c: httpx.Client) -> dict:
     """Yetkilendirme sunucusunun uclari (authorization, token, registration)."""
+    yerel_izin = yerel_host_mu(urlsplit(sunucu_url).hostname)
     kok, yol = _kok(sunucu_url), urlsplit(sunucu_url).path.rstrip("/")
     kaynak = (
         _json(c, f"{kok}/.well-known/oauth-protected-resource{yol}")
         or _json(c, f"{kok}/.well-known/oauth-protected-resource")
         or {}
     )
-    as_url = ((kaynak.get("authorization_servers") or [kok])[0]).rstrip("/")
+    as_url = _https(((kaynak.get("authorization_servers") or [kok])[0]).rstrip("/"), yerel_izin)
     meta = None
     for ek in ("/.well-known/oauth-authorization-server", "/.well-known/openid-configuration"):
         meta = _json(c, f"{as_url}{ek}") or _json(c, f"{_kok(as_url)}{ek}{urlsplit(as_url).path}")
@@ -59,10 +66,13 @@ def kesif(sunucu_url: str, c: httpx.Client) -> dict:
             break
     if not meta or not meta.get("authorization_endpoint") or not meta.get("token_endpoint"):
         raise UygulamaHatasi("Bu sunucu OAuth girisi sunmuyor (meta veri bulunamadi).")
+    reg = meta.get("registration_endpoint") or ""
+    if reg:
+        reg = _https(reg, yerel_izin)
     return {
-        "authorization_endpoint": _https(meta["authorization_endpoint"]),
-        "token_endpoint": _https(meta["token_endpoint"]),
-        "registration_endpoint": meta.get("registration_endpoint") or "",
+        "authorization_endpoint": _https(meta["authorization_endpoint"], yerel_izin),
+        "token_endpoint": _https(meta["token_endpoint"], yerel_izin),
+        "registration_endpoint": reg,
         "kaynak": kaynak.get("resource") or sunucu_url,
         "kapsam": " ".join(kaynak.get("scopes_supported") or []),
     }
@@ -77,7 +87,8 @@ def baslat(sunucu_url: str, geri: str, c: httpx.Client, client_id: str = "") -> 
                 "Bu sunucu tarayıcıdan otomatik girişi desteklemiyor. Sağlayıcının API anahtarını "
                 "ya da token'ını bağlayıcı başlığına (Authorization) ekleyin."
             )
-        r = c.post(_https(m["registration_endpoint"]), json={
+        yerel_izin = yerel_host_mu(urlsplit(sunucu_url).hostname)
+        r = c.post(_https(m["registration_endpoint"], yerel_izin), json={
             "client_name": "Kairo", "redirect_uris": [geri], "token_endpoint_auth_method": "none",
             "grant_types": ["authorization_code", "refresh_token"], "response_types": ["code"],
         })  # fmt: skip
@@ -110,11 +121,12 @@ def _token(c: httpx.Client, uc: str, govde: dict) -> dict:
 
 def tamamla(b: dict, kod: str, c: httpx.Client) -> dict:
     """Kodu tokene cevirir; McpSunucu.oauth alanina yazilacak sozluk doner."""
-    t = _token(c, b["token_endpoint"], {
+    uc = _https(b["token_endpoint"], yerel_host_mu(urlsplit(b.get("kaynak", "")).hostname))
+    t = _token(c, uc, {
         "grant_type": "authorization_code", "code": kod, "redirect_uri": b["geri"],
         "client_id": b["client_id"], "code_verifier": b["dogrulayici"], "resource": b["kaynak"],
     })  # fmt: skip
-    return _kayit(t, b["client_id"], b["token_endpoint"], b["kaynak"])
+    return _kayit(t, b["client_id"], uc, b["kaynak"])
 
 
 def _kayit(t: dict, client_id: str, uc: str, kaynak: str, eski_yenileme: str = "") -> dict:
@@ -129,11 +141,12 @@ def gerekirse_yenile(oauth: dict, c: httpx.Client) -> dict | None:
     """Suresi 60 sn icinde dolacaksa yeniler; yeni kayit ya da None (gerek yok/yapilamaz)."""
     if not oauth or oauth.get("bitis", 0) - time.time() > 60 or not oauth.get("yenileme"):
         return None
-    t = _token(c, oauth["token_endpoint"], {
+    uc = _https(oauth["token_endpoint"], yerel_host_mu(urlsplit(oauth.get("kaynak", "")).hostname))
+    t = _token(c, uc, {
         "grant_type": "refresh_token", "refresh_token": oauth["yenileme"],
         "client_id": oauth["client_id"], "resource": oauth.get("kaynak", ""),
     })  # fmt: skip
-    return _kayit(t, oauth["client_id"], oauth["token_endpoint"], oauth.get("kaynak", ""),
+    return _kayit(t, oauth["client_id"], uc, oauth.get("kaynak", ""),
                   oauth["yenileme"])  # fmt: skip
 
 

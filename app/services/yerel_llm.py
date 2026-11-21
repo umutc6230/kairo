@@ -787,6 +787,7 @@ class YerelLLM:
         govde = self._govde(mesajlar, seviye, max_tokens, stream=True, **ek)
         self.son_dusunce = ""
         self.son_zamanlama = {}
+        self.son_kullanim = {}
         try:
             async with self._istemci.stream(
                 "POST",
@@ -800,7 +801,14 @@ class YerelLLM:
                 async for satir in r.aiter_lines():
                     if not satir.startswith("data: ") or satir == "data: [DONE]":
                         continue
-                    parca = json.loads(satir[6:])
+                    try:
+                        parca = json.loads(satir[6:])
+                    except json.JSONDecodeError:
+                        continue
+                    if parca.get("error"):
+                        err = parca["error"]
+                        msg = err.get("message", str(err)) if isinstance(err, dict) else str(err)
+                        raise ModelCevapHatasi(msg)
                     if parca.get("timings"):
                         self.son_zamanlama = parca["timings"]
                     if parca.get("usage"):
@@ -839,6 +847,7 @@ class YerelLLM:
         govde = self._govde(mesajlar, seviye, max_tokens, stream=True, **ek)
         self.son_dusunce = ""
         self.son_zamanlama = {}
+        self.son_kullanim = {}
         cagrilar: dict[int, dict] = {}
         try:
             async with self._istemci.stream(
@@ -853,7 +862,14 @@ class YerelLLM:
                 async for satir in r.aiter_lines():
                     if not satir.startswith("data: ") or satir == "data: [DONE]":
                         continue
-                    parca = json.loads(satir[6:])
+                    try:
+                        parca = json.loads(satir[6:])
+                    except json.JSONDecodeError:
+                        continue
+                    if parca.get("error"):
+                        err = parca["error"]
+                        msg = err.get("message", str(err)) if isinstance(err, dict) else str(err)
+                        raise ModelCevapHatasi(msg)
                     if parca.get("timings"):
                         self.son_zamanlama = parca["timings"]
                     if parca.get("usage"):
@@ -866,8 +882,9 @@ class YerelLLM:
                         if metin := delta.get("content"):
                             yield {"tur": "parca", "metin": metin}
                         for tc in delta.get("tool_calls") or []:
+                            idx = tc.get("index")
                             k = cagrilar.setdefault(
-                                tc.get("index", len(cagrilar)),
+                                len(cagrilar) if idx is None else idx,
                                 {
                                     "id": "",
                                     "type": "function",

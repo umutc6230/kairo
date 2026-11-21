@@ -13,7 +13,7 @@ from pathlib import Path
 from typing import Any
 
 from app.agent import policy
-from app.agent.yollar import guvenli_coz, ham_dogrula, kimlik, kimlik_dogrula
+from app.agent.yollar import guvenli_coz, ham_dogrula, icinde_mi, kanonik, kimlik, kimlik_dogrula
 from app.exceptions import YetkiYok
 from app.services import araclar as demo
 
@@ -286,7 +286,13 @@ def _dosya_ara(aranan: str, kok: Path, derinlik: int = 3) -> dict:
         for o in ogeler:
             if len(bulunan) >= MAX_OGE:
                 return
-            if o.name in ATLANAN_KLASORLER or gizli_mi(o):
+            if o.is_symlink() or o.name in ATLANAN_KLASORLER:
+                continue
+            try:
+                cp = kanonik(o)
+            except YetkiYok:
+                continue
+            if not icinde_mi(kok, cp) or gizli_mi(cp):
                 continue
             if aranan_k in o.name.lower():
                 bulunan.append(f"{'[klasor] ' if o.is_dir() else ''}{o.relative_to(kok)}")

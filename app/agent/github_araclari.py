@@ -14,9 +14,9 @@ import subprocess
 
 from app.agent import superajan
 from app.agent.dosyalar import KokKapsami
-from app.agent.policy import Istek, PolitikaMotoru, YanEtki, maskele
+from app.agent.policy import Istek, Karar, PolitikaMotoru, YanEtki, maskele
 from app.agent.workspaces import CalismaAlani
-from app.exceptions import UygulamaHatasi
+from app.exceptions import UygulamaHatasi, YetkiYok
 
 SURE_SN = 60
 SON_YORUM = 10
@@ -90,6 +90,18 @@ class GithubAraclari:
     def issue_oku(self, numara: int) -> dict:
         n = self._numara(numara)
         cwd = self._cwd()
+        sonuc = self.politika.degerlendir(
+            Istek(
+                arac="github_issue_oku",
+                yan_etki=YanEtki.ag,
+                host="api.github.com",
+                yol=cwd,
+                ozet=f"GitHub issue #{n}",
+            ),
+            self.alan,
+        )
+        if sonuc.karar is Karar.ret:
+            raise YetkiYok(sonuc.neden)
         self._hazir(cwd)
         cikti = self._gh("issue", "view", str(n), "--json", "title,body,state,comments", cwd=cwd)
         try:
@@ -126,7 +138,6 @@ class GithubAraclari:
         if taban and not DAL_DESENI.match(taban):
             raise UygulamaHatasi(f"Gecersiz taban dal adi: {taban!r}")
         cwd = self._cwd()
-        self._hazir(cwd)
         arg = ["pr", "create", "--title", baslik, "--body", govde or ""]
         if taban:
             arg += ["--base", taban]
@@ -141,6 +152,7 @@ class GithubAraclari:
             govde or "",
             taban,
         )
+        self._hazir(cwd)
         cikti = self._gh(*arg, cwd=cwd)
         url = URL_DESENI.findall(cikti)
         return {"olusturuldu": True, "url": url[-1] if url else "", "cikti": cikti.strip()[:500]}
@@ -151,7 +163,6 @@ class GithubAraclari:
         if not metin or len(metin) > MAX_METIN:
             raise UygulamaHatasi(f"Yorum bos olamaz (en fazla {MAX_METIN} karakter).")
         cwd = self._cwd()
-        self._hazir(cwd)
         self._dis_izin(
             "github_pr_yorum",
             cwd,
@@ -160,6 +171,7 @@ class GithubAraclari:
             str(n),
             metin,
         )
+        self._hazir(cwd)
         cikti = self._gh("pr", "comment", str(n), "--body", metin, cwd=cwd)
         url = URL_DESENI.findall(cikti)
         return {"gonderildi": True, "numara": n, "url": url[-1] if url else ""}

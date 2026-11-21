@@ -42,7 +42,9 @@ def kayit(tmp_path: Path):
     veri.mkdir()
     alan = CalismaAlani(id="n" * 12, kokler=[str(proje)], guven=Guven.guvenilir, mod=Mod.otomatik)
     cp = CheckpointDeposu(veri)
-    return AjanAracKaydi(alan, PolitikaMotoru(veri), cp, KomutServisi()), proje, cp
+    politika = PolitikaMotoru(veri)
+    politika.kullanici_ag = lambda: True
+    return AjanAracKaydi(alan, politika, cp, KomutServisi()), proje, cp
 
 
 def test_notebook_oku_degistir_ekle_sil_ve_geri_al(kayit) -> None:

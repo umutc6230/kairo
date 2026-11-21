@@ -43,7 +43,7 @@ function temizle() {
   kayit.islemci.disconnect();
   kayit.akis.getTracks().forEach((t) => t.stop()); // mikrofon göstergesi tarayıcıda da kapanır
   kayit.baglam.close();
-  document.removeEventListener("keydown", escIptal);
+  document.removeEventListener("keydown", escIptal, true);
   kayit = null;
   dugmeDurumu(false);
 }
@@ -70,7 +70,7 @@ async function baslat() {
   islemci.onaudioprocess = (e) => parcalar.push(new Float32Array(e.inputBuffer.getChannelData(0)));
   kaynak.connect(islemci);
   islemci.connect(baglam.destination);
-  kayit = { akis, baglam, islemci, parcalar, bas: performance.now(), maxSn: d.max_sn || 30 };
+  kayit = { akis, baglam, islemci, parcalar, bas: performance.now(), maxSn: d.max_sn || 30, bulut: !!d.bulut };
   dugmeDurumu(true);
   const guncelle = () => {
     const sn = Math.floor((performance.now() - kayit.bas) / 1000);
@@ -84,11 +84,11 @@ async function baslat() {
 
 async function bitir() {
   if (!kayit) return;
-  const { parcalar, baglam } = kayit;
+  const { parcalar, baglam, bulut } = kayit;
   const hiz = baglam.sampleRate;
   temizle();
   if (!parcalar.length) { gosterge(""); return; }
-  gosterge("Yazıya dökülüyor… (yerel model)");
+  gosterge(bulut ? "Yazıya dökülüyor… (bulut)" : "Yazıya dökülüyor… (yerel model)");
   const form = new FormData();
   form.append("ses", wavKodla(parcalar, hiz), "dikte.wav");
   try {

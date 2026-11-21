@@ -20,6 +20,7 @@ from collections.abc import AsyncIterator, Callable
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
+from urllib.parse import urlsplit
 
 import httpx
 import uvicorn
@@ -28,7 +29,8 @@ from fastapi.responses import JSONResponse, PlainTextResponse, Response, Streami
 from loguru import logger
 
 from app import __version__
-from app.exceptions import YerelLLMHatasi
+from app.agent.policy import yerel_host_mu
+from app.exceptions import UygulamaHatasi, YerelLLMHatasi
 from app.services.ayarlar import AyarDeposu
 from app.services.model_yonetici import ModelYonetici
 from app.services.yerel_llm import MODELLER
@@ -190,6 +192,28 @@ def agecidi_uygulamasi(
     app = FastAPI(title="Kairo sunucusu", version=__version__, docs_url=None, redoc_url=None)
     istatistik = {"istek": 0, "son": []}  # arayuzde "son istekler"
 
+    @app.middleware("http")
+    async def _loopback_koruma(istek: Request, sonraki):
+        try:
+            konak = urlsplit(f"//{istek.headers.get('host') or ''}").hostname
+        except ValueError:
+            konak = None
+        if not yerel_host_mu(konak):
+            return JSONResponse({"error": "Yalniz bu bilgisayardan erisilir."}, status_code=403)
+        kaynak = istek.headers.get("origin") or istek.headers.get("referer") or ""
+        if kaynak:
+            try:
+                kaynak_konak = urlsplit(kaynak).hostname
+            except ValueError:
+                kaynak_konak = None
+            if not yerel_host_mu(kaynak_konak):
+                return JSONResponse({"error": "Dis kaynakli istek reddedildi."}, status_code=403)
+        return await sonraki(istek)
+
+    @app.exception_handler(UygulamaHatasi)
+    async def _uygulama_hatasi(_: Request, e: UygulamaHatasi) -> JSONResponse:
+        return JSONResponse({"error": e.mesaj}, status_code=e.durum)
+
     def kaydet(yol: str, model: str | None, istemci: str) -> None:
         istatistik["istek"] += 1
         yeni = {"zaman": simdi_iso(), "yol": yol, "model": model, "istemci": istemci}
@@ -216,29 +240,39 @@ def agecidi_uygulamasi(
 
     async def ileri(istek: dict, model: str) -> dict:
         """Modeli hazirlar (gerekirse acar/degistirir) ve llama-server'a akissiz istek atar."""
-        async with yonetici.kullan(model) as llm:
-            istek["model"] = model
-            r = await llm._istemci.post(
-                f"{llm.adres}/chat/completions", json=istek, timeout=ZAMAN_ASIMI
-            )
-            if r.status_code >= 400:
-                raise YerelLLMHatasi(f"Yerel model hata dondu ({r.status_code}): {r.text[:300]}")
-            return r.json()
+        try:
+            async with yonetici.kullan(model) as llm:
+                istek["model"] = model
+                r = await llm._istemci.post(
+                    f"{llm.adres}/chat/completions", json=istek, timeout=ZAMAN_ASIMI
+                )
+                if r.status_code >= 400:
+                    raise YerelLLMHatasi(
+                        f"Yerel model hata dondu ({r.status_code}): {r.text[:300]}"
+                    )
+                return r.json()
+        except httpx.HTTPError as e:
+            raise YerelLLMHatasi(f"Yerel modele ulasilamadi: {e}") from e
 
     async def ileri_akis(istek: dict, model: str) -> AsyncIterator[dict]:
         istek |= {"model": model, "stream": True}
-        async with (
-            yonetici.kullan(model) as llm,
-            llm._istemci.stream(
-                "POST", f"{llm.adres}/chat/completions", json=istek, timeout=ZAMAN_ASIMI
-            ) as r,
-        ):
-            if r.status_code >= 400:
-                await r.aread()
-                raise YerelLLMHatasi(f"Yerel model hata dondu ({r.status_code}): {r.text[:300]}")
-            async for satir in r.aiter_lines():
-                for olay in _sse_satirlari(satir):
-                    yield olay
+        try:
+            async with (
+                yonetici.kullan(model) as llm,
+                llm._istemci.stream(
+                    "POST", f"{llm.adres}/chat/completions", json=istek, timeout=ZAMAN_ASIMI
+                ) as r,
+            ):
+                if r.status_code >= 400:
+                    await r.aread()
+                    raise YerelLLMHatasi(
+                        f"Yerel model hata dondu ({r.status_code}): {r.text[:300]}"
+                    )
+                async for satir in r.aiter_lines():
+                    for olay in _sse_satirlari(satir):
+                        yield olay
+        except httpx.HTTPError as e:
+            raise YerelLLMHatasi(f"Yerel modele ulasilamadi: {e}") from e
 
     # ---- genel ----
     @app.get("/")
@@ -305,6 +339,7 @@ def agecidi_uygulamasi(
 
     @app.post("/api/pull")
     @app.post("/api/delete")
+    @app.delete("/api/delete")
     @app.post("/api/create")
     async def desteklenmiyor() -> JSONResponse:
         return JSONResponse(
@@ -335,7 +370,7 @@ def agecidi_uygulamasi(
         if govde.get("stream", True) is False:
             try:
                 cevap = await ileri(istek, anahtar)
-            except YerelLLMHatasi as e:
+            except (YerelLLMHatasi, UygulamaHatasi, httpx.HTTPError) as e:
                 return JSONResponse({"error": str(e)}, status_code=503)
             return JSONResponse(openai_cevabi_ollama(cevap, anahtar, bas, alan))
 
@@ -349,8 +384,10 @@ def agecidi_uygulamasi(
                     for c in olay.get("choices", []):
                         d = c.get("delta") or {}
                         for tc in d.get("tool_calls") or []:
+                            idx = tc.get("index")
                             k = cagrilar.setdefault(
-                                tc.get("index", 0), {"function": {"name": "", "arguments": ""}}
+                                len(cagrilar) if idx is None else idx,
+                                {"function": {"name": "", "arguments": ""}},
                             )
                             f = tc.get("function") or {}
                             k["function"]["name"] += f.get("name") or ""
@@ -370,10 +407,12 @@ def agecidi_uygulamasi(
                                     parca["message"]["thinking"] = d["reasoning_content"]
                             else:
                                 parca["response"] = d.get("content") or ""
+                                if d.get("reasoning_content"):
+                                    parca["thinking"] = d["reasoning_content"]
                             yield (json.dumps(parca, ensure_ascii=False) + "\n").encode()
                         if c.get("finish_reason"):
                             son["finish_reason"] = c["finish_reason"]
-            except YerelLLMHatasi as e:
+            except (YerelLLMHatasi, UygulamaHatasi, httpx.HTTPError) as e:
                 yield (json.dumps({"error": str(e)}, ensure_ascii=False) + "\n").encode()
                 return
             sahte_mesaj = {"content": "", "tool_calls": list(cagrilar.values())}
@@ -430,14 +469,14 @@ def agecidi_uygulamasi(
         if not istek.get("stream"):
             try:
                 return JSONResponse(await ileri(istek, anahtar))
-            except YerelLLMHatasi as e:
+            except (YerelLLMHatasi, UygulamaHatasi, httpx.HTTPError) as e:
                 return JSONResponse({"error": {"message": str(e)}}, status_code=503)
 
         async def akis() -> AsyncIterator[bytes]:
             try:
                 async for olay in ileri_akis(istek, anahtar):
                     yield f"data: {json.dumps(olay, ensure_ascii=False)}\n\n".encode()
-            except YerelLLMHatasi as e:
+            except (YerelLLMHatasi, UygulamaHatasi, httpx.HTTPError) as e:
                 hata = json.dumps({"error": {"message": str(e)}}, ensure_ascii=False)
                 yield f"data: {hata}\n\n".encode()
             yield b"data: [DONE]\n\n"
@@ -466,7 +505,8 @@ def agecidi_uygulamasi(
         - Sistem mesajinin basindaki `x-anthropic-billing-header` blogu atilir: bazi surumlerde
           her istekte degisen `cch=` ozeti tasir ve llama-server'in onek onbellegini bozar
           (her tur ~5K token bastan islenir)."""
-        if govde.get("thinking", {}).get("type") != "enabled":
+        thinking = govde.get("thinking")
+        if not isinstance(thinking, dict) or thinking.get("type") != "enabled":
             govde.pop("thinking", None)
             govde.setdefault("chat_template_kwargs", {"enable_thinking": False})
         sistem = govde.get("system")
@@ -492,7 +532,7 @@ def agecidi_uygulamasi(
             try:
                 async with yonetici.kullan(anahtar) as llm:
                     r = await llm._istemci.post(f"{llm.kok}{yol}", json=govde, timeout=ZAMAN_ASIMI)
-            except YerelLLMHatasi as e:
+            except (YerelLLMHatasi, UygulamaHatasi, httpx.HTTPError) as e:
                 return anthropic_hata(str(e), "api_error", 503)
             return Response(r.content, status_code=r.status_code, media_type="application/json")
 
@@ -506,7 +546,7 @@ def agecidi_uygulamasi(
                 ):
                     async for parca in r.aiter_bytes():  # Anthropic SSE olaylari aynen gecer
                         yield parca
-            except YerelLLMHatasi as e:
+            except (YerelLLMHatasi, UygulamaHatasi, httpx.HTTPError) as e:
                 hata = json.dumps(
                     {"type": "error", "error": {"type": "api_error", "message": str(e)}}
                 )

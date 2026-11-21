@@ -55,6 +55,7 @@ function kart(o) {
 }
 
 // ---- veri -> ortak oge bicimi ----
+const urlHost = (u) => { try { return u ? new URL(u).host : ""; } catch { return u || ""; } };
 function yukluOgeler() {
   const l = [];
   // sorun once (giris gerekli, baglanamadi), sonra baglaniyor, bagli, kapali
@@ -62,7 +63,7 @@ function yukluOgeler() {
   for (const s of veri.mcp) {
     const d = baglayiciDurumu(s);
     l.push({ anahtar: `mcp:${s.ad}`, tur: "baglayici", ad: s.ad,
-      kaynak: s.ek ? (s.ad === "composio" ? "Composio" : "plugin ile geldi") : s.uzak ? new URL(s.url || "https://x").host : (s.komut || "yerel"),
+      kaynak: s.ek ? (s.ad === "composio" ? "Composio" : "plugin ile geldi") : s.uzak ? (urlHost(s.url) || "uzak") : (s.komut || "yerel"),
       durum: d.etiket, durumSinif: d.sinif, ipucu: d.ipucu, kod: d.kod, oncelik: SIRA[d.kod] ?? 2,
       ham: s, dogrulanmis: veri.dizin.some((x) => x.ad === s.ad) });
   }
@@ -72,7 +73,7 @@ function yukluOgeler() {
   }
   const acikKapali = (acik) => (acik ? { durum: "Açık", durumSinif: "yesil", kod: "bagli" } : { durum: "Kapalı", durumSinif: "", kod: "kapali" });
   for (const p of veri.pluginler) {
-    l.push({ anahtar: `plg:${p.ad}`, tur: "plugin", ad: p.ad, kaynak: p.kaynak || p.surum || "plugin", ...acikKapali(p.acik !== false), ham: p });
+    l.push({ anahtar: `plg:${p.ad}`, tur: "plugin", ad: p.ad, kaynak: p.kaynak || (p.aktif ? `v${p.aktif}` : "") || p.surum || "plugin", ...acikKapali(p.acik !== false), ham: p });
   }
   for (const s of veri.skiller) {
     l.push({ anahtar: `skl:${s.ad}`, tur: "skill", ad: s.ad, kaynak: s.kaynak === "claude" ? "Claude Code" : s.kaynak === "brain" ? "Brain" : s.kaynak === "yerlesik" ? "Yerleşik" : s.kaynak || "Kairo", ...acikKapali(s.acik), ham: s });
@@ -83,7 +84,7 @@ function yukluOgeler() {
 function populerOgeler() {
   const var_ = new Set(veri.mcp.map((s) => s.ad));
   const l = veri.dizin.filter((d) => !var_.has(d.ad)).map((d) => ({
-    anahtar: `dzn:${d.ad}`, tur: "baglayici", ad: d.baslik, aciklama: d.aciklama, kaynak: d.url ? new URL(d.url).host : d.komut, ham: d,
+    anahtar: `dzn:${d.ad}`, tur: "baglayici", ad: d.baslik, aciklama: d.aciklama, kaynak: d.url ? urlHost(d.url) : d.komut, ham: d,
     dogrulanmis: true, eylemAdi: d.oauth || d.ad === "github" ? "Bağlan" : "Ekle",
   }));
   for (const u of veri.uygulamalar.filter((x) => !x.bagli)) {
@@ -124,10 +125,12 @@ async function dizindenEkle(d) {
 
 function klasorSor() {
   return new Promise((ok) => {
+    let cozuldu = false;
+    const bitir = (v) => { if (!cozuldu) { cozuldu = true; ok(v); } };
     const g = el(`<div><label class="proje-alan">Klasör yolu<input class="alan" id="ek-klasor" placeholder="C:\\Users\\..."></label></div>`);
-    modal({ baslik: "Klasör seç", icerik: g, dugmeler: [
-      { metin: "İptal", eylem: (k) => { ok(null); k(); } },
-      { metin: "Ekle", tur: "ana", eylem: (k) => { ok($("#ek-klasor", g).value.trim() || null); k(); } },
+    modal({ baslik: "Klasör seç", icerik: g, kapaninca: () => bitir(null), dugmeler: [
+      { metin: "İptal", eylem: (k) => { bitir(null); k(); } },
+      { metin: "Ekle", tur: "ana", eylem: (k) => { bitir($("#ek-klasor", g).value.trim() || null); k(); } },
     ] });
   });
 }

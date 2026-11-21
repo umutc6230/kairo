@@ -463,15 +463,23 @@ def uygulama_olustur(
     sohbet.hafiza = hafiza
 
     def ajan_baglami(
-        hedef: str, model_secimi: str | None = None, *,
-        alan: CalismaAlani | None = None, mcp_sunuculari: set[str] | None = None,
+        hedef: str,
+        model_secimi: str | None = None,
+        *,
+        alan: CalismaAlani | None = None,
+        mcp_sunuculari: set[str] | None = None,
     ) -> tuple[str, list, dict, str | None]:
         alan = alan or sohbet.aktif_alan()
         if sohbet.ajan_araclari(alan) is None:
             raise UygulamaHatasi("Ajan araclari hazir degil.")
         a = ayarlar.oku()
         sistem, araclar_, isleyiciler, skill_adi = sohbet.baglam_hazirla(
-            a, hedef, [], model_secimi, ajan_gorevi=True, alan=alan,
+            a,
+            hedef,
+            [],
+            model_secimi,
+            ajan_gorevi=True,
+            alan=alan,
             mcp_sunuculari=mcp_sunuculari,
         )
         if a.otomatik_ogrenme:  # kullanici actiysa ajan kalici not ekleyebilir (dusuk guven)
@@ -507,8 +515,8 @@ def uygulama_olustur(
                               ozet=f"Skill kaydet: {ad}", komut=icerik[:2000])  # fmt: skip
                 politika.uygula(istek, alan)
                 return skiller.ajan_kaydet(ad, aciklama, icerik, okunan_revizyon)
-            except OnayGerekli:
-                raise
+            except OnayGerekli as e:
+                return {"hata": e.mesaj, "karar": "onay_bekliyor", "onay": e.onay}
             except (UygulamaHatasi, YetkiYok) as e:
                 return {"hata": getattr(e, "mesaj", str(e))}
 
@@ -1043,6 +1051,7 @@ def uygulama_olustur(
 
     ajan.takim = TakimPanosu(veri_dizini)
     ajan.uzantilar = uzantilar
+
     def ajan_profilleri(run: Run) -> dict:
         profiller = pluginler.ajan_profilleri()
         alan = projeler.getir(run.proje_id) if run.proje_id else sohbet.aktif_alan()
@@ -1074,13 +1083,13 @@ def uygulama_olustur(
     indirici = Indirici(magaza, kayit, lambda: Path(ayarlar.oku().llm_dizin))
     testler = TestServisi(yonetici, ekler)
 
-    @asynccontextmanager
     def _isit_baglam() -> None:
         try:
             ajan_baglami("")
         except Exception as e:  # noqa: BLE001 - isitma yardimci; proje yoksa vb. sessiz
             logger.debug("Baglam isitma atlandi: {}", e)
 
+    @asynccontextmanager
     async def omur(_: FastAPI):
         komutlar.loop = asyncio.get_running_loop()  # arka plan komutlari bu loop'ta yasar
         a = ayarlar.oku()
@@ -1375,7 +1384,10 @@ def uygulama_olustur(
         Bu, isletim sistemi duzeyinde yetkilendirme DEGILDIR: ayni kullanicinin baska bir yerel
         programi index.html'i okuyup anahtari alabilir. Gercek izolasyon icin A1.8 notuna bak.
         """
-        konak = (istek.headers.get("host") or "").rsplit(":", 1)[0]
+        try:
+            konak = urlsplit(f"//{istek.headers.get('host') or ''}").hostname
+        except ValueError:
+            konak = None
         if not yerel_host_mu(konak):
             return JSONResponse({"hata": "Yalniz bu bilgisayardan erisilir."}, status_code=403)
         kaynak = istek.headers.get("origin") or istek.headers.get("referer") or ""
@@ -1576,7 +1588,7 @@ def uygulama_olustur(
              "sayi": len(mcp)},
         ]  # fmt: skip
         kalemler = [k for k in kalemler if k["token"] or k["tur"] == "mesaj"]
-        boyut = model_yetenegi().baglam or 1
+        boyut = model_yetenegi(sohbet.aktif_alan().koordinator_model).baglam or 1
         kullanilan = sum(k["token"] for k in kalemler)
         for k in kalemler:
             k["yuzde"] = round(k["token"] * 100 / boyut, 1)
@@ -2243,6 +2255,8 @@ def uygulama_olustur(
         # bulut dikte + anahtar: ayri dikte modeli (sohbet saglayicisindan bagimsiz)
         if a.dikte_bulut and openrouter.anahtar():
             m = a.dikte_model or a.or_model
+            if m:
+                openrouter.eksik_modeli_getir(m)
             if not (openrouter.model_bilgisi(m) or {}).get("ses"):
                 return {"kullanilabilir": False, "model": m, "neden": DIKTE_UZAK_SESSIZ}
             return {
@@ -2251,6 +2265,8 @@ def uygulama_olustur(
             }  # fmt: skip
         if a.saglayici == "openrouter" and a.or_model:
             return {"kullanilabilir": False, "model": a.or_model, "neden": DIKTE_UZAK}
+        if a.saglayici == "ollama":
+            return {"kullanilabilir": False, "model": a.aktif_model, "neden": DIKTE_SESSIZ}
         p = MODELLER.get(a.model)
         if p is None or not p.ses:
             return {"kullanilabilir": False, "model": a.model, "neden": DIKTE_SESSIZ}
@@ -2742,6 +2758,20 @@ def uygulama_olustur(
 
     HEDEF_ISARETI = "HEDEF_TAMAM"
 
+    def _rutin_hedefi(z, onek: str) -> str:
+        hedef = f"[{onek}: {z.ad}] {z.hedef}"
+        if z.davranis == "bildir":  # OpenBot check-in: yalniz bakar ve haber verir
+            hedef += (
+                "\n\nYALNIZ BILDIR: dosya yazma, komut, gonderme gibi hicbir degisiklik "
+                "yapma; yalniz incele ve kullanicinin bilmesi gerekenleri raporla."
+            )
+        if z.bitis_kosulu:  # OpenBot goal: hedefe ulasinca rutin durur
+            hedef += (
+                f"\n\nBITIS KOSULU: {z.bitis_kosulu}\nBu kosul artik saglaniyorsa "
+                f"raporunun ilk satirina tam olarak {HEDEF_ISARETI} yaz."
+            )
+        return hedef
+
     async def _tetikle(t: Tetik) -> None:
         z = next((x for x in zamanlayici.liste() if x.id == t.zamanlama), None)
         alan = sohbet.projeler.aktif() if sohbet.projeler else None
@@ -2755,19 +2785,9 @@ def uygulama_olustur(
             zamanlayici.baslatildi(t, "", "zamanlamanin projesi acik degil")
             return
         try:
-            hedef = f"[zamanlanmis: {z.ad}] {z.hedef}"
-            if z.davranis == "bildir":  # OpenBot check-in: yalniz bakar ve haber verir
-                hedef += (
-                    "\n\nYALNIZ BILDIR: dosya yazma, komut, gonderme gibi hicbir degisiklik "
-                    "yapma; yalniz incele ve kullanicinin bilmesi gerekenleri raporla."
-                )
-            if z.bitis_kosulu:  # OpenBot goal: hedefe ulasinca rutin durur
-                hedef += (
-                    f"\n\nBITIS KOSULU: {z.bitis_kosulu}\nBu kosul artik saglaniyorsa "
-                    f"raporunun ilk satirina tam olarak {HEDEF_ISARETI} yaz."
-                )
             run = await ajan.baslat(
-                hedef, [], Butce(max_adim=z.max_adim), model=ayarlar.oku().aktif_model,
+                _rutin_hedefi(z, "zamanlanmis"), [], Butce(max_adim=z.max_adim),
+                model=ayarlar.oku().aktif_model,
             )  # fmt: skip
             zamanlayici.baslatildi(t, run.id)
         except Exception as e:  # noqa: BLE001 - kaydedilir, dongu durmaz
@@ -2853,7 +2873,7 @@ def uygulama_olustur(
         if alan is None or not alan.kokler or Path(alan.kokler[0]) != Path(z.proje_kok):
             raise UygulamaHatasi(f"Once rutinin projesini acin: {z.proje_kok}")
         run = await ajan.baslat(
-            f"[rutin: {z.ad}] {z.hedef}", [], Butce(max_adim=z.max_adim),
+            _rutin_hedefi(z, "rutin"), [], Butce(max_adim=z.max_adim),
             model=ayarlar.oku().aktif_model,
         )  # fmt: skip
         return {"run": run.id}
@@ -2903,10 +2923,7 @@ def uygulama_olustur(
         govde = await istek.body()
         try:
             basliklar = {k.lower(): v for k, v in istek.headers.items()}
-            w = webhooklar.dogrula(wid, basliklar, govde)
-            sira = webhooklar.kuyruga_al(
-                w, basliklar["x-yas-teslim"], govde.decode("utf-8", errors="replace")
-            )
+            sira = webhooklar.dogrula_ve_kuyruga_al(wid, basliklar, govde)
         except WebhookHatasi as e:
             return JSONResponse({"hata": e.mesaj}, status_code=e.kod)
         try:
@@ -3001,7 +3018,8 @@ def uygulama_olustur(
         aglar = uzak_mod.TAILSCALE_AGLARI if a.uzak_ag == "tailscale" else None
         asgi = uzak_mod.tam_erisim_asgi(uzak_depo, uapp, app, oturum_anahtari, aglar)
         try:
-            await uzak_sunucu.ac(asgi, a.uzak_port, cert, key, hostlar[0])
+            baglan = hostlar[0] if a.uzak_ag == "tailscale" else "0.0.0.0"
+            await uzak_sunucu.ac(asgi, a.uzak_port, cert, key, baglan)
         except OSError as e:
             raise UygulamaHatasi(f"Uzak erisim acilamadi: {e}") from e
         return await asyncio.to_thread(_uzak_durum)

@@ -89,22 +89,33 @@ class ModelYonetici:
         model = model or a.aktif_model
         if model.startswith("ollama:") and self.ollama is not None:
             llm = await self.ollama.istemci(model)
+            llm.dusunme = a.dusunme
             try:
                 yield llm
             finally:
                 await llm.kapat()
             return
-        if model in MODELLER and a.saglayici == "openrouter":
-            # Saglayici OpenRouter: yerel (llama.cpp) model hicbir yoldan acilmaz/kullanilmaz
-            raise UygulamaHatasi(
-                "OpenRouter seçili; yerel modeller kullanılmaz. AI Ayarları'ndan bir OpenRouter "
-                "modeli seç ya da sağlayıcıyı Yerel yap."
-                if not a.or_model
-                else "OpenRouter seçili; yerel modeller kullanılmaz. Yerel model için "
-                "sağlayıcıyı Yerel yap."
-            )
+        if model in MODELLER and (
+            a.saglayici == "openrouter" or (a.saglayici == "ollama" and a.ollama_model)
+        ):
+            # Saglayici OpenRouter/Ollama: yerel (llama.cpp) model hicbir yoldan acilmaz
+            if a.saglayici == "openrouter":
+                hata = (
+                    "OpenRouter seçili; yerel modeller kullanılmaz. AI Ayarları'ndan bir "
+                    "OpenRouter modeli seç ya da sağlayıcıyı Yerel yap."
+                    if not a.or_model
+                    else "OpenRouter seçili; yerel modeller kullanılmaz. Yerel model için "
+                    "sağlayıcıyı Yerel yap."
+                )
+            else:
+                hata = (
+                    "Ollama seçili; yerel modeller kullanılmaz. Yerel model için "
+                    "sağlayıcıyı Yerel yap."
+                )
+            raise UygulamaHatasi(hata)
         if model not in MODELLER and self.uzak is not None:  # uzak: yerel kilide gerek yok
             llm = self.uzak.istemci(model)
+            llm.dusunme = a.dusunme
             try:
                 yield llm
             finally:
