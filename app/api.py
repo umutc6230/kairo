@@ -797,14 +797,57 @@ def uygulama_olustur(
 
     # ---- Telegram kanali: izinli sohbetten ajana mesaj, cevap Telegram'a ----
     telegram = TelegramKanali(veri_dizini)
+    _ana_loop: list[asyncio.AbstractEventLoop | None] = [None]
+    _bildirilen_onaylar: set[str] = set()
+
+    async def _onay_islem(onay_id: str, onayla: bool, kapsam: str = "tek") -> dict:
+        sonuc = politika.onaylar.karar_ver(onay_id, onayla, kapsam).model_dump(mode="json")
+        for r in run_deposu.liste():  # bu onayi bekleyen ajan gorevi kaldigi yerden surer
+            if r.durum is RunDurum.onay_bekliyor and any(a.onay_id == onay_id for a in r.adimlar):
+                await ajan.devam(r.id)
+        return sonuc
+
+    def _telegram_onay_bildir(onay: Any) -> None:
+        try:
+            t = telegram.ayar()
+            if not t.get("aktif") or not t.get("token") or not t.get("izinli"):
+                return
+            if onay.id in _bildirilen_onaylar:
+                return
+            if len(_bildirilen_onaylar) > 500:
+                _bildirilen_onaylar.clear()
+            _bildirilen_onaylar.add(onay.id)
+            ozet = maskele((onay.ozet or "").strip())[:240]
+            metin = (
+                f"Onay bekleniyor ({onay.id})\n"
+                f"Arac: {onay.arac} ({onay.yan_etki})\n"
+                f"Islem: {ozet}\n"
+                f"Onayla: /onayla {onay.id}\n"
+                f"Reddet: /reddet {onay.id}"
+            )
+            try:
+                asyncio.get_running_loop()
+                asyncio.create_task(telegram.bildir_herkese(metin))
+            except RuntimeError:
+                if _ana_loop[0] is not None and not _ana_loop[0].is_closed():
+                    asyncio.run_coroutine_threadsafe(telegram.bildir_herkese(metin), _ana_loop[0])
+        except Exception as e:  # noqa: BLE001
+            logger.warning("Telegram onay bildirimi planlanamadi: {}", maskele(str(e)))
+
+    politika.onaylar.onay_bildir = _telegram_onay_bildir
 
     async def _telegram_mesaj(chat: int, metin: str, ad: str) -> str | None:
         t = telegram.ayar()
-        if metin in ("/start", "/yardim", "/help"):
+        parcalar = metin.strip().split()
+        komut = parcalar[0].lower().split("@", 1)[0] if parcalar else ""
+        if komut in ("/start", "/yardim", "/help"):
             liste = ", ".join(x.ad for x in ajan_deposu.liste()) or "yok"
-            return (f"Kairo'ya bagli. Ajanlar: {liste}\nMesajin varsayilan ajana gider. "
-                    "Baska ajana: '/ajan Ad mesaj'. Durum: /durum")  # fmt: skip
-        if metin == "/durum":
+            return (
+                f"Kairo'ya bagli. Ajanlar: {liste}\nMesajin varsayilan ajana gider. "
+                "Baska ajana: '/ajan Ad mesaj'. Durum: /durum\n"
+                "Onaylar: /onaylar, /onayla <id>, /reddet <id>"
+            )
+        if komut == "/durum":
             return (
                 "\n".join(
                     f"{x.avatar} {x.ad}: {x.ozet()['durum']}, {len(x.kuyruk)} sirada"
@@ -812,6 +855,27 @@ def uygulama_olustur(
                 )
                 or "Ajan yok."
             )
+        if komut == "/onaylar":
+            bekleyen = [o for o in politika.onaylar.gecmis(50) if o.get("karar") == "bekliyor"]
+            if not bekleyen:
+                return "Bekleyen onay yok."
+            satirlar = [
+                f"- {o['id']} | {o['arac']}: {maskele(str(o.get('ozet', '')).strip())[:100]}\n"
+                f"  /onayla {o['id']}  /reddet {o['id']}"
+                for o in bekleyen[:10]
+            ]
+            return "Bekleyen onaylar:\n" + "\n".join(satirlar)
+        if komut in ("/onayla", "/reddet"):
+            if len(parcalar) < 2:
+                return f"Kullanim: {komut} <onay_id>"
+            onay_id = parcalar[1].strip()
+            onayla = komut == "/onayla"
+            try:
+                sonuc = await _onay_islem(onay_id, onayla, "tek")
+            except (YetkiYok, UygulamaHatasi) as e:
+                return getattr(e, "mesaj", str(e))
+            durum_metni = "Onaylandi" if onayla else "Reddedildi"
+            return f"{durum_metni}: {sonuc['id']} ({sonuc['arac']})"
         hedef = t.get("ajan", "")
         if metin.startswith("/ajan "):
             parca = metin[6:].strip().split(" ", 1)
@@ -1101,6 +1165,7 @@ def uygulama_olustur(
     @asynccontextmanager
     async def omur(_: FastAPI):
         komutlar.loop = asyncio.get_running_loop()  # arka plan komutlari bu loop'ta yasar
+        _ana_loop[0] = komutlar.loop
         a = ayarlar.oku()
         if gecit and a.sunucu_acik:
             await agecidi.baslat(a.sunucu_port)
@@ -1145,6 +1210,10 @@ def uygulama_olustur(
     app.state.superajan_tick = _superajan_tick
     app.state.ajan_dagit = _ajan_dagit
     app.state.ajan_runner = ajan
+    app.state.telegram = telegram
+    app.state.telegram_mesaj = _telegram_mesaj
+    app.state.politika = politika
+    app.state.run_deposu = run_deposu
 
     # ---- Superajan rotalari: elle is emri, takip, teslim (birlestir / at), durdur ----
     @app.get("/api/superajan")
@@ -2725,13 +2794,7 @@ def uygulama_olustur(
 
     @app.post("/api/onaylar/{onay_id}")
     async def onay_karar(onay_id: str, istek: OnayIstegi) -> dict:
-        sonuc = politika.onaylar.karar_ver(onay_id, istek.onayla, istek.kapsam).model_dump(
-            mode="json"
-        )
-        for r in run_deposu.liste():  # bu onayi bekleyen ajan gorevi kaldigi yerden surer
-            if r.durum is RunDurum.onay_bekliyor and any(a.onay_id == onay_id for a in r.adimlar):
-                await ajan.devam(r.id)
-        return sonuc
+        return await _onay_islem(onay_id, istek.onayla, istek.kapsam)
 
     # ---- ajan gorevleri (A3) ----
     @app.post("/api/gorevler")
@@ -3160,9 +3223,10 @@ def uygulama_olustur(
         return ajan.takim.pano(r.parent or r.id)
 
     @app.get("/api/gorevler/{run_id}/olaylar")
-    async def gorev_olaylari(run_id: str) -> StreamingResponse:
+    async def gorev_olaylari(run_id: str, mod: str = "tam") -> StreamingResponse:
         run_deposu.getir(run_id)
-        return sse(olay_akisi(run_deposu, run_id))
+        secilen = "artimli" if mod == "artimli" else "tam"
+        return sse(olay_akisi(run_deposu, run_id, mod=secilen))
 
     @app.post("/api/gorevler/{run_id}/mesaj")
     async def gorev_mesaj(run_id: str, istek: GorevMesaji) -> dict:

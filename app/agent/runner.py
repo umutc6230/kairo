@@ -1881,12 +1881,38 @@ class AgentRunner:
         self.depo.kaydet(run)
 
 
-async def olay_akisi(depo: RunDeposu, run_id: str, aralik: float = 1.0) -> AsyncIterator[dict]:
-    """Basit SSE kaynagi: durum degistikce ozet gonderir; bitince kapanir."""
+async def olay_akisi(
+    depo: RunDeposu, run_id: str, aralik: float = 1.0, mod: str = "tam"
+) -> AsyncIterator[dict]:
+    """SSE kaynagi: durum degistikce ozet ya da artimli delta gonderir; bitince kapanir."""
     son = ""
+    onceki_ozet: dict | None = None
+    onceki_adimlar: list[dict] = []
     while True:
         run = depo.getir(run_id)
-        if run.guncelleme != son:
+        if mod == "artimli":
+            ozet = run.ozet()
+            if onceki_ozet is None:
+                onceki_ozet = ozet
+                onceki_adimlar = list(ozet.get("adimlar", []))
+                son = run.guncelleme
+                yield {"tur": "run", "run": ozet}
+            elif run.guncelleme != son or ozet != onceki_ozet:
+                son = run.guncelleme
+                yeni_adimlar = ozet.get("adimlar", [])
+                if len(yeni_adimlar) < len(onceki_adimlar):
+                    yield {"tur": "run", "run": ozet}
+                else:
+                    degisen = [
+                        {"i": i, "adim": a}
+                        for i, a in enumerate(yeni_adimlar)
+                        if i >= len(onceki_adimlar) or a != onceki_adimlar[i]
+                    ]
+                    meta = {k: v for k, v in ozet.items() if k != "adimlar"}
+                    yield {"tur": "delta", "meta": meta, "adimlar": degisen}
+                onceki_ozet = ozet
+                onceki_adimlar = list(yeni_adimlar)
+        elif run.guncelleme != son:
             son = run.guncelleme
             yield {"tur": "run", "run": run.ozet()}
         if run.durum in BITMIS:

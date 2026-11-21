@@ -334,9 +334,15 @@ def islem_hashi(istek: Istek, cozulmus_yol: str | None = None) -> str:
 class OnayDeposu:
     """Onaylar data/onaylar.json'da; islem hash'i ile dogrulanir."""
 
-    def __init__(self, veri_dizini: Path, en_fazla: int = 200) -> None:
+    def __init__(
+        self,
+        veri_dizini: Path,
+        en_fazla: int = 200,
+        onay_bildir: Callable[[Onay], None] | None = None,
+    ) -> None:
         self.yol = veri_dizini / "onaylar.json"
         self.en_fazla = en_fazla
+        self.onay_bildir = onay_bildir
 
     def _liste(self) -> list[Onay]:
         ham = json_oku(self.yol, []) or []
@@ -365,6 +371,8 @@ class OnayDeposu:
             baglam=BAGLAM.get(),
         )
         self._yaz([onay, *self._liste()])
+        if self.onay_bildir is not None:
+            self.onay_bildir(onay)
         return onay
 
     def karar_ver(self, onay_id: str, onayla: bool, kapsam: str = "tek") -> Onay:

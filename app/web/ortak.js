@@ -75,12 +75,13 @@ function hataMetni(veri) {
   return typeof veri.detail === "string" ? veri.detail : "";
 }
 
-/** POST + text/event-stream: her "data: {...}" olayini verir. signal ile durdurulur. */
+/** POST/GET + text/event-stream: her "data: {...}" olayini verir. signal ile durdurulur. */
 export async function* sseOku(yol, govde, signal) {
+  const getMi = govde === undefined;
   const r = await fetch(yol, {
-    method: "POST",
-    headers: { "Content-Type": "application/json", ...oturumBasligi() },
-    body: JSON.stringify(govde),
+    method: getMi ? "GET" : "POST",
+    headers: getMi ? { ...oturumBasligi() } : { "Content-Type": "application/json", ...oturumBasligi() },
+    body: getMi ? undefined : JSON.stringify(govde),
     signal,
   });
   if (!r.ok) {

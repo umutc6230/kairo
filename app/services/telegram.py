@@ -104,6 +104,17 @@ class TelegramKanali:
             for i in range(0, max(1, len(metin)), MAX_MESAJ):  # uzun cevap parcali
                 await self._cagir(c, "sendMessage", chat_id=chat_id, text=metin[i : i + MAX_MESAJ])
 
+    async def bildir_herkese(self, metin: str) -> None:
+        """Telegram aktifse izinli tum sohbetlere bildirim gonderir; hatalari yutar."""
+        a = self.ayar()
+        if not a.get("aktif") or not a.get("token"):
+            return
+        for chat_id in a.get("izinli", []):
+            try:
+                await self.gonder(int(chat_id), metin)
+            except Exception as e:  # noqa: BLE001
+                logger.warning("Telegram bildirim hatasi ({}): {}", chat_id, sir_maskele(str(e)))
+
     # ---- dongu ----
     def baslat(self, mesaj_isle) -> None:
         """mesaj_isle(chat_id, metin, kimden_adi) -> str | None (hemen verilecek cevap)."""
