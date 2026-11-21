@@ -6,6 +6,7 @@ import { diffGoster, reviewYap } from "./inceleme.js";
 import { kacir } from "./md.js";
 import { $, $$, api, bildir, durum, el, modal, oturumBasligi, sayi } from "./ortak.js";
 import { projeAc, projeDurumu, projeYenile } from "./proje.js";
+import { maliyetPanosuAc } from "./sagpanel.js";
 import { ozelKomutListesi, pluginKomutuMu, uzantiKomutlariniYukle, uzantiKomutuMu } from "./uzantilar.js";
 
 // Bu sohbete bagli ajan gorevleri (sohbet.js ile ayni localStorage kaydi; dongusel import yok)
@@ -82,6 +83,7 @@ export const KOMUTLAR = {
   },
   "/cost": { aciklama: "Bu sohbetin kullanımı: token, model çağrısı, süre", calistir: () => maliyet() },
   "/usage": { aciklama: "/cost ile aynı", calistir: () => maliyet() },
+  "/maliyet": { aciklama: "Maliyet ve tasarruf panosu: günlük/haftalık harcama ve model dökümü", calistir: () => maliyetPanosuAc() },
   "/resume": { aciklama: "/resume [arama]: önceki bir sohbete dön", calistir: (arg) => devamEt(arg) },
   "/rewind": { aciklama: "Checkpoint'ler: ajanın dosya değişikliklerini geri al", calistir: () => geriSar() },
   "/todos": { aciklama: "Bu sohbetteki ajanın güncel planı", calistir: () => yapilacaklar() },

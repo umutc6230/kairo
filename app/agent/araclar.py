@@ -18,6 +18,7 @@ from app.agent.git_araclari import GitAraclari
 from app.agent.github_araclari import GithubAraclari
 from app.agent.notebook import NotebookAraclari
 from app.agent.policy import Istek, Karar, PolitikaMotoru, YanEtki
+from app.agent.sembol_indeks import SembolIndeksi
 from app.agent.terminal import AKTIF_RUN, KomutServisi
 from app.agent.workspaces import CalismaAlani
 from app.agent.yazma import YazmaAraclari, sonuc_veya_hata
@@ -72,6 +73,13 @@ OKUMA_SEMALARI = [
         "Dosya ICERIGINDE duzenli ifade arar; dosya:satir:metin dondurur.",
         {"desen": S, "klasor": S, "dosya_deseni": S},
         ["desen"],
+    ),
+    _fonk(
+        "proje_sembol_ara",
+        "Proje kodunda sinif, fonksiyon, metod, arayuz veya tip tanimini BM25 ile hizlica bulur; "
+        "dosya yolu, satir araligi ve imza dondurur.",
+        {"sorgu": S, "klasor": S, "tur": S, "limit": I},
+        ["sorgu"],
     ),
     _fonk(
         "notebook_oku",
@@ -212,6 +220,7 @@ class AjanAracKaydi:
         self.politika = politika
         self.kapsam = KokKapsami(alan.izinli_kokler)
         self.okuma = AjanDosyaAraclari(self.kapsam)
+        self.semboller = SembolIndeksi(self.kapsam)
         self.git = GitAraclari(self.kapsam)
         self.yazma = YazmaAraclari(self.kapsam, politika, alan, checkpointler, oturum_id)
         self.notebook = NotebookAraclari(self.kapsam, self.yazma)
@@ -273,6 +282,7 @@ class AjanAracKaydi:
             "proje_listele": self._oku_izinli("proje_listele", self.okuma.klasor_listele, "yol"),
             "proje_glob": self._oku_izinli("proje_glob", self.okuma.glob_bul, "klasor"),
             "proje_ara": self._oku_izinli("proje_ara", self.okuma.icerik_ara, "klasor"),
+            "proje_sembol_ara": self._oku_izinli("proje_sembol_ara", self.semboller.ara, "klasor"),
             "git_durum": self._oku_izinli("git_durum", self.git.git_durum, "klasor"),
             "git_diff": self._oku_izinli("git_diff", self.git.git_diff, "klasor"),
             "git_gecmis": self._oku_izinli("git_gecmis", self.git.git_gecmis, "klasor"),
