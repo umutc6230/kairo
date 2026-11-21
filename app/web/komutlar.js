@@ -174,7 +174,7 @@ export const KOMUTLAR = {
       bilgiPenceresi("Uzak erişim", satirlar);
     },
   },
-  "/akis": { aciklama: "İş akışları: listele, JSON ile başlat, onaydan sonra devam", calistir: () => akisPenceresi() },
+  "/akis": { aciklama: "İş akışları: /akis [şablon_id anahtar=değer] — listele, şablon veya JSON ile başlat", calistir: (arg) => (arg ? akisSablonHizli(arg) : akisPenceresi()) },
   "/goal": {
     aciklama: "/goal <hedef>: ajan görevi başlatır",
     calistir: async (arg) => {
@@ -304,15 +304,62 @@ const AKIS_ORNEK = JSON.stringify({ ad: "duzelt ve test et", adimlar: [
 ] }, null, 1);
 const AKIS_TR = { bekliyor: "bekliyor", calisiyor: "çalışıyor", onay_bekliyor: "onay bekliyor", basarili: "başarılı", basarisiz: "başarısız", atlandi: "atlandı" };
 
+async function akisSablonHizli(arg) {
+  const metin = arg.trim();
+  const bosluk = metin.search(/\s/);
+  const sid = bosluk < 0 ? metin : metin.slice(0, bosluk);
+  const kalan = bosluk < 0 ? "" : metin.slice(bosluk + 1).trim();
+  const parametreler = {};
+  if (kalan) {
+    const ciftler = [...kalan.matchAll(/([a-zA-Z0-9_-]+)=("[^"]*"|'[^']*'|\S+)/g)];
+    if (ciftler.length) {
+      for (const m of ciftler) {
+        let val = m[2];
+        if ((val.startsWith('"') && val.endsWith('"')) || (val.startsWith("'") && val.endsWith("'"))) {
+          val = val.slice(1, -1);
+        }
+        parametreler[m[1]] = val;
+      }
+    } else {
+      try {
+        const { sablonlar } = await api("/api/akis-sablonlari");
+        const s = sablonlar.find((x) => x.id === sid);
+        if (s?.parametreler?.length) parametreler[s.parametreler[0]] = kalan;
+      } catch { /* sunucu dogrulamasi bildirir */ }
+    }
+  }
+  try {
+    await api(`/api/akis-sablonlari/${encodeURIComponent(sid)}/calistir`, { method: "POST", govde: { parametreler } });
+    bildir(`Şablon başlatıldı: ${sid}`, "basari", 2000);
+  } catch (e) {
+    bildir(e.message, "hata");
+  }
+}
+
 function akisPenceresi() {
   const kap = document.createElement("div");
   kap.className = "diff-modal";
   const ciz = async () => {
     let liste = [];
-    try { liste = (await api("/api/akislar")).akislar; } catch (e) { bildir(e.message, "hata"); }
+    let sablonlar = [];
+    try {
+      const [ak, sb] = await Promise.all([api("/api/akislar"), api("/api/akis-sablonlari")]);
+      liste = ak.akislar || [];
+      sablonlar = sb.sablonlar || [];
+    } catch (e) { bildir(e.message, "hata"); }
     kap.innerHTML = `<div class="ayar-not">Adım türleri: <code>ajan</code> (hedef) ve <code>komut</code>. <code>bagimli</code>, <code>kosul</code> ({adim, durum}) ve <code>tekrar</code> (en fazla 3) kullanılabilir. Komutlar izin kurallarından geçer; onay isteyen komutta akış durur.</div>
-      <textarea class="alan" rows="9" aria-label="Akış tanımı (JSON)">${kacir(AKIS_ORNEK)}</textarea>
-      <div class="dugme-sira"><button class="btn ana" data-baslat>Başlat</button><button class="btn" data-yenile>Yenile</button></div>
+      <div class="kart-baslik"><b>Hazır ve kayıtlı şablonlar</b></div>
+      ${sablonlar.map((s) => `<div class="kart" data-sablon="${kacir(s.id)}">
+        <div class="kart-baslik"><b>${kacir(s.ad)}</b><code>${kacir(s.id)}</code>${s.yerlesik ? '<span class="rozet">yerleşik</span>' : ""}</div>
+        ${s.aciklama ? `<div class="soluk kucuk">${kacir(s.aciklama)}</div>` : ""}
+        <div class="satir" style="flex-wrap:wrap;gap:6px;margin-top:6px">
+          ${(s.parametreler || []).map((p) => `<input class="alan" style="max-width:190px" data-sablon-param="${kacir(p)}" value="${kacir(s.varsayilanlar?.[p] || "")}" placeholder="${kacir(p)}">`).join("")}
+          <button class="btn ana" data-sablon-calistir="${kacir(s.id)}">Şablonu çalıştır</button>
+          ${!s.yerlesik ? `<button class="btn tehlike" data-sablon-sil="${kacir(s.id)}">Sil</button>` : ""}
+        </div>
+      </div>`).join("") || '<div class="soluk">Henüz şablon yok.</div>'}
+      <textarea class="alan" rows="8" aria-label="Akış tanımı (JSON)">${kacir(AKIS_ORNEK)}</textarea>
+      <div class="dugme-sira"><button class="btn ana" data-baslat>Başlat</button><button class="btn" data-sablon-kaydet>Şablon olarak kaydet</button><button class="btn" data-yenile>Yenile</button></div>
       ${liste.map((a) => `<div class="kart"><div class="kart-baslik"><b>${kacir(a.ad)}</b><span class="rozet">${kacir(AKIS_TR[a.durum] || a.durum)}</span></div>
         <ul class="plan-liste">${a.adimlar.map((x) => `<li>${kacir(x.id)} <code>${kacir(x.tur)}</code> <span class="soluk kucuk">${kacir(AKIS_TR[x.durum] || x.durum)}${x.deneme > 1 ? ` · ${kacir(x.deneme)} deneme` : ""}${x.sonuc ? ` · ${kacir(x.sonuc.slice(0, 120))}` : ""}</span></li>`).join("")}</ul>
         ${a.durum === "onay_bekliyor" ? `<button class="btn" data-devam="${kacir(a.id)}">Onayladım, devam et</button>` : ""}</div>`).join("") || '<div class="soluk">Henüz akış yok.</div>'}`;
@@ -321,6 +368,43 @@ function akisPenceresi() {
       try { veri = JSON.parse(kap.querySelector("textarea").value); } catch { bildir("Geçersiz JSON.", "hata"); return; }
       try { await api("/api/akislar", { method: "POST", govde: veri }); bildir("Akış başladı.", "basari", 1500); setTimeout(ciz, 800); } catch (e) { bildir(e.message, "hata"); }
     };
+    kap.querySelector("[data-sablon-kaydet]").onclick = async () => {
+      let veri;
+      try { veri = JSON.parse(kap.querySelector("textarea").value); } catch { bildir("Geçersiz JSON.", "hata"); return; }
+      const sid = veri.id || String(veri.ad || "sablon").toLowerCase().replace(/[^a-z0-9_-]+/g, "-").replace(/^-|-$/g, "").slice(0, 40) || `sablon-${Date.now().toString(36)}`;
+      const bulunanParam = new Set(veri.parametreler || []);
+      for (const a of veri.adimlar || []) {
+        for (const metin of [a.hedef || "", a.komut || ""]) {
+          for (const m of metin.matchAll(/\{\{([a-zA-Z0-9_-]{1,40})\}\}/g)) bulunanParam.add(m[1]);
+        }
+      }
+      try {
+        await api("/api/akis-sablonlari", { method: "POST", govde: { ...veri, id: sid, parametreler: [...bulunanParam] } });
+        bildir(`Şablon kaydedildi: ${sid}`, "basari", 2000);
+        ciz();
+      } catch (e) { bildir(e.message, "hata"); }
+    };
+    kap.querySelectorAll("[data-sablon-calistir]").forEach((b) => {
+      b.onclick = async () => {
+        const kart = b.closest("[data-sablon]");
+        const parametreler = {};
+        kart.querySelectorAll("[data-sablon-param]").forEach((inp) => { parametreler[inp.dataset.sablonParam] = inp.value; });
+        try {
+          await api(`/api/akis-sablonlari/${encodeURIComponent(b.dataset.sablonCalistir)}/calistir`, { method: "POST", govde: { parametreler } });
+          bildir("Şablon akışı başladı.", "basari", 1500);
+          setTimeout(ciz, 800);
+        } catch (e) { bildir(e.message, "hata"); }
+      };
+    });
+    kap.querySelectorAll("[data-sablon-sil]").forEach((b) => {
+      b.onclick = async () => {
+        try {
+          await api(`/api/akis-sablonlari/${encodeURIComponent(b.dataset.sablonSil)}`, { method: "DELETE" });
+          bildir("Şablon silindi.", "basari", 1500);
+          ciz();
+        } catch (e) { bildir(e.message, "hata"); }
+      };
+    });
     kap.querySelector("[data-yenile]").onclick = ciz;
     kap.querySelectorAll("[data-devam]").forEach((b) => {
       b.onclick = async () => { try { await api(`/api/akislar/${b.dataset.devam}/devam`, { method: "POST" }); setTimeout(ciz, 800); } catch (e) { bildir(e.message, "hata"); } };

@@ -70,6 +70,9 @@ export function projeAc() {
         <ul class="kok-liste">${(izin.kokler || []).map((k) => `<li><code>${kacir(k)}</code></li>`).join("") || "<li class='soluk'>yok</li>"}</ul>
         ${izin.mod_tavani_uygulandi ? `<div class="uyari-kutu kucuk">Yönetilen politika modu <b>${kacir(izin.mod)}</b> ile sınırlıyor.</div>` : ""}
         <div class="uyari-kutu kucuk">İzolasyon: <b>${izin.izolasyon === "yok" ? "yok" : izin.izolasyon === "kum" ? "kum havuzu (ağ kapalı)" : "konteyner (ağ kapalı)"}</b> · Otomatik modda komut: <b>${kacir(izin.otomatik_komut || "onay ister")}</b><br>${kacir(izin.izolasyon_notu || "")}</div>
+        <label class="proje-alan" style="flex-direction:row;align-items:center;gap:8px">
+          <input type="checkbox" id="proje-kum-hizli" ${izin.izolasyon_secimi === "kum" ? "checked" : ""}> Windows Kum Havuzu (AppContainer, ağ kapalı)
+        </label>
         <label class="proje-alan">Komutlar nerede çalışsın
           <select class="alan" id="izolasyon-sec">
             <option value="yok" ${!["konteyner", "kum"].includes(izin.izolasyon_secimi) ? "selected" : ""}>Bu bilgisayarda (izolasyon yok, otomatik modda da onay ister)</option>
@@ -168,6 +171,11 @@ export function projeAc() {
       sarmala(async () => {
         await api("/api/ayarlar", { method: "PUT", govde: { izolasyon: ev.target.value } });
         bildir("İzolasyon ayarı kaydedildi.");
+      });
+    $("#proje-kum-hizli", govde).onchange = (ev) =>
+      sarmala(async () => {
+        await api("/api/ayarlar", { method: "PUT", govde: { izolasyon: ev.target.checked ? "kum" : "yok" } });
+        bildir(ev.target.checked ? "Windows Kum Havuzu açıldı." : "Windows Kum Havuzu kapatıldı.", "basari", 2000);
       });
     $("#btn-proje-ac", govde).onclick = () =>
       sarmala(async () => {

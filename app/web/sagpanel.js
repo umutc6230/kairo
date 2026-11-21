@@ -503,6 +503,17 @@ function kenarKullanimCiz(l, kalan) {
   k.hidden = false;
 }
 
+function guncellemeModalAc(g) {
+  const link = g.adres && /^https:\/\//i.test(g.adres) ? g.adres : "https://github.com/umutc6230/kairo/releases";
+  const html = `<div class="maliyet-pano">
+    <div><b>Mevcut sürüm:</b> <code>${kacir(g.mevcut || "")}</code> · <b>Yeni sürüm:</b> <code>${kacir(g.son || "")}</code></div>
+    ${g.notlar ? `<pre class="ayar-not" style="white-space:pre-wrap;max-height:220px;overflow:auto">${kacir(g.notlar)}</pre>` : ""}
+    <div class="uyari-kutu kucuk">Portable sürümü güncellerken <b>data/</b> klasörünü koruyun; diğer dosyaları yeni sürümle değiştirin.</div>
+    <div><a class="btn ana" href="${kacir(link)}" target="_blank" rel="noopener">GitHub Release sayfasını aç</a></div>
+  </div>`;
+  modal({ baslik: "Yeni sürüm mevcut", icerik: html, dugmeler: [{ metin: "Kapat" }] });
+}
+
 export function sagPanelKur({ baglayiciAc, ayarAc, degisiklikAc }) {
   baglamPopKur();
   $("#sp-ayar").onclick = ayarAc;
@@ -540,6 +551,15 @@ export function sagPanelKur({ baglayiciAc, ayarAc, degisiklikAc }) {
   };
   ikonlariYerlestir(document.getElementById("kok"));
   baglayicilariYenile();
-  api("/api/bilgi").then((b) => { $("#dc-surum").textContent = `${b.urun} ${b.surum}`; }).catch(() => {});
+  api("/api/bilgi").then((b) => {
+    const surumEl = $("#dc-surum");
+    surumEl.textContent = `${b.urun} ${b.surum}`;
+    api("/api/guncelleme").then((g) => {
+      if (!g?.yeni_var) return;
+      const btn = el(`<button class="bag" id="dc-yeni-surum" style="margin-left:6px">Yeni sürüm: v${kacir(g.son)}</button>`);
+      btn.onclick = () => guncellemeModalAc(g);
+      surumEl.append(btn);
+    }).catch(() => {});
+  }).catch(() => {});
   document.addEventListener("oturumlar-degisti", () => { dosyaAgaciniYenile(); baglamYenile(); degisikliklerYenile(); }); // proje/sohbet degisince
 }

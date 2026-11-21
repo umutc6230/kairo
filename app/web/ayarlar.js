@@ -251,6 +251,7 @@ export function ayarlarAc(sekme = "ai") {
       <p class="soluk" style="margin:0">Bilgisayarındaki sansürsüz yerel modelleri sohbet, OCR, araç çağırma ve karşılaştırma testleriyle denemek için.</p>
       <div>Ürün sahibi: <b>${kacir(durum.bilgi.urun_sahibi)}</b></div>
       <div class="satir"><a href="${durum.bilgi.x}" target="_blank" rel="noopener">X: @umutc6230</a><a href="${durum.bilgi.github}" target="_blank" rel="noopener">GitHub: umutc6230</a></div>
+      <div class="satir"><button class="btn" id="ay-guncelleme-kontrol">Güncellemeleri denetle</button><span id="ay-guncelleme-sonuc" class="ayar-not"></span></div>
       <div class="ayar-not">Veri klasörü: ${kacir(durum.bilgi.veri_dizini)}</div>
     </div></div>`);
   const m = modal({ baslik: "Ayarlar", icerik: govde, genis: true });
@@ -1091,6 +1092,27 @@ export function ayarlarAc(sekme = "ai") {
   $("#ay-yukle", govde).onclick = () => modelYukle();
   $("#ay-durdur", govde).onclick = () => sunucuDurdur(false);
   $("#ay-harici", govde).onclick = () => sunucuDurdur(true);
+  const guncBtn = $("#ay-guncelleme-kontrol", govde);
+  if (guncBtn) {
+    guncBtn.onclick = async () => {
+      const sonucEl = $("#ay-guncelleme-sonuc", govde);
+      guncBtn.disabled = true;
+      sonucEl.textContent = "Denetleniyor…";
+      try {
+        const g = await api("/api/guncelleme?zorla=true");
+        if (g.yeni_var) {
+          const link = g.adres && /^https:\/\//i.test(g.adres) ? g.adres : "https://github.com/umutc6230/kairo/releases";
+          sonucEl.innerHTML = `<span class="rozet yesil">Yeni sürüm: v${kacir(g.son)}</span> <a href="${kacir(link)}" target="_blank" rel="noopener">GitHub Release sayfasını aç</a>`;
+        } else {
+          sonucEl.textContent = g.uyari || g.not || `Güncel sürümü kullanıyorsunuz (${g.mevcut}).`;
+        }
+      } catch (err) {
+        sonucEl.textContent = err.message;
+      } finally {
+        guncBtn.disabled = false;
+      }
+    };
+  }
   ikonlariYerlestir(govde);
 }
 
