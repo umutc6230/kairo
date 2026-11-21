@@ -52,6 +52,7 @@ let secili = null;
 let kapOverride = null; // sohbet icinde gosterimde gorev o mesajin kutusuna cizilir
 const detayKabi = () => kapOverride || $("#gr-detay");
 let sonCizilen = ""; // degismeyen gorevi yeniden cizme: tiklanan dugme DOM'dan kalkmasin
+let seciliDurum = ""; // secili gorevin son durumu: bitmisse aralikli yoklama atlanir
 let zamanlayici = null;
 let acikAdimlar = new Set();
 // Ayni anda birden cok kutu (sohbet + sag panel karti) ayni ya da farkli gorevi canli izler;
@@ -721,6 +722,7 @@ async function gorevYenile(zorla = true) {
   if (!secili) return;
   try {
     const r = await api(`/api/gorevler/${secili}`);
+    seciliDurum = r.durum;
     // guncelleme saniye hassasiyetinde: ayni saniyedeki degisiklik kacmasin diye tum icerik
     const imza = JSON.stringify(r) + [...acikAdimlar].join(",");
     if (!zorla && imza === sonCizilen) return;
@@ -783,6 +785,7 @@ export async function gorevSayfasiYukle() {
   clearInterval(zamanlayici);
   zamanlayici = setInterval(() => {
     if (document.getElementById("g-gorevler")?.hidden) return; // sayfa gizliyken yoklama yok
+    if (BITMIS.has(seciliDurum)) return; // sec() ve kart butonlari zorla yeniler
     gorevYenile(false);
   }, 1500);
 }
@@ -802,6 +805,8 @@ export function sohbetteGorevGoster(kap, id, durumBildir) {
   izleyiciYenile(v);
   v.zamanlayici = setInterval(() => {
     if (!kap.isConnected) { clearInterval(v.zamanlayici); izleyiciler.delete(kap); return; }
+    // bitmis gorev degismez (olcum: ozet p90 ~320 KB); kart butonlari zorla yeniler, tekrar edilirse yoklama surer
+    if (BITMIS.has(v.sonDurum)) return;
     izleyiciYenile(v, false);
   }, 1500);
 }
