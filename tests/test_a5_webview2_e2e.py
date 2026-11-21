@@ -86,6 +86,10 @@ def pencere(tmp_path):
         surec.wait(10)
 
 
+@pytest.mark.skipif(
+    os.environ.get("GITHUB_ACTIONS") == "true",
+    reason="CI runner'inda etkilesimli masaustu yok, WebView2 debug portu acilmiyor",
+)
 def test_gercek_pencere_uctan_uca(pencere, tmp_path) -> None:
     from playwright.sync_api import sync_playwright
 

@@ -23,7 +23,7 @@ jobs:
           cache: pip
       - uses: actions/setup-node@v4
         with:
-          node-version: "20"
+          node-version: "22"  # .ts gorev testleri Node type-stripping ister (>=22.18)
       - name: Bagimliliklar
         run: pip install -r requirements-dev.txt
       - name: Lint (ruff)

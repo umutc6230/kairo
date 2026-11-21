@@ -26,6 +26,8 @@ from typing import Any
 
 import yaml
 
+from app.exceptions import UygulamaHatasi
+
 # Claude Code arac adi -> bu uygulamanin araclari (hook matcher ve ajan profili 'tools' icin)
 ARAC_ESLESME = {
     "Read": ["proje_dosya_oku"],
@@ -284,6 +286,8 @@ def marketplace_oku(kok: Path) -> dict:
         p = kok / "marketplace.json"
     if not p.is_file():
         raise ValueError("marketplace.json bulunamadi.")
+    if not p.resolve().is_relative_to(kok.resolve()):  # symlink ile kok disi okuma engeli
+        raise UygulamaHatasi("marketplace.json plugin klasorunun disina isaret ediyor.")
     v = _json(p)
     pluginler = []
     for x in v.get("plugins") or []:
