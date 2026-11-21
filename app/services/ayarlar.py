@@ -99,6 +99,7 @@ class KullaniciAyarlari(BaseModel):
     # yeni projelerin varsayilan koordinator/uygulayici modeli (bos = aktif model)
     varsayilan_koordinator: str = Field(default="", max_length=200)
     varsayilan_uygulayici: str = Field(default="", max_length=200)
+    gunluk_butce_usd: float = Field(default=0.0, ge=0.0, le=1000.0)
     # hafif: kucuk modelde skill/MCP/ek araclar gonderilmez; otomatik = kucuk yerel modelde hafif
     baglam_profili: Literal["otomatik", "tam", "hafif"] = "otomatik"
     # gorsel_uret araci (OpenRouter /images); bos = arac kapali

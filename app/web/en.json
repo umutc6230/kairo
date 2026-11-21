@@ -1905,5 +1905,10 @@
  "Soru bekliyor:": "Waiting for answer:",
  "Cevabınızı yazın": "Write your answer",
  "Yazıya dökülüyor… (bulut)": "Transcribing… (cloud)",
- "/btw sonrasına soru yaz.": "Write a question after /btw."
+ "/btw sonrasına soru yaz.": "Write a question after /btw.",
+ "Gizli proje (yalnız yerel model)": "Private project (local model only)",
+ "Gizli proje açıldı: yalnız yerel model kullanılacak.": "Private project enabled: only local model will be used.",
+ "Gizli proje kapatıldı.": "Private project disabled.",
+ "Günlük bulut bütçe sınırı (USD, 0 = sınırsız)": "Daily cloud budget limit (USD, 0 = unlimited)",
+ "Günlük bulut harcaması bu sınırı aştığında yeni sohbetler otomatik yerel modele yönlendirilir.": "When daily cloud spend exceeds this limit, new chats automatically route to the local model."
 }

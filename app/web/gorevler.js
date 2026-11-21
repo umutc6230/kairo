@@ -4,7 +4,7 @@ import { ikon, ikonlariYerlestir } from "./ikonlar.js";
 import { kacir, md } from "./md.js";
 import { diffGoster, reviewYap } from "./inceleme.js";
 import { arayuzKarti, onizlemeKarti } from "./gorsel_kartlar.js";
-import { $, $$, api, bildir, durum, el, modal, onayla, sayi } from "./ortak.js";
+import { $, $$, api, bildir, durum, el, modal, onayla, sayi, sseOku } from "./ortak.js";
 import { masaustuBildirimi } from "./ayarlar2.js";
 
 // ---- bildirim: durum gecislerinde (onay istendi, rutin bitti) Windows bildirimi ----
@@ -58,7 +58,7 @@ let acikAdimlar = new Set();
 // Ayni anda birden cok kutu (sohbet + sag panel karti) ayni ya da farkli gorevi canli izler;
 // her kutunun kendi yoklamasi ve acik/kapali durumu var. Tek global izleyici, panel karti
 // acilinca sohbetin yoklamasini olduruyordu (sohbet ilk adimda donuyordu).
-const izleyiciler = new Map(); // kap -> { kap, id, acik, imza, zamanlayici }
+const izleyiciler = new Map(); // kap -> { kap, id, acik, imza, run, abort, yenidenBaglanTimer, sonDurum }
 function baglamla(v, fn) { // cizim senkron: global kap/acik durumu cizim suresince bu kutuya
   const once = [kapOverride, acikAdimlar];
   [kapOverride, acikAdimlar] = [v.kap, v.acik];
@@ -797,18 +797,90 @@ export function gorevlerKur() {
   $("#gr-hedef").onkeydown = (e) => { if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) baslat(); };
 }
 
+function izleyiciAkisDurdur(v) {
+  if (!v) return;
+  if (v.yenidenBaglanTimer) {
+    clearTimeout(v.yenidenBaglanTimer);
+    v.yenidenBaglanTimer = null;
+  }
+  if (v.abort) {
+    v.abort.abort();
+    v.abort = null;
+  }
+}
+
+function izleyiciCiz(v, r, zorla = false) {
+  if (!v.kap.isConnected || izleyiciler.get(v.kap) !== v) return; // beklerken kutu baska goreve baglandi
+  // gorev bu izlemede bitti (sayfa acilisinda zaten bitmis olan sayilmaz): sonraki mesaj onerisi
+  if (v.sonDurum && !BITMIS.has(v.sonDurum) && BITMIS.has(r.durum)) {
+    setTimeout(() => document.dispatchEvent(new Event("ajan-tur-bitti")), 300);
+  }
+  if (r.durum !== v.sonDurum) v.durumBildir?.(r.durum);
+  v.sonDurum = r.durum;
+  if (BITMIS.has(r.durum)) izleyiciAkisDurdur(v);
+  const imza = JSON.stringify(r) + [...v.acik].join(",");
+  if (!zorla && imza === v.imza) return;
+  v.imza = imza;
+  const cevapYazilan = $("#gr-cevap", v.kap)?.value; // kullanici yazarken girdi silinmesin
+  const odak = document.activeElement?.id;
+  baglamla(v, () => detayCiz(r));
+  if (cevapYazilan && $("#gr-cevap", v.kap)) $("#gr-cevap", v.kap).value = cevapYazilan;
+  if (odak) document.getElementById(odak)?.focus();
+  bildirimGerekirse(r);
+}
+
+async function izleyiciAkisBaslat(v) {
+  if (v.abort || !v.kap.isConnected || izleyiciler.get(v.kap) !== v) return;
+  if (BITMIS.has(v.sonDurum)) return;
+  const abort = new AbortController();
+  v.abort = abort;
+  try {
+    for await (const ev of sseOku(`/api/gorevler/${v.id}/olaylar?mod=artimli`, undefined, abort.signal)) {
+      if (!v.kap.isConnected || izleyiciler.get(v.kap) !== v) {
+        izleyiciAkisDurdur(v);
+        return;
+      }
+      if (ev.tur === "run" && ev.run) {
+        v.run = ev.run;
+        izleyiciCiz(v, v.run, true);
+      } else if (ev.tur === "delta") {
+        if (!v.run) continue;
+        if (ev.meta) Object.assign(v.run, ev.meta);
+        if (!Array.isArray(v.run.adimlar)) v.run.adimlar = [];
+        for (const parca of ev.adimlar || []) {
+          v.run.adimlar[parca.i] = parca.adim;
+        }
+        izleyiciCiz(v, v.run, false);
+      }
+      if (BITMIS.has(v.sonDurum)) break;
+    }
+  } catch (e) {
+    if (e.name === "AbortError" || abort.signal.aborted) return;
+    if (!v.run && v.kap.isConnected) {
+      v.kap.innerHTML = `<div class="uyari-kutu">${kacir(e.message)}</div>`;
+    }
+  } finally {
+    if (v.abort === abort) v.abort = null;
+  }
+  if (v.kap.isConnected && izleyiciler.get(v.kap) === v && !BITMIS.has(v.sonDurum)) {
+    v.yenidenBaglanTimer = setTimeout(() => {
+      v.yenidenBaglanTimer = null;
+      izleyiciAkisBaslat(v);
+    }, 2000);
+  }
+}
+
 /** Claude Code gibi: gorev SOHBETIN ICINDE canli cizilir (adimlar, onay, diff, kontroller). */
 export function sohbetteGorevGoster(kap, id, durumBildir) {
-  clearInterval(izleyiciler.get(kap)?.zamanlayici); // ayni kutu yeniden baglanirsa eskisini birak
-  const v = { kap, id, durumBildir, acik: new Set(), imza: "", zamanlayici: null };
+  for (const [k, eski] of izleyiciler) {
+    if (k === kap || !k.isConnected) {
+      izleyiciAkisDurdur(eski);
+      izleyiciler.delete(k);
+    }
+  }
+  const v = { kap, id, durumBildir, acik: new Set(), imza: "", run: null, abort: null, yenidenBaglanTimer: null, sonDurum: undefined };
   izleyiciler.set(kap, v);
-  izleyiciYenile(v);
-  v.zamanlayici = setInterval(() => {
-    if (!kap.isConnected) { clearInterval(v.zamanlayici); izleyiciler.delete(kap); return; }
-    // bitmis gorev degismez (olcum: ozet p90 ~320 KB); kart butonlari zorla yeniler, tekrar edilirse yoklama surer
-    if (BITMIS.has(v.sonDurum)) return;
-    izleyiciYenile(v, false);
-  }, 1500);
+  izleyiciAkisBaslat(v);
 }
 
 async function izleyiciYenile(v, zorla = true) {
@@ -819,26 +891,9 @@ async function izleyiciYenile(v, zorla = true) {
     v.kap.innerHTML = `<div class="uyari-kutu">${kacir(e.message)}</div>`;
     return;
   }
-  if (!v.kap.isConnected || izleyiciler.get(v.kap) !== v) return; // beklerken kutu baska goreve baglandi
-  // gorev bu izlemede bitti (sayfa acilisinda zaten bitmis olan sayilmaz): sonraki mesaj onerisi
-  if (v.sonDurum && !BITMIS.has(v.sonDurum) && BITMIS.has(r.durum)) {
-    setTimeout(() => document.dispatchEvent(new Event("ajan-tur-bitti")), 300);
-  }
-  if (r.durum !== v.sonDurum) v.durumBildir?.(r.durum);
-  v.sonDurum = r.durum;
-  if (BITMIS.has(r.durum) && v.zamanlayici) {
-    clearInterval(v.zamanlayici);
-    v.zamanlayici = null;
-  }
-  const imza = JSON.stringify(r) + [...v.acik].join(",");
-  if (!zorla && imza === v.imza) return;
-  v.imza = imza;
-  const cevapYazilan = $("#gr-cevap", v.kap)?.value; // kullanici yazarken girdi silinmesin
-  const odak = document.activeElement?.id;
-  baglamla(v, () => detayCiz(r));
-  if (cevapYazilan && $("#gr-cevap", v.kap)) $("#gr-cevap", v.kap).value = cevapYazilan;
-  if (odak) document.getElementById(odak)?.focus();
-  bildirimGerekirse(r);
+  v.run = r;
+  izleyiciCiz(v, r, zorla);
+  if (!BITMIS.has(r.durum) && !v.abort) izleyiciAkisBaslat(v);
 }
 // Gorev sonu otomatik inceleme (Chimera): model varsayimi, kanit degil
 const ONEM_SINIF = { kritik: "kirmizi", yuksek: "kirmizi", orta: "sari", dusuk: "" };

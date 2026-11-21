@@ -109,6 +109,9 @@ export function projeAc() {
           <input class="alan" id="proje-uygulayici" list="proje-model-liste" value="${kacir(aktif.uygulayici_model || "")}" placeholder="Aktif model" spellcheck="false">
         </label>
         <datalist id="proje-model-liste">${modelOnerileri.map((id) => `<option value="${kacir(id)}"></option>`).join("")}</datalist>
+        <label class="proje-alan" style="flex-direction:row;align-items:center;gap:8px">
+          <input type="checkbox" id="proje-gizli" ${aktif.gizli_proje ? "checked" : ""}> Gizli proje (yalnız yerel model)
+        </label>
         <label class="proje-alan">Ek klasör yetkilendir (kök dışı)
           <span class="klasor-sec-sira">
             <input class="alan" id="proje-ek" type="text" placeholder="Klasör seçin" spellcheck="false">
@@ -182,6 +185,11 @@ export function projeAc() {
       sarmala(() => api(`/api/projeler/${aktif.id}/mod`, { method: "PUT", govde: { mod: e.target.value } }));
     $("#proje-guven-sec", govde).onchange = (e) =>
       sarmala(() => api(`/api/projeler/${aktif.id}/guven`, { method: "PUT", govde: { guven: e.target.value } }));
+    $("#proje-gizli", govde).onchange = (e) =>
+      sarmala(async () => {
+        await api(`/api/projeler/${aktif.id}/gizli`, { method: "PUT", govde: { gizli_proje: e.target.checked } });
+        bildir(e.target.checked ? "Gizli proje açıldı: yalnız yerel model kullanılacak." : "Gizli proje kapatıldı.", "basari", 2000);
+      });
     // model onerileri: uzakta OpenRouter listesi, yerelde kurulu modeller (elle id de yazilabilir)
     const sag = durum.ayarlar?.saglayici;
     const oneriler = sag === "openrouter"

@@ -124,6 +124,9 @@ export function ayarlarAc(sekme = "ai") {
         <div class="satir"><input class="alan" id="ay-v-koord" list="ay-v-liste" value="${kacir(a.varsayilan_koordinator || "")}" placeholder="Koordinatör (boş: aktif model)" spellcheck="false"><input class="alan" id="ay-v-uyg" list="ay-v-liste" value="${kacir(a.varsayilan_uygulayici || "")}" placeholder="Uygulayıcı / thread (boş: aktif model)" spellcheck="false"></div>
         <datalist id="ay-v-liste"></datalist>
         <div class="ayar-not">Yeni açılan projeye bu modeller atanır: koordinatör planlar ve iş dağıtır, uygulayıcı thread'lerde kodu yazar. Proje ayrıntısından projeye özel değiştirilebilir.</div></div>
+      <div class="ayar-grup"><label for="ay-gunluk-butce">Günlük bulut bütçe sınırı (USD, 0 = sınırsız)</label>
+        <input class="alan" id="ay-gunluk-butce" type="number" min="0" max="1000" step="0.01" value="${a.gunluk_butce_usd ?? 0}" style="max-width:180px">
+        <div class="ayar-not">Günlük bulut harcaması bu sınırı aştığında yeni sohbetler otomatik yerel modele yönlendirilir.</div></div>
       <h3 class="ay-bolum" id="ay-b-dusunme">Düşünme (effort)</h3>
       <div id="ay-dusunme-not" class="ayar-not"></div>
       <div id="ay-dusunme" class="ayar-grup secenek-sira"></div>
@@ -1055,6 +1058,7 @@ export function ayarlarAc(sekme = "ai") {
   gorselListe();
   alanKaydet("#ay-sicaklik", "sicaklik", Number);
   alanKaydet("#ay-max", "max_tokens", Number);
+  alanKaydet("#ay-gunluk-butce", "gunluk_butce_usd", (v) => Math.max(0, Number(v) || 0));
   $("#ay-sicaklik", govde).oninput = (e) => { e.target.previousElementSibling.textContent = `Sıcaklık (${e.target.value})`; };
 
   $("#ay-test", govde).onclick = async (e) => {

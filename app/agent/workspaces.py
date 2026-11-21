@@ -54,6 +54,7 @@ class CalismaAlani(BaseModel):
     # Claude "Coordinator / Threads" gibi iki model; bos: uygulamanin aktif modeli
     koordinator_model: str = Field(default="", max_length=200)  # proje sohbeti: plan, arastirma
     uygulayici_model: str = Field(default="", max_length=200)  # thread + alt ajan: uygulama
+    gizli_proje: bool = False  # True ise bulut modellerine degil yalniz yerel modele gider
     olusturma: str = Field(default_factory=simdi)
     guncelleme: str = Field(default_factory=simdi)
 
@@ -251,4 +252,9 @@ class WorkspaceDeposu:
     def guven_ayarla(self, alan_id: str, guven: Guven) -> CalismaAlani:
         alan = self.getir(alan_id)
         alan.guven = guven
+        return self.kaydet(alan)
+
+    def gizli_ayarla(self, alan_id: str, gizli: bool) -> CalismaAlani:
+        alan = self.getir(alan_id)
+        alan.gizli_proje = bool(gizli)
         return self.kaydet(alan)
