@@ -20,10 +20,41 @@ from app.degerlendir import OLCULEMEDI, gorevleri_yukle, ozet_tablo  # noqa: E40
 KAT = {"hata": "Hata duzeltme", "ozellik": "Ozellik/refactor", "test": "Test/build",
        "kesif": "Kesif/review", "uzun": "Uzun baglam/devam", "toparlanma": "Toparlanma",
        "entegrasyon": "Web/entegrasyon"}  # fmt: skip
+ESDEGERLIK_ESIK_PUAN = 5
 
 
 def _ort_sure(liste: list[dict]) -> float:
     return round(sum(k["sure_sn"] for k in liste) / max(len(liste), 1), 1)
+
+
+def esdegerlik_sonucu(yerel_ozet: dict, cc_ozet: dict) -> tuple[bool | None, list[str], list[str]]:
+    """A13 esdegerlik kapisini degerlendirir.
+
+    Tum mevcut KAT kategorileri kritik sayilir. Her iki tarafta da olumlu sayida
+    olculmus kosu yoksa sonuc belirsizdir; eksik kapsama basarisizlik ya da
+    kategori gerilemesi atfedilmez.
+    """
+    eksik_kapsam = []
+    if yerel_ozet.get("kosu", 0) <= 0 or cc_ozet.get("kosu", 0) <= 0:
+        eksik_kapsam.append("genel")
+
+    for kategori, ad in KAT.items():
+        yerel = yerel_ozet.get("kategori", {}).get(kategori, {})
+        cc = cc_ozet.get("kategori", {}).get(kategori, {})
+        if yerel.get("kosu", 0) <= 0 or cc.get("kosu", 0) <= 0:
+            eksik_kapsam.append(ad)
+
+    if eksik_kapsam:
+        return None, eksik_kapsam, []
+
+    fark = yerel_ozet["basari_yuzde"] - cc_ozet["basari_yuzde"]
+    gerileyen = [
+        ad
+        for kategori, ad in KAT.items()
+        if yerel_ozet["kategori"][kategori]["basari_yuzde"]
+        < cc_ozet["kategori"][kategori]["basari_yuzde"]
+    ]
+    return abs(fark) <= ESDEGERLIK_ESIK_PUAN and not gerileyen, [], gerileyen
 
 
 def rapor(yerel_r: list[dict], cc: dict) -> str:
@@ -63,14 +94,26 @@ def rapor(yerel_r: list[dict], cc: dict) -> str:
         "## Kategori", "", "| Kategori | Kairo | Claude Code | Fark (puan) |",
         "|---|---|---|---|",
     ]  # fmt: skip
-    gerileyen = []
-    for c, ad in KAT.items():
-        y, k = oy["kategori"].get(c, {}), oc["kategori"].get(c, {})
-        fark = round(y.get("basari_yuzde", 0) - k.get("basari_yuzde", 0), 1)
-        if fark < 0:
-            gerileyen.append(ad)
-        s.append(f"| {ad} | %{y.get('basari_yuzde', '-')} ({y.get('kosu', 0)}) "
-                 f"| %{k.get('basari_yuzde', '-')} ({k.get('kosu', 0)}) | {fark:+} |")  # fmt: skip
+    for kategori, ad in KAT.items():
+        yerel_kat, cc_kat = oy["kategori"].get(kategori, {}), oc["kategori"].get(kategori, {})
+        if yerel_kat.get("kosu", 0) > 0 and cc_kat.get("kosu", 0) > 0:
+            fark = round(yerel_kat["basari_yuzde"] - cc_kat["basari_yuzde"], 1)
+            yerel_deger = f"%{yerel_kat['basari_yuzde']} ({yerel_kat['kosu']})"
+            cc_deger = f"%{cc_kat['basari_yuzde']} ({cc_kat['kosu']})"
+            fark_deger = f"{fark:+}"
+        else:
+            yerel_deger = (
+                f"%{yerel_kat['basari_yuzde']} ({yerel_kat['kosu']})"
+                if yerel_kat.get("kosu", 0) > 0
+                else f"- ({yerel_kat.get('kosu', 0)})"
+            )
+            cc_deger = (
+                f"%{cc_kat['basari_yuzde']} ({cc_kat['kosu']})"
+                if cc_kat.get("kosu", 0) > 0
+                else f"- ({cc_kat.get('kosu', 0)})"
+            )
+            fark_deger = "-"
+        s.append(f"| {ad} | {yerel_deger} | {cc_deger} | {fark_deger} |")
     s += ["", "## Gorev bazinda", "",
           "| Gorev | Yerel (gecen/olculen) | Claude Code | Yerel ort. sn | CC sn |",
           "|---|---|---|---|---|"]  # fmt: skip
@@ -79,12 +122,25 @@ def rapor(yerel_r: list[dict], cc: dict) -> str:
         s.append(f"| {g['id']} | {sum(k['basari'] for k in liste)}/{len(liste)} | "
                  f"{'GECTI' if c and c['basari'] else 'KALDI'} | {_ort_sure(liste)} | "
                  f"{c['sure_sn'] if c else '-'} |")  # fmt: skip
+    esdeger, eksik_kapsam, gerileyen = esdegerlik_sonucu(oy, oc)
     fark = round(oy["basari_yuzde"] - oc["basari_yuzde"], 1)
+    s += ["", "## Degerlendirme", ""]
+    if esdeger is None:
+        s += [
+            "- Esdegerlik sonucu **BELIRSIZ**: olumlu olcum sayisi olmayan kapsam: "
+            f"{', '.join(eksik_kapsam)}. "
+            "Eksik kapsamdan basari veya kategori gerilemesi sonucu cikarilmaz.",
+        ]
+    else:
+        s += [
+            f"- Genel fark **{fark:+} puan**. Onceden belirlenen esdegerlik olcutu "
+            f"(|fark| <= {ESDEGERLIK_ESIK_PUAN} puan ve tum mevcut kategorilerde gerileme yok) "
+            f"**{'SAGLANDI' if esdeger else 'SAGLANMADI'}**. Gerileyen kategoriler: "
+            f"{', '.join(gerileyen) or 'yok'}.",
+        ]
     s += [
-        "", "## Degerlendirme", "",
-        f"- Genel fark **{fark:+} puan**. Onceden belirlenen esdegerlik olcutu (fark <= 5 puan ve",
-        "  kritik kategoride gerileme yok) **SAGLANMADI**. Gerileyen kategoriler: "
-        f"{', '.join(gerileyen) or 'yok'}.",
+        "- Bu esik yalnizca bu benchmarkin raporlama kapisidir; "
+        "genel urun esdegerligi iddiasi degildir.",
         "- Fark urun ile modelin TOPLAMIDIR (farkli modeller). Ayni guclu modelle Kairo",
         "  olculmeden farkin urun payi AYRISTIRILAMAZ.",
         f"- Yerel ilk surum kapisi (>= %80): {'GECTI' if oy['basari_yuzde'] >= 80 else 'GECMEDI'}"
