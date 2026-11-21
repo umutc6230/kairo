@@ -117,6 +117,8 @@ class KullaniciAyarlari(BaseModel):
     tam_yetki: bool = (
         False  # tek seferlik onayla: dosya/komut/MCP/git/web onaysiz (tehlikeli komut haric)
     )
+    # abonelik CLI uygulayici (cli:claude/codex) izin sormadan komut calistirsin mi; tam_yetki'den ayri
+    cli_tam_yetki: bool = False
     tarayici_acik: bool = True  # A9.2: izole profilli tarayici araclari (proje acikken)
     masaustu_izinli: list[str] = Field(default=[], max_length=20)  # A9.5: exe adlari; bos=kapali
     uzak_ag: Literal["tailscale", "yerel_ag"] = "tailscale"  # A12: varsayilan yalniz tailnet

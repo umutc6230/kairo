@@ -15,8 +15,11 @@ from __future__ import annotations
 
 import asyncio
 import contextlib
+import hashlib
 import json
 import re
+import subprocess
+import sys
 import time
 import uuid
 from collections.abc import AsyncIterator, Awaitable, Callable
@@ -225,6 +228,35 @@ class Sonuc(BaseModel):
     dogrulandi: bool = False
 
 
+def _git_durum(kok: str) -> dict[str, str] | None:
+    """Git'e gore degismis/izlenmeyen dosyalar -> icerik hashi (CLI oncesi/sonrasi farki icin).
+    Hash, CLI oncesi zaten degismis dosyanin yeniden degismesini de yakalar (canli: is emri
+    devaminda ayni dosyaya ekleme 'degismedi' sanilmisti). Git deposu degilse None."""
+    try:
+        r = subprocess.run(
+            ["git", "status", "--porcelain", "--untracked-files=all", "-z"], cwd=kok,
+            capture_output=True, timeout=30,
+            creationflags=subprocess.CREATE_NO_WINDOW if sys.platform == "win32" else 0,
+        )  # fmt: skip
+    except (OSError, subprocess.SubprocessError):
+        return None
+    if r.returncode != 0:
+        return None
+    durum: dict[str, str] = {}
+    parcalar = iter(r.stdout.decode("utf-8", "replace").split("\0"))
+    for satir in parcalar:
+        if len(satir) < 4:
+            continue
+        if "R" in satir[:2] or "C" in satir[:2]:
+            next(parcalar, None)  # -z'de yeniden adlandirmanin eski adi ayri parca gelir
+        yol = Path(kok) / satir[3:]
+        try:
+            durum[satir[3:]] = hashlib.sha1(yol.read_bytes()).hexdigest() if yol.is_file() else "-"
+        except OSError:
+            durum[satir[3:]] = "?"
+    return durum
+
+
 def _tekil(semalar: list[dict]) -> list[dict]:
     """Ayni adli arac iki kez gitmesin: Gemini 400 'Duplicate function declaration' veriyor
     (canli: thread runner + MCP/takim birlesiminde). Ilk tanim kalir."""
@@ -284,6 +316,7 @@ class Run(BaseModel):
     sahip_dosyalar: list[str] = []  # alt ajanin yazabilecegi dosyalar (goreli yol)
     cocuklar: list[str] = []
     onceki: str = ""  # ayni sohbetteki onceki gorev (konusma surekliligi)
+    cli_oturum: str = ""  # cli: uygulayicinin oturumu; is emri devaminda surdurulur
     gecmis: str = ""  # onceki turlarin ozeti; sonraki tura aynen tasinir
     etkilesimli: bool = False  # sohbetten baslatildi: soru_sor araci sunulur
     inceleme: dict = {}  # D (Chimera): gorev sonu otomatik inceleme {ozet, bulgular, ...}
@@ -1187,8 +1220,8 @@ class AgentRunner:
     async def _cli_ile_calistir(self, run: Run) -> None:
         """Uygulayici `cli:claude[:model]` / `cli:codex[:model]`: gorevin tamami kullanicinin
         aboneligiyle CLI'da tek seferde calisir; Kairo token gormez, sonucu ozet olarak doner.
-        shortcut: CLI oturumu (resume) saklanmiyor, her atama yeni oturum; is emri devami gerekirse
-        CliSonuc.oturum run'a yazilip komut_kur(oturum=...) ile surdurulmeli."""
+        Kanit: CLI adimlari gorunmez; once/sonra `git status` farki degisen dosyalari verir.
+        Devam (is emri onceki atamasi ayni CLI ise) ayni CLI oturumunda surer."""
         _, saglayici, *model = run.model.split(":", 2)
         kok = run.calisma_koku or (self.kok(run.proje_id) if self.kok else "")
         if saglayici not in cli_ajan.SAGLAYICILAR or saglayici == "kairo" or not kok:
@@ -1198,26 +1231,47 @@ class AgentRunner:
         # run.mesajlar Kairo'nun alt ajan sarmalayicisi (Kairo arac adlari, "salt okunur"): CLI
         # bunlara harfiyen uyup isi yapmiyordu (canli 2026-11-21); CLI'a yalniz gorevin kendisi
         mesaj = run.hedef
+        oturum = ""
+        if run.onceki:
+            with contextlib.suppress(Bulunamadi):
+                once = self.depo.getir(run.onceki)
+                if once.model.split(":")[:2] == ["cli", saglayici]:
+                    oturum = once.cli_oturum
         run.durum = RunDurum.calisiyor
         run.son_model = run.model
         self.depo.kaydet(run)
+        once_git = await asyncio.to_thread(_git_durum, kok)
         try:
             s = await self.cli_calistir(
-                saglayici, mesaj, Path(kok), tam_yetki=self.cli_tam_yetki(),
+                saglayici, mesaj, Path(kok), oturum=oturum, tam_yetki=self.cli_tam_yetki(),
                 model=model[0] if model else "", canli=run.guncellemeler,
             )  # fmt: skip
         except RuntimeError as e:  # CLI kurulu degil
             run.durum, run.hata = RunDurum.basarisiz, str(e)
             return
+        run.cli_oturum = s.oturum or oturum
         run.kullanim.dokume_ekle(run.model, 1, 0, s.maliyet_usd)
         run.kullanim.maliyet_usd = round(run.kullanim.maliyet_usd + s.maliyet_usd, 6)
         ozet = sirlar.maskele(s.ozet)
-        run.sonuc = Sonuc(ozet=ozet)
-        if s.durum == "basarili":
-            # Kairo CLI'nin adimlarini goremez: kanit yok, koordinator git farkiyla dogrular
-            run.durum = RunDurum.basarili
-        else:
+        sonra_git = await asyncio.to_thread(_git_durum, kok)
+        degisen = (
+            sorted(y for y in {*once_git, *sonra_git} if once_git.get(y) != sonra_git.get(y))
+            if once_git is not None and sonra_git is not None
+            else []
+        )
+        if degisen:
+            ozet += "\n\nDegisen dosyalar (git): " + ", ".join(degisen[:50])
+        if s.durum != "basarili":
+            run.sonuc = Sonuc(ozet=ozet)
             run.durum, run.hata = RunDurum.basarisiz, ozet or "CLI basarisiz."
+        elif run.dal.startswith("is/") and once_git is not None and not degisen:
+            # is emri degisiklik icin acilir; CLI "basarili" dese de dosya degismediyse kanit yok
+            run.sonuc = Sonuc(ozet=ozet)
+            run.durum = RunDurum.dogrulanmadi
+            run.hata = "CLI basarili dedi ama hic dosya degismedi; sonuc dogrulanmadi."
+        else:
+            run.sonuc = Sonuc(ozet=ozet, dogrulandi=bool(degisen))
+            run.durum = RunDurum.basarili
 
     def _adim_olustur(self, run: Run, c: dict) -> Adim:
         ad = (c.get("function") or {}).get("name", "")

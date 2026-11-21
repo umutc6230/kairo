@@ -655,7 +655,7 @@ def uygulama_olustur(
     ajan.kok = lambda proje_id="": next(iter(gorev_alani(proje_id).kokler), "")
     ajan.paralel_model = lambda: ayarlar.oku().saglayici == "openrouter"
     ajan.uygulayici_model = lambda proje_id="": gorev_alani(proje_id).uygulayici_model
-    ajan.cli_tam_yetki = lambda: ayarlar.oku().tam_yetki
+    ajan.cli_tam_yetki = lambda: ayarlar.oku().cli_tam_yetki
 
     def _proje_modeli(rol: str) -> dict:
         """Aktif projenin 'koordinator' / 'uygulayici' modeli; secilmemisse aktif model."""
