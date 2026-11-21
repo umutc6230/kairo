@@ -1934,5 +1934,9 @@
  "Sesli sohbet modu": "Voice chat mode",
  "Sesli sohbet modu: dikte bitince otomatik gönder ve cevabı sesli oku": "Voice chat mode: auto-send after dictation and read reply aloud",
  "Sesli sohbet modu açık.": "Voice chat mode on.",
- "Sesli sohbet modu kapalı.": "Voice chat mode off."
+ "Sesli sohbet modu kapalı.": "Voice chat mode off.",
+ "Abonelik CLI uygulayıcısında tam yetki": "Full access for subscription CLI implementer",
+ "Uygulayıcı modeli <code>cli:claude</code> / <code>cli:codex</code> olan projelerde CLI komutları sormadan çalıştırır. Kapalıyken yalnız dosya düzenler. Kairo'nun Tam yetki ayarından ayrıdır.": "In projects whose implementer model is <code>cli:claude</code> / <code>cli:codex</code>, the CLI runs commands without asking. When off it only edits files. Separate from Kairo's Full access setting.",
+ "CLI uygulayıcısına tam yetki verilsin mi?": "Give the CLI implementer full access?",
+ "Claude Code / Codex, proje klasöründe komutları sana sormadan çalıştıracak. Kairo'nun güvenlik kontrolleri bu CLI'ların içinde çalışmaz.": "Claude Code / Codex will run commands in the project folder without asking you. Kairo's safety checks do not run inside these CLIs."
 }
