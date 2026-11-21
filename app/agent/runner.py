@@ -403,10 +403,21 @@ ALT_AJAN_MIN_ADIM = 15
 YAZAN_ARACLAR = DEGISTIREN
 
 KOORDINATOR_OKUMA = {
-    "proje_dosya_oku", "proje_listele", "proje_glob", "proje_ara",
-    "dosya_oku", "klasor_listele", "dosya_ara", "notebook_oku",
-    "git_durum", "git_diff", "git_gecmis", "github_issue_oku", "hesapla",
-    "skill_ara", "skill_kullan",
+    "proje_dosya_oku",
+    "proje_listele",
+    "proje_glob",
+    "proje_ara",
+    "dosya_oku",
+    "klasor_listele",
+    "dosya_ara",
+    "notebook_oku",
+    "git_durum",
+    "git_diff",
+    "git_gecmis",
+    "github_issue_oku",
+    "hesapla",
+    "skill_ara",
+    "skill_kullan",
 }
 KOORDINATOR_TALIMATI = (
     "ROL: KOORDINATOR. Baglami oku, karar ver, plani ve kabul olcutlerini yaz. "
@@ -964,8 +975,7 @@ class AgentRunner:
                     yuklenen = []
                     bul = None
                     sistem += (
-                        f"\n\n{KOORDINATOR_TALIMATI}\n"
-                        f"Uygulayici modeli: {run.uygulayici_model}."
+                        f"\n\n{KOORDINATOR_TALIMATI}\nUygulayici modeli: {run.uygulayici_model}."
                     )
                     if uygulama_araclari:
                         arac_listesi = ", ".join(uygulama_araclari)
@@ -1599,12 +1609,18 @@ class AgentRunner:
         if profil_modeli and profil_modeli != "inherit":
             uygulayici = profil_modeli
         effort = {
-            "low": "kapali", "medium": "dengeli", "high": "derin",
-            "xhigh": "derin", "max": "derin",
+            "low": "kapali",
+            "medium": "dengeli",
+            "high": "derin",
+            "xhigh": "derin",
+            "max": "derin",
         }.get(profil.get("effort"), "")
         izin = {
-            "plan": "plan", "default": "ask", "dontAsk": "plan",
-            "onayli": "ask", "planla": "plan",
+            "plan": "plan",
+            "default": "ask",
+            "dontAsk": "plan",
+            "onayli": "ask",
+            "planla": "plan",
         }.get(profil.get("izin"), "")
         cocuk = Run(
             hedef=gorev,
