@@ -29,7 +29,9 @@ def sonraki(mesajlar):
     tool = [m for m in mesajlar if m.get("role") == "tool"]
     if not tool:
         return cagri(
-            "plan_guncelle", adimlar=[{"baslik": "Hatayi bul"}, {"baslik": "Duzelt ve test et"}]
+            "plan_guncelle",
+            # sahte akis plani sonradan guncellemez; acik madde bitiste reddedilirdi
+            adimlar=[{"baslik": "Duzelt ve test et", "durum": "tamam"}],
         )
     son = json.loads(tool[-1]["content"])
     if "adim_sayisi" in son:

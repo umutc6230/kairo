@@ -632,3 +632,18 @@ def test_anthropic_icin_onbellek_isareti() -> None:
     assert isinstance(g["messages"][0]["content"], list)
     g = OpenRouterLLM("k", "deepseek/v4")._govde([{"role": "system", "content": "t"}], "kapali", 9)
     assert g["messages"][0]["content"] == "t"  # kendiliginden onbellekleyen saglayici
+
+
+async def test_bitiste_acik_plan_maddesi_bir_kez_sorulur(tmp_path, proje) -> None:
+    model = SahteModel(
+        [
+            cagri("plan_guncelle", adimlar=[{"baslik": "Rapor yaz", "durum": "suruyor"}]),
+            cagri("gorevi_bitir", ozet="bitti", kanit_adimlari=[]),  # 2: reddedilir
+            cagri("plan_guncelle", adimlar=[{"baslik": "Rapor yaz", "durum": "atlandi"}]),
+            cagri("gorevi_bitir", ozet="rapor atlandi", kanit_adimlari=[]),
+        ]
+    )
+    runner, *_ = kur(tmp_path, proje, model)
+    run = await bitir(runner, (await runner.baslat("rapor")).id)
+    assert run.adimlar[1].durum is AdimDurum.hata and "Rapor yaz" in run.adimlar[1].sonuc
+    assert run.durum is RunDurum.dogrulanmadi and run.plan[0].durum == "atlandi"
