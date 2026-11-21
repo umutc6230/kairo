@@ -131,6 +131,15 @@ class GizliProjeIstegi(BaseModel):
     gizli_proje: bool
 
 
+class EditorBaglamIstegi(BaseModel):
+    dosya: str = Field(min_length=1, max_length=4096)
+    satir_baslangic: int = Field(default=1, ge=1)
+    satir_bitis: int = Field(default=1, ge=1)
+    secim: str = Field(default="", max_length=20000)
+    proje_kok: str = Field(default="", max_length=4096)
+    kaynak: str = Field(default="vscode", max_length=40)
+
+
 class ModellerIstegi(BaseModel):
     koordinator_model: str = Field(default="", max_length=200)
     uygulayici_model: str = Field(default="", max_length=200)
@@ -1565,6 +1574,37 @@ def uygulama_olustur(
     @app.get("/api/guncelleme")
     async def surum_guncelleme(zorla: bool = False) -> dict:
         return await guncelleme.kontrol(zorla=zorla, ag_acik=politika.ag_acik())
+
+    editor_baglam: dict[str, Any] = {}
+    app.state.editor_baglam = editor_baglam
+
+    @app.post("/api/editor/baglam")
+    async def editor_baglam_kaydet(istek: EditorBaglamIstegi) -> dict:
+        editor_baglam.clear()
+        editor_baglam.update(
+            {
+                "var": True,
+                "dosya": istek.dosya.strip(),
+                "satir_baslangic": istek.satir_baslangic,
+                "satir_bitis": max(istek.satir_baslangic, istek.satir_bitis),
+                "secim": maskele(istek.secim),
+                "proje_kok": istek.proje_kok.strip(),
+                "kaynak": istek.kaynak.strip() or "vscode",
+                "guncelleme": datetime.now().isoformat(timespec="seconds"),
+            }
+        )
+        return dict(editor_baglam)
+
+    @app.get("/api/editor/baglam")
+    async def editor_baglam_oku() -> dict:
+        if not editor_baglam:
+            return {"var": False}
+        return dict(editor_baglam)
+
+    @app.delete("/api/editor/baglam")
+    async def editor_baglam_sil() -> dict:
+        editor_baglam.clear()
+        return {"temizlendi": True}
 
     @app.post("/api/model/hazirla")
     async def model_hazirla(istek: ModelIstegi) -> dict:
