@@ -21,7 +21,14 @@ from typing import Any
 
 from app.agent import policy
 from app.agent.checkpoints import icerik_hashi
-from app.agent.yollar import guvenli_coz, ham_dogrula, kimlik, kimlik_dogrula
+from app.agent.yollar import (
+    guvenli_coz,
+    ham_dogrula,
+    icinde_mi,
+    kanonik,
+    kimlik,
+    kimlik_dogrula,
+)
 from app.exceptions import YetkiYok
 
 MAX_SATIR = 400  # tek okumada en fazla satir
@@ -225,7 +232,8 @@ class AjanDosyaAraclari:
                 # dist/build gibi klasorler desen ACIKCA icermiyorsa atlanir
                 if any(x in ATLANAN and x not in desen for x in p.relative_to(kok).parts):
                     continue
-                if policy.hassas_mi(p):
+                cp = kanonik(p)
+                if not icinde_mi(kok, cp) or policy.hassas_mi(cp):
                     continue
                 bulunan.append(str(p.relative_to(kok)))
         except (OSError, ValueError) as e:
@@ -263,7 +271,13 @@ class AjanDosyaAraclari:
             except OSError:
                 continue
             for p in ogeler:
-                if policy.hassas_mi(p) or yoksay.yok_sayilir(p):
+                if p.is_symlink():
+                    continue
+                try:
+                    cp = kanonik(p)
+                except YetkiYok:
+                    continue
+                if not icinde_mi(kok, cp) or policy.hassas_mi(cp) or yoksay.yok_sayilir(p):
                     continue
                 if p.name in ATLANAN:
                     if p.is_dir() and p.name != ".git":  # gorunur ama icine inilmez (dist/build)
@@ -330,12 +344,21 @@ class AjanDosyaAraclari:
             if not m:
                 continue
             dosya, no, metin = m.group(1), m.group(2), m.group(3)
+            yol = Path(dosya)
+            if not yol.is_absolute():
+                yol = kok / yol
             try:
-                goreli = str(Path(dosya).relative_to(kok))
+                fp = kanonik(yol)
+            except YetkiYok:
+                continue
+            if not icinde_mi(kok, fp) or policy.hassas_mi(fp):
+                continue
+            try:
+                goreli = str(fp.relative_to(kanonik(kok)))
             except ValueError:
-                goreli = dosya
+                goreli = str(fp)
             sonuc.append({"dosya": goreli, "satir": int(no) if no.isdigit() else 0,
-                          "metin": metin.strip()[:300]})  # fmt: skip
+                          "metin": policy.maskele(metin.strip()[:300])})  # fmt: skip
         return {
             "klasor": str(kok),
             "desen": desen,

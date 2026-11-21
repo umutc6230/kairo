@@ -698,7 +698,7 @@ class AgentRunner:
         run = self.depo.getir(run_id)
         if run.durum in BITMIS:
             raise UygulamaHatasi("Biten goreve mesaj eklenemez; 'tekrar' ile yeniden baslatin.")
-        await self._hook("prompt", {"run": run_id, "metin": metin})
+        await self._hook("prompt", {"run": run_id, "metin": metin}, cwd=self._hook_kok(run))
         soru = next((a for a in run.adimlar if a.durum is AdimDurum.cevap_bekliyor), None)
         if soru is not None:  # mesaj, ajanin sordugu sorunun CEVABIDIR: arac sonucu olarak doner
             soru.durum = AdimDurum.tamam
@@ -772,6 +772,28 @@ class AgentRunner:
         run.kullanim = Kullanim()
         run.ilerlemesiz = 0
         run.hata_sayaci = {}
+        son = len(run.mesajlar) - 1
+        while son >= 0 and run.mesajlar[son].get("role") == "tool":
+            son -= 1
+        if (
+            son >= 0
+            and run.mesajlar[son].get("role") == "assistant"
+            and (tc_ler := run.mesajlar[son].get("tool_calls"))
+        ):
+            cevapli = {m.get("tool_call_id") for m in run.mesajlar[son + 1 :]}
+            for tc in tc_ler:
+                cid = tc.get("id")
+                if cid and cid not in cevapli:
+                    run.mesajlar.append(
+                        {
+                            "role": "tool",
+                            "tool_call_id": cid,
+                            "content": json.dumps(
+                                {"hata": "Onceki deneme kesildi."},
+                                ensure_ascii=False,
+                            ),
+                        }
+                    )
         run.mesajlar.append(
             {
                 "role": "user",
@@ -829,7 +851,7 @@ class AgentRunner:
                 continue
             if (b.arac, json.dumps(b.argumanlar, sort_keys=True, ensure_ascii=False)) != imza:
                 break
-            if b.durum is not AdimDurum.tamam:  # basarisiz tekrar: ayri koruma (hata_sayaci)
+            if b.durum not in (AdimDurum.tamam, AdimDurum.atlandi):  # basarisiz tekrar: hata_sayaci
                 break
             sayi += 1
         return sayi
@@ -845,7 +867,7 @@ class AgentRunner:
             return b.arac, json.dumps(b.argumanlar, sort_keys=True, ensure_ascii=False)
 
         dizi = [b for b in run.adimlar if b.arac not in DONGU_MUAF][-18:]
-        if any(b.durum is not AdimDurum.tamam for b in dizi[-6:]):
+        if any(b.durum not in (AdimDurum.tamam, AdimDurum.atlandi) for b in dizi[-6:]):
             return 0  # hatali tekrar ayri korumada (hata_sayaci)
         imzalar = [imza(b) for b in dizi] + [imza(a)]
         en_iyi = 0
@@ -875,7 +897,15 @@ class AgentRunner:
         )
         metin = sirlar.maskele(json.dumps(sonuc, ensure_ascii=False, default=str))
         if len(metin) > SONUC_SINIRI:
-            metin = metin[:SONUC_SINIRI] + '..."[kesildi]"'
+            metin = json.dumps(
+                {
+                    "adim": a.no,
+                    "kisaltildi": True,
+                    "toplam_karakter": len(metin),
+                    "ozet": metin[:SONUC_SINIRI],
+                },
+                ensure_ascii=False,
+            )
         a.sonuc = metin[:2000]
         run.mesajlar.append(
             {"role": "tool", "tool_call_id": a.cagri_id, "content": dis_zarf(a.arac, metin)}
@@ -1199,8 +1229,6 @@ class AgentRunner:
         if ozetle_gerekirse(run, mesaj_siniri, self.depo.dizin / f"{run.id}.arsiv.jsonl"):
             run.ozet_sayisi += 1
             run.guncellemeler.append("Baglam doldu: eski adimlar ozetlendi (arsivde duruyor).")
-            if self.hooks is not None:  # bilgilendirme (senkron: _baglami_hazirla async degil)
-                self.hooks.tetikle("compact", {"run": run.id, "ozet_sayisi": run.ozet_sayisi})
         for m in run.mesajlar[:-2]:  # son iki mesaj ham kalir
             if mesaj_token(run.mesajlar) <= mesaj_siniri:
                 break
@@ -1220,8 +1248,16 @@ class AgentRunner:
         from app.services.yerel_llm import ModelCevapHatasi, SunucuKapali
 
         sistem_metni = f"{SISTEM}\n\n{RAPOR_TALIMATI}\n\n{sistem}".strip()
+        onceki_ozet = run.ozet_sayisi
         if not self._baglami_hazirla(run, sistem_metni, semalar):
             return None
+        if run.ozet_sayisi > onceki_ozet and self.hooks is not None:
+            await asyncio.to_thread(
+                self.hooks.tetikle,
+                "compact",
+                {"run": run.id, "ozet_sayisi": run.ozet_sayisi},
+                cwd=self._hook_kok(run),
+            )
         gonderilen = [{"role": "system", "content": sistem_metni}, *run.mesajlar]
         for deneme in range(GECICI_HATA_DENEME + 1):
             try:

@@ -16,7 +16,8 @@ from typing import Literal
 
 from pydantic import BaseModel, Field
 
-from app.agent.policy import maskele
+from app.agent.policy import hassas_mi, maskele
+from app.agent.yollar import ham_dogrula, kanonik
 from app.exceptions import Bulunamadi, UygulamaHatasi
 from app.services.depo import json_oku, json_yaz
 
@@ -49,9 +50,12 @@ class Hafiza(BaseModel):
         for d in self.dayanak:
             yol, _, parca = d.partition("::")
             try:
-                if parca and parca not in Path(yol).read_text(encoding="utf-8", errors="ignore"):
+                p = kanonik(ham_dogrula(yol))
+                if hassas_mi(p) or not p.is_file() or p.stat().st_size > 1_000_000:
                     return False
-            except OSError:
+                if parca and parca not in p.read_text(encoding="utf-8", errors="ignore"):
+                    return False
+            except (OSError, UygulamaHatasi):
                 return False
         return True
 
@@ -100,6 +104,8 @@ class HafizaDeposu:
         kayitlar = self._liste()
         if len(kayitlar) >= MAX_KAYIT:
             raise UygulamaHatasi(f"Hafiza dolu ({MAX_KAYIT} kayit); eskileri silin.")
+        if "dayanak" in alanlar and alanlar["dayanak"]:
+            alanlar["dayanak"] = [_sir_yok(str(x)) for x in alanlar["dayanak"]]
         k = Hafiza(metin=_sir_yok(metin), **alanlar)
         if any(x.metin == k.metin and x.kapsam == k.kapsam for x in kayitlar):
             raise UygulamaHatasi("Bu not zaten kayitli.")

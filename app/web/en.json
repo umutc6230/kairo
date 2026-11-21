@@ -1896,5 +1896,10 @@
  "Dosya yazmadı": "No files written yet",
  "Bu projede başka çalışan oturum yok": "No other active sessions in this project",
  "Başka oturumu bekliyor": "Waiting for another session",
- "Dosya düzenliyor": "Editing files"
+ "Dosya düzenliyor": "Editing files",
+ "Kairo · Ürün sahibi: Umut Çelik": "Kairo · Product Owner: Umut Çelik",
+ "Soru bekliyor:": "Waiting for answer:",
+ "Cevabınızı yazın": "Write your answer",
+ "Yazıya dökülüyor… (bulut)": "Transcribing… (cloud)",
+ "/btw sonrasına soru yaz.": "Write a question after /btw."
 }

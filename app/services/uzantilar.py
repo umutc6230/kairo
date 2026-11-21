@@ -101,8 +101,14 @@ class _Surec:
         self.imza = _imza(kok)  # dosyalar degisince surec yeniden baslatilir
 
     def _baslat(self) -> None:
+        if getattr(sys, "frozen", False):
+            py = next((y for ad in ("python", "python3", "py") if (y := shutil.which(ad))), "")
+            if not py:
+                raise UygulamaHatasi("Sistemde Python bulunamadi; uzanti calistirilamadi.")
+        else:
+            py = sys.executable
         self.p = subprocess.Popen(  # noqa: S603 - kullanicinin onayla kurdugu uzanti
-            [sys.executable, "-I", self.m.ana],
+            [py, "-I", self.m.ana],
             cwd=str(self.kok),
             stdin=subprocess.PIPE,
             stdout=subprocess.PIPE,

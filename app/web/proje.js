@@ -173,6 +173,9 @@ export function projeAc() {
         await api("/api/projeler", { method: "POST", govde: { yol, guven: $("#proje-guven", govde).value } });
         bildir("Proje açıldı.");
       });
+    for (const b of govde.querySelectorAll("[data-ac]")) {
+      b.onclick = () => sarmala(() => api("/api/projeler", { method: "POST", govde: { yol: b.dataset.ac } }));
+    }
     const aktif = projeDurumu.aktif;
     if (!aktif) return;
     $("#proje-mod-sec", govde).onchange = (e) =>
@@ -219,9 +222,6 @@ export function projeAc() {
       if (!(await onayla("Projeyi kapat", "Araçlar kişisel klasörlerle sınırlı kapsama döner."))) return;
       sarmala(() => api("/api/projeler/kapat", { method: "POST" }));
     };
-    for (const b of govde.querySelectorAll("[data-ac]")) {
-      b.onclick = () => sarmala(() => api("/api/projeler", { method: "POST", govde: { yol: b.dataset.ac } }));
-    }
   }
 
   ciz();

@@ -4,6 +4,7 @@ import { kacir } from "./md.js";
 import { $, $$, api, bildir, durum, el, modal, onayla, sayi } from "./ortak.js";
 
 const KAYNAK_AD = { claude: "Claude Code", brain: "Brain", uygulama: "Uygulama", yerlesik: "Yerleşik" };
+const kaynakAdi = (k) => KAYNAK_AD[k] || (String(k || "").startsWith("plugin:") ? `${k.slice(7)} plugin` : k || "Kairo");
 let skiller = [];
 let filtre = "hepsi";
 let ayarYenile = async () => {};
@@ -89,7 +90,7 @@ async function skillleriYukle() {
   try {
     const v = await api("/api/skiller");
     skiller = v.skiller;
-    $("#s-kaynaklar").textContent = v.kaynaklar.map((k) => `${KAYNAK_AD[k.kaynak]}: ${k.yol}${k.var ? "" : " (yok)"}`).join("  ·  ");
+    $("#s-kaynaklar").textContent = v.kaynaklar.map((k) => `${kaynakAdi(k.kaynak)}: ${k.yol}${k.var ? "" : " (yok)"}`).join("  ·  ");
   } catch (e) { bildir(e.message, "hata"); }
   listeCiz();
 }
@@ -103,7 +104,7 @@ function listeCiz() {
   kap.innerHTML = liste.length ? "" : `<div class="bos-not soluk">Eşleşen skill yok.</div>`;
   for (const s of liste) {
     const r = el(`<div class="skill-satir ${s.acik ? "" : "kapali"}">
-      <div class="skill-bilgi"><div class="ust"><b>${kacir(s.ad)}</b><span class="rozet ${s.kaynak === "uygulama" ? "yesil" : ""}">${KAYNAK_AD[s.kaynak]}</span></div>
+      <div class="skill-bilgi"><div class="ust"><b>${kacir(s.ad)}</b><span class="rozet ${s.kaynak === "uygulama" ? "yesil" : ""}">${kacir(kaynakAdi(s.kaynak))}</span></div>
       <div class="alt soluk">${kacir(s.aciklama)}</div></div>
       <div class="skill-eylem"><button class="ikon-btn" title="Önizle" data-ikon="dosya"></button>
       ${s.silinebilir ? '<button class="ikon-btn sil" title="Sil" data-ikon="cop"></button>' : ""}
@@ -117,7 +118,7 @@ function listeCiz() {
         r.classList.toggle("kapali", !s.acik);
         $("#s-sayi").textContent = `${liste.length} / ${skiller.length} skill · ${skiller.filter((x) => x.acik).length} açık`;
         await ayarYenile();
-      } catch (x) { bildir(x.message, "hata"); }
+      } catch (x) { e.target.checked = !e.target.checked; bildir(x.message, "hata"); }
     };
     kap.append(r);
   }
@@ -127,7 +128,7 @@ function listeCiz() {
 async function onizle(ad) {
   try {
     const s = await api(`/api/skiller/${encodeURIComponent(ad)}`);
-    modal({ baslik: `${s.ad} · ${KAYNAK_AD[s.kaynak]}`, icerik: `<div class="ayar-not">${kacir(s.yol)}</div><pre class="duz">${kacir(s.icerik)}</pre>`, genis: true });
+    modal({ baslik: `${s.ad} · ${kaynakAdi(s.kaynak)}`, icerik: `<div class="ayar-not">${kacir(s.yol)}</div><pre class="duz">${kacir(s.icerik)}</pre>`, genis: true });
   } catch (e) { bildir(e.message, "hata"); }
 }
 

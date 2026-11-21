@@ -131,7 +131,7 @@ class KomutIsi:
     def _job_bagla(self) -> None:
         if sys.platform != "win32" or self.surec is None:
             return
-        from app.services.yerel_llm import cokunce_kapanacak_yap
+        from app.services.yerel_llm import _handle_kapat, cokunce_kapanacak_yap
 
         class _Sarmal:  # cokunce_kapanacak_yap Popen benzeri `_handle` bekler
             def __init__(self, pid: int) -> None:
@@ -142,12 +142,16 @@ class KomutIsi:
                 # PROCESS_SET_QUOTA | PROCESS_TERMINATE
                 self._handle = k32.OpenProcess(0x0100 | 0x0001, False, pid) or 0
 
+        sarmal = None
         try:
             sarmal = _Sarmal(self.surec.pid)
             if sarmal._handle:
                 self._is_nesnesi = cokunce_kapanacak_yap(sarmal)  # type: ignore[arg-type]
         except Exception:  # noqa: BLE001 - job baglanamazsa komut yine calisir
             self._is_nesnesi = None
+        finally:
+            if sarmal is not None and sarmal._handle:
+                _handle_kapat(sarmal._handle)
 
     def _job_kapat(self) -> None:
         if self._is_nesnesi is None:
@@ -263,11 +267,17 @@ class KomutServisi:
     async def _oku(is_: KomutIsi) -> None:
         if is_.surec is None or is_.surec.stdout is None:
             return
+        tampon = b""
         while True:
-            ham = await is_.surec.stdout.readline()
-            if not ham:
+            parca = await is_.surec.stdout.read(8192)
+            if not parca:
                 break
-            is_.satirlar.append(ham.decode("utf-8", errors="replace").rstrip("\r\n"))
+            tampon += parca
+            while b"\n" in tampon:
+                satir, tampon = tampon.split(b"\n", 1)
+                is_.satirlar.append(satir.decode("utf-8", errors="replace").rstrip("\r"))
+        if tampon:
+            is_.satirlar.append(tampon.decode("utf-8", errors="replace").rstrip("\r"))
 
     async def girdi_gonder(self, is_id: str, metin: str) -> dict:
         """Calisan arka plan isinin stdin'ine yazar (satir sonu yoksa eklenir)."""

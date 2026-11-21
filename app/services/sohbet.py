@@ -818,6 +818,8 @@ class SohbetServisi:
         32K'da sistem + ~100 arac tanimi tum butceyi yiyor, gecmis hic gitmiyordu."""
         if self.model_baglami is None:
             return ayar.baglam_token
+        if ayar.saglayici == "ollama" and ayar.ollama_model:
+            return min(self.model_baglami(), UZAK_BAGLAM_TAVAN)
         # shortcut: her turda tum gecmis yeniden gider; 1M'lik modelde istek basi maliyet
         # sinirsiz buyumesin diye tavan var. Otomatik ozet (compact) gelirse tavan kalkabilir.
         return max(ayar.baglam_token, min(self.model_baglami(), UZAK_BAGLAM_TAVAN))
@@ -1428,8 +1430,9 @@ class SohbetServisi:
                     gonder({"tur": "arac_sonucu", **kayit})
                     otomatik_kayit.append(kayit)
                 guncel += tahmini_token(sistem) - tahmini_token(ayar.sistem_istemi)
+                arac_token = tahmini_token(json.dumps(araclar)) if araclar else 0
                 if araclar:  # arac tanimlari + bir arac sonucu icin pay
-                    guncel += tahmini_token(json.dumps(araclar)) + 1800
+                    guncel += arac_token + 1800
                 from app.agent.runner import cevap_tokeni
 
                 baglam = await asyncio.to_thread(self.baglam, ayar)
@@ -1477,7 +1480,7 @@ class SohbetServisi:
                     # ajan araclari varsa (yaz/komut) cok adimli is: 6 tur yetmiyordu (canli)
                     max_tur=0,  # sinirsiz; donguyu tekrar korumasi durdurur
                     baglam_token=baglam,
-                    rezerv=GUVENLIK_TOKEN + ayrilan_token(cevap_payi, seviye),
+                    rezerv=arac_token + ayrilan_token(cevap_payi, seviye),
                 )
                 sonuc["istatistik"]["yukleme_sn"] = yukleme
                 return sonuc

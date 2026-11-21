@@ -36,7 +36,31 @@ from app.agent import mcp_oauth
 from app.agent.dosyalar import ortam_allowlist
 from app.agent.policy import maskele
 from app.exceptions import Bulunamadi, UygulamaHatasi
+from app.services import dpapi
 from app.services.depo import json_oku, json_yaz
+
+_DPAPI_ONEK = "dpapi:"
+
+
+def _sir_yaz(deger: str) -> str:
+    s = str(deger or "")
+    if not s or s.startswith(_DPAPI_ONEK):
+        return s
+    return _DPAPI_ONEK + dpapi.sifrele(s)
+
+
+def _sir_oku(deger: str) -> tuple[str, bool]:
+    """(cozulmus, duz_muydu)."""
+    s = str(deger or "")
+    if not s:
+        return "", False
+    if not s.startswith(_DPAPI_ONEK):
+        return s, True
+    try:
+        return dpapi.coz(s.removeprefix(_DPAPI_ONEK)), False
+    except (OSError, ValueError):
+        return "", False
+
 
 PROTOKOL = "2025-06-18"
 AD = re.compile(r"^[a-z0-9][a-z0-9_-]{0,31}$")
@@ -532,11 +556,33 @@ class McpYoneticisi:
 
     def liste(self) -> list[McpSunucu]:
         sonuc = []
-        for h in json_oku(self.yol, []) or []:
+        duz_var = False
+        for ham in json_oku(self.yol, []) or []:
+            if not isinstance(ham, dict):
+                continue
+            h = dict(ham)
+            for alan in ("ortam", "basliklar"):
+                if isinstance(h.get(alan), dict):
+                    yeni_d = {}
+                    for k, v in h[alan].items():
+                        val, duz = _sir_oku(str(v))
+                        duz_var = duz_var or duz
+                        yeni_d[k] = val
+                    h[alan] = yeni_d
+            if isinstance(h.get("oauth"), dict):
+                oa = dict(h["oauth"])
+                for k in ("erisim", "yenileme"):
+                    if oa.get(k):
+                        val, duz = _sir_oku(str(oa[k]))
+                        duz_var = duz_var or duz
+                        oa[k] = val
+                h["oauth"] = oa
             try:
                 sonuc.append(McpSunucu(**h))
             except ValueError:
                 continue
+        if duz_var and sonuc:  # eski duz metin sirlar ilk okumada DPAPI'ye tasinir
+            self._yaz(sonuc)
         return sonuc
 
     def tum(self) -> list[McpSunucu]:
@@ -550,7 +596,19 @@ class McpYoneticisi:
         return [*self.liste(), *ek]
 
     def _yaz(self, sunucular: list[McpSunucu]) -> None:
-        json_yaz(self.yol, [s.model_dump() for s in sunucular])
+        kayitlar = []
+        for s in sunucular:
+            d = s.model_dump()
+            d["ortam"] = {k: _sir_yaz(v) for k, v in (d.get("ortam") or {}).items()}
+            d["basliklar"] = {k: _sir_yaz(v) for k, v in (d.get("basliklar") or {}).items()}
+            if isinstance(d.get("oauth"), dict):
+                oa = dict(d["oauth"])
+                for k in ("erisim", "yenileme"):
+                    if oa.get(k):
+                        oa[k] = _sir_yaz(str(oa[k]))
+                d["oauth"] = oa
+            kayitlar.append(d)
+        json_yaz(self.yol, kayitlar)
 
     def ekle(self, veri: dict) -> dict:
         s = McpSunucu(**veri)
@@ -564,10 +622,15 @@ class McpYoneticisi:
         for i, s in enumerate(sunucular):
             if s.ad == ad:
                 yeni = s.model_dump() | {k: v for k, v in veri.items() if k != "ad"}
-                for alan in ("ortam", "basliklar"):  # maskeli deger geri gelirse sir korunur
+                for alan in ("ortam", "basliklar"):  # anahtar bazli: "****" olan eski sir korunur
                     gelen = veri.get(alan)
-                    if gelen and all(v == "****" for v in gelen.values()):
-                        yeni[alan] = getattr(s, alan)
+                    if isinstance(gelen, dict):
+                        eski = getattr(s, alan)
+                        yeni[alan] = {
+                            k: (eski[k] if v == "****" and k in eski else v)
+                            for k, v in gelen.items()
+                            if not (v == "****" and k not in eski)
+                        }
                 sunucular[i] = McpSunucu(**yeni)
                 self._yaz(sunucular)
                 self._kapat(ad)  # komut/ortam degisti: yeniden baglanir

@@ -91,13 +91,29 @@ TARAYICI_PROFILI = re.compile(r"(Chrome|Edge|Firefox|Opera|Brave)[\\/].*(User Da
 KORUMALI_KLASORLER = (".claude", ".codex", ".gemini", ".cursor", ".windsurf", ".opencode")
 
 SIR_DESENLERI = [
-    re.compile(r"(sk-[A-Za-z0-9]{12,})"),
+    re.compile(r"(sk-(?:or-v1-|ant-|proj-)?[A-Za-z0-9_-]{12,})"),
     re.compile(r"(gh[pousr]_[A-Za-z0-9]{16,})"),
+    re.compile(r"\b(github_pat_[A-Za-z0-9_]{20,})\b"),
     re.compile(r"(AKIA[0-9A-Z]{12,})"),
+    re.compile(r"\b(\d{8,12}:AA[A-Za-z0-9_-]{30,})\b"),
+    re.compile(r"\b((?:ak|ck)_[A-Za-z0-9_-]{16,})\b"),
+    re.compile(r"\b(AIza[0-9A-Za-z_-]{30,})\b"),
+    re.compile(r"\b(xox[baprs]-[A-Za-z0-9-]{12,})\b"),
     re.compile(r"(?i)\b(api[_-]?key|token|secret|parola|password|passwd)\b\s*[:=]\s*(\S{6,})"),
     re.compile(r"(eyJ[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{6,})"),
 ]
 MASKE = "***"
+
+_ARAC_ES_ADLAR = {
+    "proje_dosya_yaz": "dosya_yaz",
+    "dosya_yaz": "proje_dosya_yaz",
+    "proje_dosya_yama": "dosya_yama",
+    "dosya_yama": "proje_dosya_yama",
+    "proje_dosya_tasi": "dosya_tasi",
+    "dosya_tasi": "proje_dosya_tasi",
+    "proje_dosya_sil": "dosya_sil",
+    "dosya_sil": "proje_dosya_sil",
+}
 
 
 class YanEtki(StrEnum):
@@ -463,7 +479,8 @@ class PolitikaMotoru:
     # ---- ana karar ----
     def degerlendir(self, istek: Istek, alan: CalismaAlani) -> Sonuc:
         # 1) yonetilen politika: ust sinir
-        if istek.arac in self.yonetilen.yasak_araclar:
+        yasak = set(self.yonetilen.yasak_araclar)
+        if istek.arac in yasak or _ARAC_ES_ADLAR.get(istek.arac) in yasak:
             return Sonuc(
                 karar=Karar.ret,
                 neden=f"Yonetilen politika '{istek.arac}' aracini engelliyor.",
@@ -483,29 +500,45 @@ class PolitikaMotoru:
             if ret is not None:
                 return ret
 
+        mod = self.mod(alan)
+        yol_metni = str(cozulmus) if cozulmus else None
+
         # 3) ag hedefi: yerel olmayan hedef acik izin ister
         if istek.yan_etki is YanEtki.ag and not yerel_host_mu(istek.host):
+            if alan.guven is Guven.guvenilmeyen:
+                return Sonuc(
+                    karar=Karar.ret,
+                    neden="Guvenilmeyen projede dis ag kullanilmaz.",
+                    kural="guven_salt_okunur",
+                    cozulmus_yol=yol_metni,
+                )
             if not self.ag_acik():
                 return Sonuc(
                     karar=Karar.ret,
                     neden=f"Yerel olmayan ag hedefi kapali: {istek.host}",
                     kural="ag_kapali",
                 )
-            if self.tam_yetki():
-                return Sonuc(karar=Karar.izin, neden="Tam yetki: web istegi.", kural="tam_yetki")
+            if self.tam_yetki() and mod not in (Mod.planla, Mod.sohbet):
+                return Sonuc(
+                    karar=Karar.izin,
+                    neden="Tam yetki: web istegi.",
+                    kural="tam_yetki",
+                    cozulmus_yol=yol_metni,
+                )
             from app.agent.web import ARAMA_HOSTLARI
 
             if (istek.host or "").lower() in ARAMA_HOSTLARI:
                 return Sonuc(karar=Karar.izin, neden="Web aramasi (salt okuma).", kural="web_arama")
             return Sonuc(karar=Karar.sor, neden="Dis ag hedefi onay ister.", kural="ag_onay")
 
-        mod = self.mod(alan)
-        yol_metni = str(cozulmus) if cozulmus else None
-
         # 3b) TAM YETKI: Claude Code "bypass" / openbot danger-full-access gibi. Yonetilen politika,
-        # hassas dosya ve kok kapsami yukarida zaten uygulandi; burada yalniz Planla (kullanicinin
-        # sectigi salt okunur mod) ve geri alinamaz genis komutlar sorulur.
-        if self.tam_yetki() and mod is not Mod.planla and alan.guven is not Guven.guvenilmeyen:
+        # hassas dosya ve kok kapsami yukarida zaten uygulandi; burada yalniz Planla/Sohbet (salt
+        # okunur modlar) ve geri alinamaz genis komutlar sorulur.
+        if (
+            self.tam_yetki()
+            and mod not in (Mod.planla, Mod.sohbet)
+            and alan.guven is not Guven.guvenilmeyen
+        ):
             if istek.yan_etki is YanEtki.dis and (tur := eylem_turu(istek)):
                 # OpenBot "kinds of action": gonderme, paylasma, yayinlama, odeme, silme, parola
                 # gibi geri alinamaz dis eylemler tam yetkide de sorulur; "Her zaman" ile sorulmaz

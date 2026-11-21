@@ -221,24 +221,36 @@ class HookDeposu:
             )
         except OSError as e:
             return "hata", f"baslatilamadi: {e}"
-        try:
-            p.stdin.write(girdi.encode("utf-8"))
-            p.stdin.close()
-        except OSError:
-            pass
-        asenkron, ilk_satir = _async_mi(p, h.timeout) if h.bicim == "claude" else (False, b"")
-        if asenkron is None:
-            return "hata", f"{h.timeout} sn zaman asimi"
-        if asenkron:
-            # Claude Code async hook'u ({"async": true} ilk satir): bekleme, arka planda bitsin
-            threading.Thread(target=_bitir, args=(p, h.timeout, h.ad), daemon=True).start()
-            return "izin", ""
-        try:
-            cikti, hata_b = p.communicate(timeout=h.timeout)
-            cikti = ilk_satir + cikti
-        except subprocess.TimeoutExpired:
-            _oldur(p)
-            return "hata", f"{h.timeout} sn zaman asimi"
+        if h.bicim != "claude":
+            try:
+                cikti, hata_b = p.communicate(input=girdi.encode("utf-8"), timeout=h.timeout)
+            except subprocess.TimeoutExpired:
+                _oldur(p)
+                return "hata", f"{h.timeout} sn zaman asimi"
+        else:
+
+            def _yaz_stdin() -> None:
+                try:
+                    assert p.stdin is not None
+                    p.stdin.write(girdi.encode("utf-8"))
+                    p.stdin.close()
+                except OSError:
+                    pass
+
+            threading.Thread(target=_yaz_stdin, daemon=True).start()
+            asenkron, ilk_satir = _async_mi(p, h.timeout)
+            if asenkron is None:
+                return "hata", f"{h.timeout} sn zaman asimi"
+            if asenkron:
+                # Claude Code async hook'u ({"async": true} ilk satir): arka planda bitsin
+                threading.Thread(target=_bitir, args=(p, h.timeout, h.ad), daemon=True).start()
+                return "izin", ""
+            try:
+                cikti, hata_b = p.communicate(timeout=h.timeout)
+                cikti = ilk_satir + cikti
+            except subprocess.TimeoutExpired:
+                _oldur(p)
+                return "hata", f"{h.timeout} sn zaman asimi"
         hata = maskele(hata_b.decode("utf-8", "replace").strip())[:MAX_CIKTI]
         if p.returncode == 0:
             return "izin", _ek_baglam(cikti) if h.bicim == "claude" else ""

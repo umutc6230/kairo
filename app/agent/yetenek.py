@@ -97,16 +97,37 @@ def tahmini_token(metin: str) -> int:
     return int((len(metin) / 3 + 1) * GUVENLIK_PAYI)
 
 
+GORSEL_OZET_TOKEN = 1000
+SES_OZET_TOKEN = 1500
+
+
 def _js(x: object) -> str:
     return json.dumps(x, ensure_ascii=False, default=str)
+
+
+def mesaj_token_tahmini(m: dict) -> int:
+    """Mesajin token tahmini: base64 gorsel/ses bloklari sabit maliyetle sayilir."""
+    icerik = m.get("content")
+    if not isinstance(icerik, list):
+        return tahmini_token(_js(m))
+    maliyet = 0
+    metin_kopya = {**m, "content": []}
+    for parca in icerik:
+        if isinstance(parca, dict) and parca.get("type") == "image_url":
+            maliyet += GORSEL_OZET_TOKEN
+        elif isinstance(parca, dict) and parca.get("type") == "input_audio":
+            maliyet += SES_OZET_TOKEN
+        else:
+            metin_kopya["content"].append(parca)
+    return maliyet + tahmini_token(_js(metin_kopya))
 
 
 def butce_dokumu(
     sistem: str, araclar: list[dict], mesajlar: list[dict], cevap: int, baglam: int
 ) -> dict:
     """Baglamin nereye harcandigi: sistem, arac tanimi, mesaj, kanit (arac sonuclari), cevap."""
-    kanit = sum(tahmini_token(_js(m)) for m in mesajlar if m.get("role") == "tool")
-    mesaj = sum(tahmini_token(_js(m)) for m in mesajlar if m.get("role") != "tool")
+    kanit = sum(mesaj_token_tahmini(m) for m in mesajlar if m.get("role") == "tool")
+    mesaj = sum(mesaj_token_tahmini(m) for m in mesajlar if m.get("role") != "tool")
     d = {
         "sistem": tahmini_token(sistem),
         "araclar": tahmini_token(_js(araclar)),

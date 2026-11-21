@@ -73,7 +73,15 @@ def yerel_hedef_mi(host: str) -> bool:
         return False  # cozulemeyen adres istekte zaten hata verir
     for a in adresler:
         ip = ipaddress.ip_address(a.split("%")[0])
-        if ip.is_private or ip.is_loopback or ip.is_link_local or ip.is_reserved or ip.is_multicast:
+        ip = getattr(ip, "ipv4_mapped", None) or ip
+        if (
+            ip.is_private
+            or ip.is_loopback
+            or ip.is_link_local
+            or ip.is_reserved
+            or ip.is_multicast
+            or ip.is_unspecified
+        ):
             return True
     return False
 
@@ -98,7 +106,10 @@ def _ham_getir(url: str, izin, transport: Any, yerel_kontrol) -> dict:
     adres = url
     with httpx.Client(timeout=ZAMAN, transport=transport, follow_redirects=False) as c:
         for _ in range(MAX_YONLENDIRME + 1):
-            h = url_dogrula(adres)
+            try:
+                h = url_dogrula(adres)
+            except ValueError as e:
+                return {"hata": str(e)}
             if yerel_kontrol(h):
                 return {"hata": f"Yerel/ozel ag adresi okunamaz: {h}"}
             if h != host:  # baska siteye yonlendirme: yeni host da izin ister

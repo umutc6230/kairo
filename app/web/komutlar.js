@@ -22,7 +22,10 @@ Dosya, bu projede çalışacak bir yapay zeka ajanına yol gösterecek. Yalnız 
 - Kod stili ve bu projeye özgü kurallar (README, AGENTS.md, .cursorrules gibi dosyalar varsa onlardan)
 Genel geçer öğütler yazma; kısa ve somut tut. Bitirmeden önce dosyayı geri okuyup doğrula.`;
 
-const git = (hedef) => document.querySelector(`[data-git="${hedef}"]`)?.click();
+let sayfayaGit = (hedef) => document.querySelector(`[data-git="${hedef}"]`)?.click();
+export function komutlarKur({ git } = {}) {
+  if (git) sayfayaGit = git;
+}
 
 function bilgiPenceresi(baslik, satirlar) {
   const html = satirlar.map(([k, v]) => `<div class="izin-satiri"><span class="soluk">${kacir(k)}</span><span>${kacir(v)}</span></div>`).join("");
@@ -101,7 +104,7 @@ export const KOMUTLAR = {
   },
   "/export": { aciklama: "Sohbeti Markdown dosyası olarak indirir (ajan görevleriyle birlikte)", calistir: () => disaAktar() },
   "/output-style": { aciklama: "Çıktı stili ve ayrıntı düzeyi (Ayarlar > Kod)", calistir: () => ayarlarAc("kod") },
-  "/agents": { aciklama: "Ajan görevleri sayfası", calistir: () => git("gorevler") },
+  "/agents": { aciklama: "Ajan görevleri sayfası", calistir: () => sayfayaGit("gorevler") },
   "/browser": {
     aciklama: "Tarayıcı durumu; /browser kapat: acil durdurma",
     calistir: async (arg) => {
@@ -175,7 +178,7 @@ export const KOMUTLAR = {
     calistir: async (arg) => {
       if (!arg) { bildir("Kullanım: /goal <hedef>", "uyari"); return; }
       await api("/api/gorevler", { method: "POST", govde: { hedef: arg } });
-      git("gorevler");
+      sayfayaGit("gorevler");
       bildir("Görev başlatıldı.", "basari", 1500);
     },
   },

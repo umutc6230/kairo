@@ -118,6 +118,11 @@ class KonteynerAdaptoru:
 
             raise UygulamaHatasi(f"Konteyner izolasyonu kullanilamiyor: {self.durum()['not']}")
         ic = (Path(KONTEYNER_KOK) / cwd.relative_to(kok)).as_posix()
+        git_ek = (
+            ["-v", f"{Path(kok) / '.git'}:{KONTEYNER_KOK}/.git:ro"]
+            if (Path(kok) / ".git").exists()
+            else []
+        )
         return [
             shutil.which(self.motor) or self.motor,
             "run", "--rm", "-i", "--pull=never",
@@ -127,6 +132,7 @@ class KonteynerAdaptoru:
             "--pids-limit", "256",
             "--memory", "2g",
             "-v", f"{kok}:{KONTEYNER_KOK}",
+            *git_ek,
             "-w", ic,
             self.imaj, "sh", "-c", komut,
         ]  # fmt: skip

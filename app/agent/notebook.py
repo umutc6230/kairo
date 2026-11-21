@@ -6,8 +6,8 @@ yazim. Boylece geri alma ve bayat-yazim korumasi dosya araclariyla birebir aynid
 
 from __future__ import annotations
 
+import hashlib
 import json
-import uuid
 from pathlib import Path
 
 from app.agent.checkpoints import icerik_hashi
@@ -50,8 +50,14 @@ def _yeni_hucre(nb: dict, tur: str, kaynak: str) -> dict:
     if tur == "code":
         hucre["outputs"] = []
         hucre["execution_count"] = None
-    if int(nb.get("nbformat_minor", 0) or 0) >= 5:
-        hucre["id"] = uuid.uuid4().hex[:8]  # nbformat 4.5+ hucre kimligi ister
+    surum = (int(nb.get("nbformat", 0) or 0), int(nb.get("nbformat_minor", 0) or 0))
+    if surum >= (4, 5):
+        mevcut = {h.get("id") for h in nb.get("cells", []) if isinstance(h, dict)}
+        for sayac in range(len(mevcut) + 10):
+            ozet = hashlib.sha256(f"{tur}:{sayac}:{kaynak}".encode()).hexdigest()[:8]
+            if ozet not in mevcut:
+                hucre["id"] = ozet  # nbformat 4.5+ kararli ve benzersiz kimlik
+                break
     return hucre
 
 

@@ -442,7 +442,7 @@ function sagPanelCiz(r) {
   $$("[data-diff]", p).forEach((x) => { x.onclick = () => diffAc(x.dataset.diff); });
   const dosyaKap = $(".sp-dosya-kap", p);
   if (dosyaKap) dosyaKap.ontoggle = () => { dosyaListesiAcik = dosyaKap.open; };
-  if ((r.cocuklar || []).length) altAjanlariCiz(r.cocuklar);
+  if ((r.cocuklar || []).length) altAjanlariCiz(r.cocuklar, p);
   takimCiz(p, r.id);
 }
 
@@ -459,8 +459,8 @@ async function takimCiz(panel, runId) {
 }
 
 // Agent View: hangi alt ajan, hangi dosyaya ve hangi araclara yetkili, durumu ne
-async function altAjanlariCiz(idler) {
-  const kap = document.getElementById("sp-cocuklar");
+async function altAjanlariCiz(idler, sagPanel = document.getElementById("sag-panel-gorev")) {
+  const kap = sagPanel ? $("#sp-cocuklar", sagPanel) : null;
   const cocuklar = await Promise.all(idler.map((id) => api(`/api/gorevler/${id}`).catch(() => null)));
   if (!kap?.isConnected) return;
   kap.classList.remove("soluk", "kucuk");
@@ -492,7 +492,7 @@ async function altAjanlariCiz(idler) {
           kapali: "Çalışma dalı zaten kapalı.", degisiklik_yok: "Birleştirilecek değişiklik yok.",
         }[r.durum];
         bildir(mesaj || r.not || r.durum, mesaj ? "basari" : "uyari");
-        await altAjanlariCiz(idler);
+        await altAjanlariCiz(idler, sagPanel);
       } catch (e) { bildir(e.message, "hata"); } finally { b.disabled = false; }
     };
   });
@@ -784,7 +784,7 @@ export async function gorevSayfasiYukle() {
   if (secili) gorevYenile();
   clearInterval(zamanlayici);
   zamanlayici = setInterval(() => {
-    if (document.getElementById("g-gorevler")?.hidden) return; // sayfa gizliyken yoklama yok
+    if (document.hidden || document.getElementById("g-gorevler")?.hidden) return; // sayfa gizliyken yoklama yok
     if (BITMIS.has(seciliDurum)) return; // sec() ve kart butonlari zorla yeniler
     gorevYenile(false);
   }, 1500);
@@ -826,6 +826,10 @@ async function izleyiciYenile(v, zorla = true) {
   }
   if (r.durum !== v.sonDurum) v.durumBildir?.(r.durum);
   v.sonDurum = r.durum;
+  if (BITMIS.has(r.durum) && v.zamanlayici) {
+    clearInterval(v.zamanlayici);
+    v.zamanlayici = null;
+  }
   const imza = JSON.stringify(r) + [...v.acik].join(",");
   if (!zorla && imza === v.imza) return;
   v.imza = imza;

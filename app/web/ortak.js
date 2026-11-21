@@ -105,7 +105,7 @@ export async function* sseOku(yol, govde, signal) {
 }
 
 export function bildir(metin, tur = "bilgi", sureMs = 4500) {
-  const ikonAdi = { hata: "uyari", basari: "tik", bilgi: "bilgi" }[tur] || "bilgi";
+  const ikonAdi = { hata: "uyari", uyari: "uyari", basari: "tik", bilgi: "bilgi" }[tur] || "bilgi";
   const b = el(`<div class="bildirim ${tur}">${ikon(ikonAdi)}<div>${kacir(metin)}</div></div>`);
   $("#bildirimler").append(b);
   setTimeout(() => b.remove(), sureMs);
@@ -197,6 +197,7 @@ export function sor(baslik, varsayilan = "") {
 let acikMenu = null;
 let acikCapa = null;
 let disTiklama = null; // acik menunun "disariya tiklayinca kapat" dinleyicisi
+let disTus = null;
 export function menuKapat() {
   acikMenu?.remove();
   acikMenu = null;
@@ -205,7 +206,9 @@ export function menuKapat() {
   // kapandiginda (stopPropagation) askida kaliyor; sonraki acilis tiklamasi yeni menuyu aninda
   // kapatiyordu ("bir kez aciliyor, sonra acilmiyor").
   if (disTiklama) document.removeEventListener("click", disTiklama);
+  if (disTus) document.removeEventListener("keydown", disTus, true);
   disTiklama = null;
+  disTus = null;
 }
 
 /** ogeler: {metin, ikon, sag, secili, tehlike, eylem} | "ayrac" | {baslik} */
@@ -236,7 +239,9 @@ export function menuAc(capa, ogeler, { yukari = false, sagaHizali = false } = {}
   setTimeout(() => {
     if (acikMenu !== m) return;
     disTiklama = (e) => { if (!m.contains(e.target)) menuKapat(); };
+    disTus = (e) => { if (e.key === "Escape") { e.preventDefault(); e.stopPropagation(); menuKapat(); } };
     document.addEventListener("click", disTiklama);
+    document.addEventListener("keydown", disTus, true);
   }, 0);
 }
 

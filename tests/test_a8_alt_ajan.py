@@ -77,9 +77,11 @@ async def _calistir(runner, hedef, butce=None):
 def test_butce_cocuga_aktarilinca_cogalmaz(tmp_path) -> None:
     proje = tmp_path / "proje"
     proje.mkdir()
+    for i in range(20):
+        (proje / f"d{i}").mkdir()
     model = SahteModel([
         cagri("alt_ajan", gorev="sonsuz", araclar=["proje_listele"], max_adim=100),
-        *[cagri("proje_listele") for _ in range(20)],
+        *[cagri("proje_listele", yol=f"d{i}") for i in range(20)],
     ])  # fmt: skip
     runner, depo, *_ = kur(tmp_path, proje, model)
     run = asyncio.run(_calistir(runner, "x", Butce(max_adim=6)))

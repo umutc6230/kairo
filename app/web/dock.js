@@ -9,7 +9,10 @@ import { t } from "./i18n.js";
 // ---- yan sohbet (Claude Desktop "Side chat"): ayri oturum, ana sohbete karismaz ----
 let yanOturum = null;
 let yanAkis = null;
+let yanGonderiliyor = false;
 async function yanGonder(metin) {
+  if (yanGonderiliyor || yanAkis) return;
+  yanGonderiliyor = true;
   const kap = $("#yan-mesajlar");
   kap.insertAdjacentHTML("beforeend", `<div class="yan-k">${_k(metin)}</div>`);
   const cevap = document.createElement("div");
@@ -23,11 +26,12 @@ async function yanGonder(metin) {
     for await (const o of sseOku(`/api/oturumlar/${yanOturum}/mesaj`, { metin, ekler: [] }, yanAkis.signal)) {
       if (o.tur === "parca") { yazi += o.metin; cevap.innerHTML = md(yazi); }
       else if (o.tur === "hata") cevap.textContent = o.mesaj;
-      else if (o.tur === "durum" && !yazi) cevap.textContent = o.metin;
+      else if (o.tur === "durum" && !yazi) cevap.textContent = o.mesaj || o.metin;
       kap.scrollTop = kap.scrollHeight;
     }
   } catch (e) { cevap.textContent = e.message; }
   yanAkis = null;
+  yanGonderiliyor = false;
 }
 
 // ---- plan paneli: calisan (ya da son) ajan gorevinin plani ----
@@ -83,6 +87,7 @@ export function dockAcKapa(ad, zorla = null) {
 function tmYaz(metin) {
   const c = $("#tm-cikti");
   c.textContent += metin;
+  if (c.textContent.length > 30000) c.textContent = c.textContent.slice(-30000);
   c.scrollTop = c.scrollHeight;
 }
 
@@ -181,12 +186,15 @@ export function dockKur() {
   $("#tr-yenile").onclick = () => { const f = $("#tr-cerceve"); if (f.src) f.src = f.src; };
   $("#tr-geri").onclick = () => { try { $("#tr-cerceve").contentWindow.history.back(); } catch { /* farkli origin */ } };
   document.addEventListener("keydown", (e) => {
-    if (e.ctrlKey && e.key === "`") { e.preventDefault(); dockAcKapa("terminal"); }
-    if (e.ctrlKey && e.key === ";") { e.preventDefault(); dockAcKapa("yan"); }
+    if (e.ctrlKey && !e.altKey && e.key === "`") { e.preventDefault(); dockAcKapa("terminal"); }
+    if (e.ctrlKey && !e.altKey && e.key === ";") { e.preventDefault(); dockAcKapa("yan"); }
   });
   $("#yan-girdi").onkeydown = (e) => {
-    if (e.key === "Enter" && e.target.value.trim() && !yanAkis) { yanGonder(e.target.value.trim()); e.target.value = ""; }
+    if (e.key === "Enter" && e.target.value.trim() && !yanAkis && !yanGonderiliyor) { yanGonder(e.target.value.trim()); e.target.value = ""; }
   };
   $("#yan-yeni").onclick = () => { yanAkis?.abort(); yanOturum = null; $("#yan-mesajlar").innerHTML = ""; };
-  ciz(acikPaneller());
+  const baslangic = acikPaneller();
+  ciz(baslangic);
+  if (baslangic.includes("degisiklik")) degisiklikYenile();
+  if (baslangic.includes("plan")) planYenile();
 }

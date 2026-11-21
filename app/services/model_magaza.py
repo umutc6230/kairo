@@ -320,8 +320,10 @@ class Indirici:
                 if d["sha256"] and await asyncio.to_thread(_sha256, parca) != d["sha256"]:
                     parca.unlink(missing_ok=True)
                     raise UygulamaHatasi(f"SHA256 eslesmedi, dosya silindi: {d['ad']}")
+            hedef_klasor = self.model_klasoru / "models"
+            hedef_klasor.mkdir(parents=True, exist_ok=True)
             for d in i.dosyalar:
-                (gecici / f"{d['ad']}.part").replace(self.model_klasoru / "models" / d["ad"])
+                (gecici / f"{d['ad']}.part").replace(hedef_klasor / d["ad"])
             model, mmproj = i.dosyalar[0], (i.dosyalar[1] if len(i.dosyalar) > 1 else None)
             ses = bool(mmproj) and gguf_ses_var(self.model_klasoru / "models" / mmproj["ad"])
             ozellik = "metin" + (", resim" if mmproj else "") + (", ses" if ses else "")

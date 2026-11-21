@@ -11,7 +11,7 @@ import json
 from pathlib import Path
 from typing import Any
 
-from app.agent.yetenek import tahmini_token
+from app.agent.yetenek import mesaj_token_tahmini
 
 OZET_ETIKETI = "[BAGLAM OZETI]"
 ESIK = 0.70  # mesajlar baglamin %70'ini gecince ozetle
@@ -24,7 +24,7 @@ def _js(x: object) -> str:
 
 
 def mesaj_token(mesajlar: list[dict]) -> int:
-    return sum(tahmini_token(_js(m)) for m in mesajlar)
+    return sum(mesaj_token_tahmini(m) for m in mesajlar)
 
 
 def ozet_metni(run: Any) -> str:
@@ -82,7 +82,7 @@ def _kesim_noktasi(mesajlar: list[dict], kuyruk_sinir: int) -> int:
     toplam = 0
     kesim = len(mesajlar)
     for i in range(len(mesajlar) - 1, 0, -1):
-        toplam += tahmini_token(_js(mesajlar[i]))
+        toplam += mesaj_token_tahmini(mesajlar[i])
         if toplam > kuyruk_sinir:
             break
         if mesajlar[i].get("role") in ("assistant", "user"):

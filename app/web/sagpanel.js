@@ -88,12 +88,17 @@ function baglayiciDetayCiz() {
 let baglayiciAcGeri = null;
 
 let sonBaglam = null;
+let baglamIstek = 0;
 export async function baglamYenile() {
   const yazi = $("#sp-baglam");
   if (!yazi) return;
-  if (!durum.oturumId) { yazi.textContent = "-"; $("#sp-baglam-dolu").style.width = "0"; sonBaglam = null; halkaCiz(null); return; }
+  const oid = durum.oturumId;
+  const no = ++baglamIstek;
+  if (!oid) { yazi.textContent = "-"; $("#sp-baglam-dolu").style.width = "0"; sonBaglam = null; halkaCiz(null); return; }
   try {
-    const b = sonBaglam = await api(`/api/oturumlar/${durum.oturumId}/baglam`);
+    const b = await api(`/api/oturumlar/${oid}/baglam`);
+    if (no !== baglamIstek || durum.oturumId !== oid) return;
+    sonBaglam = b;
     yazi.textContent = `%${b.yuzde}`;
     yazi.title = `~${b.kullanilan} / ${b.boyut} token`;
     $("#sp-baglam-dolu").style.width = `${b.yuzde}%`;
@@ -180,7 +185,7 @@ const SURE = (sn) => {
   if (sn < 3600) return `${Math.floor(sn / 60)}m ${sn % 60}s`;
   return `${Math.floor(sn / 3600)}h ${Math.floor((sn % 3600) / 60)}m`;
 };
-const CALISAN = new Set(["calisiyor", "onay_bekliyor", "karar_bekliyor", "duraklatildi", "bekliyor"]);
+const CALISAN = new Set(["calisiyor", "onay_bekliyor", "cevap_bekliyor", "karar_bekliyor", "duraklatildi", "bekliyor"]);
 
 // Komut ve ajan gorevlerini tek listeye cevirir (en yeni once)
 async function isListesi() {
@@ -433,7 +438,7 @@ export function sagPanelKur({ baglayiciAc, ayarAc, degisiklikAc }) {
   $("#sp-ayar").onclick = ayarAc;
   baglayiciAcGeri = baglayiciAc;
   degisiklikAcGeri = degisiklikAc;
-  setInterval(degisikliklerYenile, 10000);
+  setInterval(() => { if (!document.hidden) degisikliklerYenile(); }, 10000);
   degisikliklerYenile();
   bolumleriKur();
   baglamDetayCiz();
@@ -450,11 +455,11 @@ export function sagPanelKur({ baglayiciAc, ayarAc, degisiklikAc }) {
   $("#btn-dosyalar").onclick = () => dosyaPaneliAyarla($("#dosya-panel").hidden);
   $("#sp-dosya-kapat").onclick = () => dosyaPaneliAyarla(false);  $("#sp-dosya-yenile").onclick = dosyaAgaciniYenile;
   dosyaPaneliAyarla(localStorage.getItem(DOSYA_ANAHTAR) === "1");
-  setInterval(islerYenile, 4000);
-  setInterval(threadlerYenile, 5000);
-  setInterval(koordinasyonYenile, 3000);
-  setTimeout(orLimitYenile, 1500); // ayarlar yuklendikten sonra
-  setInterval(orLimitYenile, 60000);
+  setInterval(() => { if (!document.hidden) islerYenile(); }, 4000);
+  setInterval(() => { if (!document.hidden) threadlerYenile(); }, 5000);
+  setInterval(() => { if (!document.hidden) koordinasyonYenile(); }, 3000);
+  setTimeout(() => { if (!document.hidden) orLimitYenile(); }, 1500); // ayarlar yuklendikten sonra
+  setInterval(() => { if (!document.hidden) orLimitYenile(); }, 60000);
   threadlerYenile();
   $("#sp-baglayici-baslik").onclick = (e) => {
     const acik = $("#sp-baglayici-detay").hidden;

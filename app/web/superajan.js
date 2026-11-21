@@ -198,8 +198,10 @@ function threadDetay(s, x) {
     if (!metin) return;
     const [, komut, arg = ""] = metin.match(/^\/(btw|fork)(?:\s+|$)([\s\S]*)$/) || [];
     if (komut === "btw") { // yan soru: thread'i bozmadan ana sohbete gider
+      if (!arg.trim()) return bildir("/btw sonrasına soru yaz.", "uyari", 4000);
       const ana = $("#girdi");
-      ana.value = `(${x.baslik} thread'i hakkında) ${arg}`;
+      if (!ana || !$("#btn-gonder")) return;
+      ana.value = `(${x.baslik} thread'i hakkında) ${arg.trim()}`;
       ana.dispatchEvent(new Event("input", { bubbles: true }));
       girdi.value = "";
       return $("#btn-gonder").click();
@@ -217,7 +219,7 @@ EK TALIMAT: ${arg}`.slice(0, 8000), proje_kok: x.proje_kok, kaynak: "sohbet" } }
     }
     try { await api(`/api/superajan/isler/${x.id}/mesaj`, { method: "POST", govde: { metin } }); girdi.value = ""; bildir("Thread'e iletildi.", "basari", 2500); } catch (e) { bildir(e.message, "hata", 7000); }
   };
-  $("button", d).onclick = gonder;
+  $(".thread-yonlendir button", d).onclick = gonder;
   girdi.onkeydown = (e) => { if (e.key === "Enter") gonder(); };
 }
 

@@ -12,6 +12,7 @@ import threading
 import time
 from pathlib import Path
 from typing import Any
+from urllib.parse import urlsplit
 
 import httpx
 from loguru import logger
@@ -56,7 +57,13 @@ class _DusunmeDuzelten(httpx.AsyncBaseTransport):
             return cevap
         govde = await cevap.aread()
         if b"easoning is mandatory" not in govde:
-            return httpx.Response(400, headers=cevap.headers, content=govde, request=istek)
+            basliklar = {
+                k: v
+                for k, v in cevap.headers.items()
+                if k.lower() not in ("content-encoding", "content-length")
+            }
+            return httpx.Response(400, headers=basliklar, content=govde, request=istek)
+        await cevap.aclose()
         import json as _json
 
         veri = _json.loads(istek.content or b"{}")
@@ -92,9 +99,12 @@ def onbellek_isaretle(mesajlar: list[dict]) -> list[dict]:
             sonuc[i]["content"] = [
                 {"type": "text", "text": icerik, "cache_control": {"type": "ephemeral"}}
             ]
-        elif isinstance(icerik, list) and icerik and isinstance(icerik[-1], dict):
-            icerik = [dict(p) for p in icerik]
-            icerik[-1]["cache_control"] = {"type": "ephemeral"}
+        elif isinstance(icerik, list) and icerik:
+            icerik = [dict(p) if isinstance(p, dict) else p for p in icerik]
+            for j in range(len(icerik) - 1, -1, -1):
+                if isinstance(icerik[j], dict) and icerik[j].get("type") == "text":
+                    icerik[j]["cache_control"] = {"type": "ephemeral"}
+                    break
             sonuc[i]["content"] = icerik
     return sonuc
 
@@ -390,7 +400,21 @@ class OpenRouterDeposu:
                         )
                     bekle(aralik)
                     yol = is_.get("polling_url") or f"/api/v1/videos/{is_['id']}"
-                    r = c.get(yol if yol.startswith("http") else kok + yol, headers=bas)
+                    if yol.startswith(("http://", "https://")):
+                        uy, uk = urlsplit(yol), urlsplit(kok)
+                        if (
+                            uy.scheme != uk.scheme
+                            or uy.netloc.lower() != uk.netloc.lower()
+                            or uy.username
+                            or uy.password
+                        ):
+                            raise OpenRouterHatasi("Gecersiz video yoklama adresi.")
+                        hedef = yol
+                    else:
+                        if not yol.startswith("/") or yol.startswith("//"):
+                            raise OpenRouterHatasi("Gecersiz video yoklama adresi.")
+                        hedef = kok + yol
+                    r = c.get(hedef, headers=bas)
                     if r.status_code >= 400:
                         OpenRouterLLM._hata_firlat(r.status_code, r.text)
                     is_ = r.json()

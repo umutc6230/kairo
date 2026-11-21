@@ -9,6 +9,7 @@
 
 from __future__ import annotations
 
+import threading
 import time
 import uuid
 from pathlib import Path
@@ -41,6 +42,7 @@ class TakimPanosu:
         self.dizin = veri_dizini / "takim"
         self.dizin.mkdir(parents=True, exist_ok=True)
         self.saat = saat
+        self._kilit = threading.RLock()
 
     def _yol(self, kok: str) -> Path:
         return self.dizin / f"{kok}.json"
@@ -59,85 +61,122 @@ class TakimPanosu:
             elif g.durum == "alindi" and g.kira_bitis < simdi:
                 g.durum, g.sahip = "acik", ""  # yetim: geri acilir
 
+    @staticmethod
+    def _okunmamis_al(
+        p: Pano, kimlikler: set[str], kendinden_hepsi_atla: bool = True
+    ) -> list[dict]:
+        kim = {k.lower() for k in kimlikler if k} - {"hepsi"}
+        hedef = kim | {"hepsi"}
+        okuyucu = sorted(kim)
+        gelen: list[dict] = []
+        for m in p.mesajlar:
+            kime = str(m["kime"]).lower()
+            if kime not in hedef:
+                continue
+            if kendinden_hepsi_atla and str(m["kimden"]).lower() in kim:
+                continue
+            okuyanlar = list(m.get("okuyanlar") or [])
+            if (m.get("okundu") and "okuyanlar" not in m) or any(k in okuyanlar for k in okuyucu):
+                continue
+            for k in okuyucu:
+                if k not in okuyanlar:
+                    okuyanlar.append(k)
+            m["okuyanlar"] = okuyanlar
+            if kime != "hepsi":
+                m["okundu"] = True
+            gelen.append(m)
+        return gelen
+
     def teslim_al(self, kok: str, kimlikler: set[str]) -> list[dict]:
         """Claude ekipleri gibi itmeli teslim: runner her model cagrisindan once bu ajana gelen
         okunmamis mesajlari alir ve baglama ekler (alicinin 'oku' demesi gerekmez)."""
-        p = self._oku(kok)
-        hedef = {k.lower() for k in kimlikler if k} | {"hepsi"}
-        gelen = [m for m in p.mesajlar if str(m["kime"]).lower() in hedef and not m["okundu"]
-                 and str(m["kimden"]).lower() not in hedef]  # fmt: skip
-        if gelen:
-            for m in gelen:
-                m["okundu"] = True
-            self._yaz(kok, p)
-        return [{k: m[k] for k in ("kimden", "metin")} for m in gelen]
+        with self._kilit:
+            p = self._oku(kok)
+            gelen = self._okunmamis_al(p, kimlikler, kendinden_hepsi_atla=True)
+            if gelen:
+                self._yaz(kok, p)
+            return [{k: m[k] for k in ("kimden", "metin")} for m in gelen]
 
     def isleyiciler(self, kok: str, ajan: str, ad: str = "") -> dict[str, Any]:
         gonderen = ad or ajan  # mesajlarda okunur ad (or. Arastirmaci, lider)
 
         def gorev_ekle(baslik: str, bagimli: list[str] | None = None) -> dict:
-            p = self._oku(kok)
-            ids = {g.id for g in p.gorevler}
-            eksik = [b for b in bagimli or [] if b not in ids]
-            if eksik:
-                return {"hata": f"Bilinmeyen bagimlilik: {', '.join(eksik)}"}
-            g = TakimGorevi(baslik=str(baslik)[:300], bagimli=list(bagimli or []))
-            p.gorevler.append(g)
-            self._yaz(kok, p)
-            return {"id": g.id}
+            with self._kilit:
+                p = self._oku(kok)
+                ids = {g.id for g in p.gorevler}
+                eksik = [b for b in bagimli or [] if b not in ids]
+                if eksik:
+                    return {"hata": f"Bilinmeyen bagimlilik: {', '.join(eksik)}"}
+                g = TakimGorevi(baslik=str(baslik)[:300], bagimli=list(bagimli or []))
+                p.gorevler.append(g)
+                self._yaz(kok, p)
+                return {"id": g.id}
 
         def gorev_listesi() -> dict:
-            p = self._oku(kok)
-            self._bakim(p, ajan)
-            self._yaz(kok, p)
-            return {"gorevler": [g.model_dump(exclude={"kira_bitis"}) for g in p.gorevler]}
+            with self._kilit:
+                p = self._oku(kok)
+                self._bakim(p, ajan)
+                self._yaz(kok, p)
+                return {"gorevler": [g.model_dump(exclude={"kira_bitis"}) for g in p.gorevler]}
 
         def gorev_al(id: str) -> dict:  # noqa: A002 - arac argumani
-            p = self._oku(kok)
-            self._bakim(p, ajan)
-            g = next((x for x in p.gorevler if x.id == id), None)
-            if g is None:
-                return {"hata": "Gorev yok."}
-            if g.durum != "acik":
-                return {"hata": f"Gorev {g.durum} (sahip: {g.sahip or '-'})."}
-            bitmemis = [
-                b for b in g.bagimli if next(x for x in p.gorevler if x.id == b).durum != "tamam"
-            ]
-            if bitmemis:
-                return {"hata": f"Once bagimliliklar bitmeli: {', '.join(bitmemis)}"}
-            g.durum, g.sahip, g.kira_bitis = "alindi", ajan, self.saat() + KIRA_SN
-            self._yaz(kok, p)
-            return {"alindi": g.id}
+            with self._kilit:
+                p = self._oku(kok)
+                self._bakim(p, ajan)
+                g = next((x for x in p.gorevler if x.id == id), None)
+                if g is None:
+                    return {"hata": "Gorev yok."}
+                if g.durum != "acik":
+                    return {"hata": f"Gorev {g.durum} (sahip: {g.sahip or '-'})."}
+                bitmemis = [
+                    b
+                    for b in g.bagimli
+                    if (bx := next((x for x in p.gorevler if x.id == b), None)) is not None
+                    and bx.durum != "tamam"
+                ]
+                if bitmemis:
+                    return {"hata": f"Once bagimliliklar bitmeli: {', '.join(bitmemis)}"}
+                g.durum, g.sahip, g.kira_bitis = "alindi", ajan, self.saat() + KIRA_SN
+                self._yaz(kok, p)
+                return {"alindi": g.id}
 
         def gorev_tamamla(id: str, sonuc: str = "") -> dict:  # noqa: A002
-            p = self._oku(kok)
-            self._bakim(p, ajan)
-            g = next((x for x in p.gorevler if x.id == id), None)
-            if g is None or g.sahip != ajan or g.durum != "alindi":
-                return {"hata": "Yalniz kendi aldigin gorevi tamamlayabilirsin."}
-            g.durum, g.sonuc = "tamam", str(sonuc)[:1000]
-            self._yaz(kok, p)
-            return {"tamam": g.id}
+            with self._kilit:
+                p = self._oku(kok)
+                self._bakim(p, ajan)
+                g = next((x for x in p.gorevler if x.id == id), None)
+                if g is None or g.sahip != ajan or g.durum != "alindi":
+                    return {"hata": "Yalniz kendi aldigin gorevi tamamlayabilirsin."}
+                g.durum, g.sonuc = "tamam", str(sonuc)[:1000]
+                self._yaz(kok, p)
+                return {"tamam": g.id}
 
         def mesaj_gonder(alici: str, metin: str, mesaj_id: str = "") -> dict:
-            p = self._oku(kok)
-            mid = mesaj_id or uuid.uuid4().hex[:10]
-            if any(m["id"] == mid for m in p.mesajlar):
-                return {"tekrar": mid}  # ayni mesaj ikinci kez teslim edilmez
-            p.mesajlar.append({"id": mid, "kimden": gonderen, "kime": str(alici).strip(),
-                               "metin": str(metin)[:2000], "okundu": False})  # fmt: skip
-            self._yaz(kok, p)
-            return {"gonderildi": mid}
+            with self._kilit:
+                p = self._oku(kok)
+                mid = mesaj_id or uuid.uuid4().hex[:10]
+                if any(m["id"] == mid for m in p.mesajlar):
+                    return {"tekrar": mid}  # ayni mesaj ikinci kez teslim edilmez
+                p.mesajlar.append(
+                    {
+                        "id": mid,
+                        "kimden": gonderen,
+                        "kime": str(alici).strip(),
+                        "metin": str(metin)[:2000],
+                        "okundu": False,
+                        "okuyanlar": [],
+                    }
+                )
+                self._yaz(kok, p)
+                return {"gonderildi": mid}
 
         def mesajlari_oku() -> dict:
-            p = self._oku(kok)
-            self._bakim(p, ajan)
-            kim = {ajan.lower(), gonderen.lower(), "hepsi"}
-            gelen = [m for m in p.mesajlar if str(m["kime"]).lower() in kim and not m["okundu"]]
-            for m in gelen:
-                m["okundu"] = True
-            self._yaz(kok, p)
-            return {"mesajlar": [{k: m[k] for k in ("id", "kimden", "metin")} for m in gelen]}
+            with self._kilit:
+                p = self._oku(kok)
+                self._bakim(p, ajan)
+                gelen = self._okunmamis_al(p, {ajan, gonderen}, kendinden_hepsi_atla=False)
+                self._yaz(kok, p)
+                return {"mesajlar": [{k: m[k] for k in ("id", "kimden", "metin")} for m in gelen]}
 
         return {
             "takim_gorev_ekle": gorev_ekle,
@@ -149,7 +188,8 @@ class TakimPanosu:
         }
 
     def pano(self, kok: str) -> dict:
-        return self._oku(kok).model_dump()
+        with self._kilit:
+            return self._oku(kok).model_dump()
 
 
 def _f(ad: str, aciklama: str, ozellikler: dict, zorunlu: list[str]) -> dict:
