@@ -419,9 +419,9 @@ async function oturumSil(o) {
 const DURUM_METNI = { hazir: "hazır", yukleniyor: "yükleniyor", kapali: "kapalı", hata: "hata", bilinmiyor: "…" };
 
 /** OpenRouter ya da Ollama seciliyse yerel (llama.cpp) modeller arayuzde gorunmez ve kullanilmaz. */
-const uzakMi = () => ["openrouter", "ollama"].includes(durum.ayarlar?.saglayici);
-const SAG_AD = { openrouter: "OpenRouter", ollama: "Ollama" };
-const uzakModel = () => (durum.ayarlar?.saglayici === "ollama" ? durum.ayarlar.ollama_model : durum.ayarlar?.or_model) || "";
+const uzakMi = () => ["openrouter", "ollama", "uyumlu"].includes(durum.ayarlar?.saglayici);
+const SAG_AD = { openrouter: "OpenRouter", ollama: "Ollama", uyumlu: "Bulut" };
+const uzakModel = () => ({ ollama: durum.ayarlar?.ollama_model, uyumlu: durum.ayarlar?.uyumlu_model }[durum.ayarlar?.saglayici] ?? durum.ayarlar?.or_model) || "";
 
 async function durumYenile() {
   try {

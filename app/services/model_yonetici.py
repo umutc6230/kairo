@@ -15,6 +15,7 @@ from loguru import logger
 from app.exceptions import FarkliModelAcik, UygulamaHatasi, YerelLLMHatasi
 from app.services import sistem
 from app.services.ayarlar import AyarDeposu
+from app.services.saglayicilar import ayir
 from app.services.yerel_llm import MODELLER, YerelLLM
 
 LLMFabrikasi = Callable[..., YerelLLM]
@@ -27,8 +28,10 @@ class ModelYonetici:
         fabrika: LLMFabrikasi = YerelLLM,
         uzak: Any = None,
         ollama: Any = None,
+        uyumlu: Any = None,
     ) -> None:
         self.ayarlar = ayarlar
+        self.uyumlu = uyumlu  # SaglayiciDeposu: '<saglayici>:<model>' id'leri buradan
         self.ollama = ollama  # Ollama: 'ollama:<ad>' model id'leri buradan
         self.uzak = uzak  # OpenRouterDeposu: yerel listede olmayan model id'leri buradan
         self._fabrika = fabrika
@@ -95,8 +98,16 @@ class ModelYonetici:
             finally:
                 await llm.kapat()
             return
+        if self.uyumlu is not None and ayir(model):
+            llm = self.uyumlu.istemci(model)
+            llm.dusunme = a.dusunme
+            try:
+                yield llm
+            finally:
+                await llm.kapat()
+            return
         if model in MODELLER and (
-            a.saglayici == "openrouter" or (a.saglayici == "ollama" and a.ollama_model)
+            a.saglayici in ("openrouter", "uyumlu") or (a.saglayici == "ollama" and a.ollama_model)
         ):
             # Saglayici OpenRouter/Ollama: yerel (llama.cpp) model hicbir yoldan acilmaz
             if a.saglayici == "openrouter":
@@ -106,6 +117,11 @@ class ModelYonetici:
                     if not a.or_model
                     else "OpenRouter seçili; yerel modeller kullanılmaz. Yerel model için "
                     "sağlayıcıyı Yerel yap."
+                )
+            elif a.saglayici == "uyumlu":
+                hata = (
+                    "Bulut sağlayıcı seçili; yerel modeller kullanılmaz. AI Ayarları'ndan bir "
+                    "model seç ya da sağlayıcıyı Yerel yap."
                 )
             else:
                 hata = (
