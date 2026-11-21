@@ -45,7 +45,7 @@ from app.agent.hooks import HookDeposu
 from app.agent.izolasyon import adaptor_olustur
 from app.agent.masaustu import Masaustu
 from app.agent.mcp import McpYoneticisi
-from app.agent.policy import Istek, PolitikaMotoru, YanEtki, maskele, yerel_host_mu
+from app.agent.policy import Istek, Karar, PolitikaMotoru, YanEtki, maskele, yerel_host_mu
 from app.agent.runner import BITMIS as BITMIS_RUN
 from app.agent.runner import YAZAN_ARACLAR, AgentRunner, Butce, Run, RunDeposu, RunDurum, olay_akisi
 from app.agent.takim import TakimPanosu
@@ -266,6 +266,11 @@ class HunkIstegi(BaseModel):
 
 class GirdiIstegi(BaseModel):
     metin: str = Field(max_length=10000)
+
+
+class KartKomutIstegi(BaseModel):
+    komut: str = Field(min_length=1, max_length=2000)
+    onay: bool = False  # arayuz modalinda kullanici "Calistir" dedi
 
 
 class AdIstegi(BaseModel):
@@ -3208,6 +3213,25 @@ def uygulama_olustur(
     @app.post("/api/komutlar/{is_id}/girdi")
     async def komut_girdi_ucu(is_id: str, istek: GirdiIstegi) -> dict:
         return await komutlar.girdi_gonder(is_id, istek.metin)
+
+    # ---- mini arayuz kopru: kart -> ana sayfa (kaynak/tur/oran denetimi) -> burada politika ----
+    @app.post("/api/kart-komut")
+    async def kart_komut(istek: KartKomutIstegi) -> dict:
+        alan = sohbet.aktif_alan()
+        if politika.mod(alan) is Mod.planla:
+            raise YetkiYok("Planla modunda karttan komut calistirilmaz.")
+        kok = alan.izinli_kokler[0]
+        sonuc = politika.degerlendir(
+            Istek(arac="kart_komut", yan_etki=YanEtki.komut, yol=str(kok), komut=istek.komut,
+                  ozet=f"Kart komutu: {istek.komut}"), alan
+        )  # fmt: skip
+        if sonuc.karar is Karar.ret:
+            raise YetkiYok(sonuc.neden)
+        if not istek.onay:  # kart komutu her zaman kullanici onayi ister (tam yetkide de)
+            raise YetkiYok("Kart komutu kullanici onayi olmadan calistirilmaz.")
+        is_ = await komutlar.baslat(istek.komut, Path(kok), timeout=30, kok=Path(kok))
+        await komutlar.bekle(is_)
+        return komutlar.ozet(is_)
 
     # ---- calisan komutlar ----
     @app.get("/api/komutlar")

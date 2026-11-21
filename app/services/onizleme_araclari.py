@@ -35,7 +35,10 @@ ARAYUZ_ARACI = _fonk(
     "Sohbetin icinde kucuk, etkilesimli bir arayuz gosterir (panel, grafik, tablo, hesaplayici, "
     "sistem monitoru). `html`: tek parca HTML; CSS <style>, JS <script> icinde. Ag erisimi YOK "
     "(fetch, dis CDN, dis resim calismaz): veriyi once araclarla topla, HTML'e gom. Koyu zemine "
-    "uygun renk kullan. `baslik`: 2-4 kelime.",
+    "uygun renk kullan. `baslik`: 2-4 kelime. CANLI VERI: kartta `await kairo.komut('komut')` "
+    "bir komut calistirir (kullanici her seferinde onaylar, izin kurallari gecerli) ve "
+    "{ok, cikti, cikis_kodu, hata} doner; 'Yenile' gibi dugmeyle guncel veriyi bununla cek, "
+    "cikti'yi ayristirip karti guncelle. Komut sabit olsun, kullanici girdisini komuta katma.",
     {"baslik": S, "html": S},
     ["baslik", "html"],
 )
