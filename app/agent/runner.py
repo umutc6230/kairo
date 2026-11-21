@@ -183,6 +183,14 @@ class Kullanim(BaseModel):
     # Claude Code /cost karsiligi: saglayicinin bildirdigi maliyet ve onbellekten okunan token
     maliyet_usd: float = 0.0
     onbellek_token: int = 0
+    # model adi -> {cagri, token, maliyet_usd}: koordinator/uygulayici harcamasi ayri gorunur
+    model_dokumu: dict[str, dict] = {}
+
+    def dokume_ekle(self, model: str, cagri: int, token: int, maliyet: float) -> None:
+        d = self.model_dokumu.setdefault(model or "?", {"cagri": 0, "token": 0, "maliyet_usd": 0.0})
+        d["cagri"] += cagri
+        d["token"] += token
+        d["maliyet_usd"] = round(d["maliyet_usd"] + maliyet, 6)
 
 
 class PlanAdimi(BaseModel):
@@ -1245,16 +1253,15 @@ class AgentRunner:
             # Cevap sinirda kesildi (genelde cok uzun dosya icerigi): modele bolmesini soyle
             mesaj = {**mesaj, "_kesildi": True}
         if kullanim.get("prompt_tokens"):  # saglayicinin gercek sayimi tahminden iyidir
-            run.kullanim.token += int(kullanim["prompt_tokens"]) + int(
-                kullanim.get("completion_tokens") or 0
-            )
+            token = int(kullanim["prompt_tokens"]) + int(kullanim.get("completion_tokens") or 0)
         else:
-            run.kullanim.token += tahmini_token(json.dumps(gonderilen, ensure_ascii=False)) + (
+            token = tahmini_token(json.dumps(gonderilen, ensure_ascii=False)) + (
                 tahmini_token(json.dumps(mesaj, ensure_ascii=False))
             )
-        run.kullanim.maliyet_usd = round(
-            run.kullanim.maliyet_usd + float(kullanim.get("cost") or 0), 6
-        )
+        maliyet = float(kullanim.get("cost") or 0)
+        run.kullanim.token += token
+        run.kullanim.maliyet_usd = round(run.kullanim.maliyet_usd + maliyet, 6)
+        run.kullanim.dokume_ekle(run.son_model, 1, token, maliyet)
         run.kullanim.onbellek_token += int(
             (kullanim.get("prompt_tokens_details") or {}).get("cached_tokens") or 0
         )
@@ -1661,6 +1668,8 @@ class AgentRunner:
             run.kullanim.token += c.kullanim.token
             run.kullanim.maliyet_usd = round(run.kullanim.maliyet_usd + c.kullanim.maliyet_usd, 6)
             run.kullanim.onbellek_token += c.kullanim.onbellek_token
+            for m, d in c.kullanim.model_dokumu.items():
+                run.kullanim.dokume_ekle(m, d["cagri"], d["token"], d["maliyet_usd"])
         a.devredilen_model = c.son_model or a.devredilen_model
         sonuc = {
             "alt_ajan": c.id,
