@@ -19,8 +19,8 @@ const TEMEL_STIL = "<style>html{color-scheme:dark}body{margin:0;padding:12px;fon
 // KOPRU: kart yalniz `window.kairo.komut(k)` ile istek yollar. Ana sayfa: kaynak = kayitli kart
 // iframe'i mi, tur beyaz listede mi, oran sinirinda mi bakar; her komut uygulama ici modalla
 // kullaniciya sorulur, sunucuda PolitikaMotoru'ndan gecer. Sonuc yalniz o iframe'e doner.
-const KOPRU = "<script>(()=>{let n=0;const b=new Map();addEventListener('message',e=>{const y=e.data&&e.data.kairoKopruYanit;if(e.source!==parent||!y||!b.has(y.id))return;b.get(y.id)(y);b.delete(y.id)});window.kairo={komut:k=>new Promise(r=>{const id=++n;b.set(id,r);parent.postMessage({kairoKopru:{id,tur:'komut',komut:String(k)}},'*')})}})()</script>";
-export const KOPRU_TURLERI = new Set(["komut"]);
+const KOPRU = "<script>(()=>{let n=0;const b=new Map();addEventListener('message',e=>{const y=e.data&&e.data.kairoKopruYanit;if(e.source!==parent||!y||!b.has(y.id))return;b.get(y.id)(y);b.delete(y.id)});const g=(t,a)=>new Promise(r=>{const id=++n;b.set(id,r);parent.postMessage({kairoKopru:{id,tur:t,...a}},'*')});window.kairo={komut:k=>g('komut',{komut:String(k)}),yenile:i=>g('yenile',{istem:String(i)})}})()</script>";
+export const KOPRU_TURLERI = new Set(["komut", "yenile"]);
 export const KOPRU_ARALIK_MS = 2000;
 
 const iframeler = new Set();
@@ -30,7 +30,11 @@ const sonIstek = new WeakMap(); // iframe -> son istek zamani (oran siniri; ayni
 export function kopruDenetle(veri, kaynakVar, son, simdi) {
   if (!kaynakVar) return "kaynak";
   if (!veri || typeof veri !== "object" || !KOPRU_TURLERI.has(veri.tur)) return "tur";
-  if (typeof veri.komut !== "string" || !veri.komut.trim() || veri.komut.length > 2000) return "komut";
+  if (veri.tur === "komut") {
+    if (typeof veri.komut !== "string" || !veri.komut.trim() || veri.komut.length > 2000) return "komut";
+  } else if (veri.tur === "yenile") {
+    if (typeof veri.istem !== "string" || !veri.istem.trim() || veri.istem.length > 2000) return "istem";
+  }
   if (son && simdi - son < KOPRU_ARALIK_MS) return "oran";
   return "";
 }
@@ -43,16 +47,24 @@ async function kopruIstegi(f, veri) {
   const neden = kopruDenetle(veri, true, sonIstek.get(f), Date.now());
   if (neden) return kopruYanit(f, veri?.id, { ok: false, hata: neden === "oran" ? "Çok sık istek." : "Geçersiz istek." });
   sonIstek.set(f, Date.now() + 10 ** 9); // onay/calisma bitene kadar yeni istek yok
+  const yenileMi = veri.tur === "yenile";
   const onay = await new Promise((coz) => {
-    const g = el('<div><p>Bu mini uygulama bir komut çalıştırmak istiyor:</p><pre class="kart-komut"></pre></div>');
-    g.querySelector("pre").textContent = veri.komut;
+    const mesaj = yenileMi
+      ? "Bu mini uygulama modeli şu istemle yeniden çağırmak istiyor:"
+      : "Bu mini uygulama bir komut çalıştırmak istiyor:";
+    const g = el(`<div><p>${kacir(mesaj)}</p><pre class="kart-komut"></pre></div>`);
+    g.querySelector("pre").textContent = yenileMi ? veri.istem : veri.komut;
     modal({ baslik: f.title, icerik: g, kapaninca: () => coz(false), dugmeler: [
       { metin: "Reddet" },
-      { metin: "Çalıştır", tur: "ana", eylem: (kapat) => { coz(true); kapat(); } },
+      { metin: yenileMi ? "Gönder" : "Çalıştır", tur: "ana", eylem: (kapat) => { coz(true); kapat(); } },
     ] });
   });
   try {
     if (!onay) return kopruYanit(f, veri.id, { ok: false, hata: "Kullanıcı reddetti." });
+    if (yenileMi) {
+      document.dispatchEvent(new CustomEvent("kart-yenile", { detail: { istem: veri.istem, baslik: f.title } }));
+      return kopruYanit(f, veri.id, { ok: true });
+    }
     const s = await api("/api/kart-komut", { method: "POST", govde: { komut: veri.komut, onay: true } });
     kopruYanit(f, veri.id, { ok: s.cikis_kodu === 0 || s.cikis_kodu == null, cikti: s.cikti || "", cikis_kodu: s.cikis_kodu });
   } catch (e) {

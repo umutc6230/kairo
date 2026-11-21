@@ -1,0 +1,52 @@
+{
+  "name": "kairo-bridge",
+  "displayName": "Kairo Bridge",
+  "description": "Send active file and selected lines from VS Code directly to Kairo.",
+  "version": "0.1.0",
+  "publisher": "umutc6230",
+  "engines": {
+    "vscode": "^1.85.0"
+  },
+  "categories": [
+    "Other"
+  ],
+  "activationEvents": [
+    "onCommand:kairo.baglamGonder",
+    "onCommand:kairo.ac"
+  ],
+  "main": "./extension.js",
+  "contributes": {
+    "commands": [
+      {
+        "command": "kairo.baglamGonder",
+        "title": "Kairo: Secili kodu/dosyayi gonder"
+      },
+      {
+        "command": "kairo.ac",
+        "title": "Kairo: Arayuzu ac"
+      }
+    ],
+    "keybindings": [
+      {
+        "command": "kairo.baglamGonder",
+        "key": "ctrl+alt+k",
+        "when": "editorTextFocus"
+      }
+    ],
+    "configuration": {
+      "title": "Kairo Bridge",
+      "properties": {
+        "kairo.url": {
+          "type": "string",
+          "default": "http://127.0.0.1:8765",
+          "description": "Calisan Kairo yerel sunucu adresi (or. http://127.0.0.1:8765)."
+        },
+        "kairo.oturumAnahtari": {
+          "type": "string",
+          "default": "",
+          "description": "X-YAS-Oturum oturum anahtari (gerekirse)."
+        }
+      }
+    }
+  }
+}

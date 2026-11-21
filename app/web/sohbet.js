@@ -110,6 +110,16 @@ function altOturumKarti(o, kap) {
 export function sohbetKur(cb) {
   geriCagri = cb;
   document.addEventListener("dikte-gonder", () => gonder());
+  document.addEventListener("kart-yenile", (e) => {
+    const istem = (e.detail?.istem || "").trim();
+    if (!istem) return;
+    const g = $("#girdi");
+    if (!g) return;
+    g.value = istem;
+    boyutla();
+    gonderDurumu();
+    gonder();
+  });
   kaydirmaTakibiKur();
   prKartlariKur();
   const yolTik = (e) => {
