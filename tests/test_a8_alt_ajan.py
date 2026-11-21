@@ -265,6 +265,7 @@ def test_calisan_goreve_gelen_mesaj_kaybolmaz(tmp_path) -> None:
     asyncio.run(_calistir(runner, "oku"))
     assert any("YONLENDIRME-42" in str(x.get("content")) for x in gorulen)
 
+
 def test_model_router_rapor_yazimini_uygulayiciya_devreder(tmp_path) -> None:
     proje = tmp_path / "proje"
     proje.mkdir()
@@ -291,8 +292,11 @@ def test_model_router_rapor_yazimini_uygulayiciya_devreder(tmp_path) -> None:
 
     async def calistir():
         run = await runner.baslat(
-            "Detayli inceleme raporu yaz", model="qwen/model", model_sabit=True,
-            model_rol="koordinator", uygulayici_model="deepseek/model",
+            "Detayli inceleme raporu yaz",
+            model="qwen/model",
+            model_sabit=True,
+            model_rol="koordinator",
+            uygulayici_model="deepseek/model",
         )
         return await bitir(runner, run.id)
 
@@ -305,6 +309,7 @@ def test_model_router_rapor_yazimini_uygulayiciya_devreder(tmp_path) -> None:
     assert depo.getir(run.cocuklar[0]).model == run.adimlar[1].devredilen_model == "deepseek/model"
     assert istenen == ["qwen/model"] * 2 + ["deepseek/model"] * 3 + ["qwen/model"] * 2
     assert run.sonuc.ozet.endswith("x" * 2500)
+
 
 def test_profile_model_effort_and_permissions(tmp_path) -> None:
     from app.services.cc_plugin import ajan_profili

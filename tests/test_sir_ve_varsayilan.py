@@ -40,6 +40,7 @@ def test_hafif_profil_kucuk_yerel_modelde_otomatik(monkeypatch):
     monkeypatch.setitem(MODELLER, buyuk, N(ram_gb=18.0))
     alan = N(koordinator_model="")
     hafif = SohbetServisi.hafif_mi
+
     def ayar(**k):
         return N(**{"baglam_profili": "otomatik", "saglayici": "yerel", "model": kucuk, **k})
 

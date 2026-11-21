@@ -78,6 +78,7 @@ async def test_api_izole_gorev(istemci, repo, tmp_path) -> None:
     r = await istemci.post("/api/gorevler/" + "0" * 12 + "/entegre", json={})
     assert r.status_code == 404
 
+
 @pytest.mark.parametrize("islem, sonuc", [("entegre", "birlestirildi"), ("at", "atildi")])
 async def test_worktree_kapanisi_ve_ayni_sohbette_sonraki_gorev(
     app, istemci, repo, tmp_path, monkeypatch, islem, sonuc
@@ -116,6 +117,7 @@ async def test_worktree_kapanisi_ve_ayni_sohbette_sonraki_gorev(
     assert yeni.json()["onceki"] == run.id
     assert yeni.json()["worktree_durumu"] == "acik"
 
+
 async def test_alt_ajan_bagimsiz_worktree_skill_ve_merge(app, istemci, repo, skill_klasoru) -> None:
     from app.agent.runner import Run, RunDurum
 
@@ -130,8 +132,12 @@ async def test_alt_ajan_bagimsiz_worktree_skill_ve_merge(app, istemci, repo, ski
     runner = app.state.ajan_runner
     lider = Run(hedef="incele", proje_id=p["id"])
     alt = Run(
-        hedef="rapor", proje_id=lider.proje_id, parent=lider.id,
-        bagimsiz_worktree=True, profil_skilleri=["alt-rapor"], profil_mcp=[],
+        hedef="rapor",
+        proje_id=lider.proje_id,
+        parent=lider.id,
+        bagimsiz_worktree=True,
+        profil_skilleri=["alt-rapor"],
+        profil_mcp=[],
         durum=RunDurum.basarili,
     )
     alt.calisma_koku, alt.dal = runner.alt_worktree_kur(lider, alt.id)
