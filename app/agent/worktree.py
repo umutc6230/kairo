@@ -14,6 +14,7 @@ import subprocess
 import sys
 from pathlib import Path
 
+from app.agent import kum
 from app.agent.dosyalar import ortam_allowlist
 from app.exceptions import UygulamaHatasi
 
@@ -24,10 +25,13 @@ def _git(cwd: Path, *a: str, sure: int = ZAMAN) -> tuple[int, str]:
     git = shutil.which("git")
     if not git:
         raise UygulamaHatasi("Bu bilgisayarda git bulunamadi.")
+    ortam = ortam_allowlist()
+    kum.git_komut_sertlestir(ortam)
     try:
         r = subprocess.run(  # noqa: S603 - sabit argumanlar, kabuk yok
-            [git, *a], cwd=str(cwd), capture_output=True, text=True, encoding="utf-8",
-            errors="replace", timeout=sure, env=ortam_allowlist(),
+            [git, "-c", "diff.external=", *a],
+            cwd=str(cwd), capture_output=True, text=True, encoding="utf-8",
+            errors="replace", timeout=sure, env=ortam,
             creationflags=subprocess.CREATE_NO_WINDOW if sys.platform == "win32" else 0,
         )  # fmt: skip
     except subprocess.TimeoutExpired as e:

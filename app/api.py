@@ -37,7 +37,7 @@ from app.agent import koordinasyon as koord
 from app.agent import review as rv
 from app.agent import worktree as wt
 from app.agent.ajanlar import AJAN_NOTU_ARACI, AJANA_MESAJ_ARACI, AjanDeposu, KuyrukOgesi
-from app.agent.akis import Akis, AkisDeposu
+from app.agent.akis import Akis, AkisDeposu, SablonDeposu, sablon_uygula
 from app.agent.checkpoints import CheckpointDeposu
 from app.agent.dosyalar import AjanDosyaAraclari, KokKapsami
 from app.agent.hooks import OLAYLAR as HOOK_OLAYLARI
@@ -75,6 +75,7 @@ from app.services.araclar import ARACLAR, ORNEK_ISTEMLER
 from app.services.ayarlar import AyarDeposu
 from app.services.composio import Composio
 from app.services.ekler import EkDeposu
+from app.services.guncelleme import GuncellemeDenetleyici
 from app.services.hafiza import HafizaDeposu
 from app.services.model_magaza import Indirici, Magaza, ModelKaydi, uyumluluk
 from app.services.model_yonetici import LLMFabrikasi, ModelYonetici
@@ -401,6 +402,7 @@ def uygulama_olustur(
     ayarlar = AyarDeposu(veri_dizini)
     oturumlar = OturumDeposu(veri_dizini)
     ekler = EkDeposu(veri_dizini)
+    guncelleme = GuncellemeDenetleyici(veri_dizini)
     openrouter = OpenRouterDeposu(veri_dizini, transport=or_transport)
     ollama = Ollama(
         lambda: ayarlar.oku().ollama_adres,
@@ -1243,6 +1245,7 @@ def uygulama_olustur(
     app.state.telegram_mesaj = _telegram_mesaj
     app.state.politika = politika
     app.state.run_deposu = run_deposu
+    app.state.guncelleme = guncelleme
 
     # ---- Superajan rotalari: elle is emri, takip, teslim (birlestir / at), durdur ----
     @app.get("/api/superajan")
@@ -1557,6 +1560,10 @@ def uygulama_olustur(
     @app.get("/api/durum")
     async def durum() -> dict:
         return await yonetici.bilgi()
+
+    @app.get("/api/guncelleme")
+    async def surum_guncelleme(zorla: bool = False) -> dict:
+        return await guncelleme.kontrol(zorla=zorla, ag_acik=politika.ag_acik())
 
     @app.post("/api/model/hazirla")
     async def model_hazirla(istek: ModelIstegi) -> dict:
@@ -3186,6 +3193,8 @@ def uygulama_olustur(
 
     # ---- dinamik is akislari (A8.6): tipli adimlar, kod calistirma yok ----
     akislar = AkisDeposu(veri_dizini)
+    sablonlar = SablonDeposu(veri_dizini)
+    app.state.sablonlar = sablonlar
     akis_gorevleri: set[asyncio.Task] = set()
 
     def _akis_baslat(a: Akis) -> None:
@@ -3235,6 +3244,29 @@ def uygulama_olustur(
         for x in a.adimlar:
             if x.durum in ("onay_bekliyor", "calisiyor"):
                 x.durum = "bekliyor"
+        _akis_baslat(a)
+        return a.model_dump()
+
+    @app.get("/api/akis-sablonlari")
+    async def akis_sablon_listesi() -> dict:
+        return {"sablonlar": sablonlar.liste()}
+
+    @app.post("/api/akis-sablonlari")
+    async def akis_sablon_kaydet(veri: dict) -> dict:
+        return sablonlar.kaydet(veri).model_dump()
+
+    @app.delete("/api/akis-sablonlari/{sid}")
+    async def akis_sablon_sil(sid: str) -> dict:
+        sablonlar.sil(sid)
+        return {"silindi": sid}
+
+    @app.post("/api/akis-sablonlari/{sid}/calistir")
+    async def akis_sablon_calistir(sid: str, veri: dict | None = None) -> dict:
+        param = (veri or {}).get("parametreler") or {}
+        if not isinstance(param, dict):
+            raise UygulamaHatasi("parametreler sozluk olmali.")
+        a = sablon_uygula(sablonlar.getir(sid), {str(k): str(v) for k, v in param.items()})
+        akislar.kaydet(a)
         _akis_baslat(a)
         return a.model_dump()
 

@@ -15,6 +15,7 @@ import subprocess
 import sys
 from pathlib import Path
 
+from app.agent import kum
 from app.agent.dosyalar import ortam_allowlist
 from app.exceptions import UygulamaHatasi, YetkiYok
 
@@ -22,8 +23,8 @@ MAX_CIKTI = 30000
 TIMEOUT = 30
 OKUMA_KOMUTLARI = {
     "status": ["status", "--porcelain=v1", "--branch"],
-    "diff": ["diff"],
-    "diff_staged": ["diff", "--staged"],
+    "diff": ["diff", "--no-ext-diff"],
+    "diff_staged": ["diff", "--staged", "--no-ext-diff"],
     "log": ["log", "--oneline", "-20"],
     "branch": ["branch", "--show-current"],
     "dallar": ["branch", "--list"],
@@ -39,16 +40,18 @@ def _calistir(argumanlar: list[str], cwd: Path) -> tuple[int, str]:
     git = shutil.which("git")
     if not git:
         raise UygulamaHatasi("Bu bilgisayarda git bulunamadi.")
+    ortam = ortam_allowlist()
+    kum.git_komut_sertlestir(ortam)
     try:
         ch = subprocess.run(  # noqa: S603 - sabit allowlist argumanlari, kabuk yok
-            [git, *argumanlar],
+            [git, "-c", "diff.external=", *argumanlar],
             cwd=str(cwd),
             capture_output=True,
             text=True,
             encoding="utf-8",
             errors="replace",
             timeout=TIMEOUT,
-            env=ortam_allowlist(),
+            env=ortam,
             creationflags=subprocess.CREATE_NO_WINDOW if sys.platform == "win32" else 0,
         )
     except subprocess.TimeoutExpired as e:

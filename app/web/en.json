@@ -1934,5 +1934,20 @@
  "Sesli sohbet modu": "Voice chat mode",
  "Sesli sohbet modu: dikte bitince otomatik gönder ve cevabı sesli oku": "Voice chat mode: auto-send after dictation and read reply aloud",
  "Sesli sohbet modu açık.": "Voice chat mode on.",
- "Sesli sohbet modu kapalı.": "Voice chat mode off."
+ "Sesli sohbet modu kapalı.": "Voice chat mode off.",
+ "Hazır ve kayıtlı şablonlar": "Built-in & saved templates",
+ "yerleşik": "built-in",
+ "Şablonu çalıştır": "Run template",
+ "Şablon olarak kaydet": "Save as template",
+ "Henüz şablon yok.": "No templates yet.",
+ "Mevcut sürüm:": "Current version:",
+ "Yeni sürüm:": "New version:",
+ "Portable sürümü güncellerken data/ klasörünü koruyun; diğer dosyaları yeni sürümle değiştirin.": "When updating the portable build, keep the data/ folder and replace the rest.",
+ "GitHub Release sayfasını aç": "Open GitHub Release page",
+ "Yeni sürüm mevcut": "New version available",
+ "Güncellemeleri denetle": "Check for updates",
+ "Denetleniyor…": "Checking…",
+ "Windows Kum Havuzu (AppContainer, ağ kapalı)": "Windows Sandbox (AppContainer, network disabled)",
+ "Windows Kum Havuzu açıldı.": "Windows Sandbox enabled.",
+ "Windows Kum Havuzu kapatıldı.": "Windows Sandbox disabled."
 }

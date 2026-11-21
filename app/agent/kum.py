@@ -181,7 +181,15 @@ def _ace_ekle(yol: Path, ace: str) -> None:
         ctypes.windll.kernel32.LocalFree(sd)
 
 
-GIT_SERT = {"core.hooksPath": "NUL", "core.fsmonitor": "false"}
+GIT_SERT = {
+    "core.hooksPath": "NUL" if sys.platform == "win32" else "/dev/null",
+    "core.fsmonitor": "false",
+}
+GIT_KOMUT_SERT = {
+    "core.pager": "cat",
+    "core.sshCommand": "false",
+    "protocol.file.allow": "user",
+}
 SERT_AKTIF = False  # KumAdaptoru olusunca True: ortam_allowlist sertlestirmeyi ekler
 
 
@@ -194,6 +202,19 @@ def git_sertlestir(ortam: dict) -> None:
     for i, (a, d) in enumerate(GIT_SERT.items(), start=n):
         ortam[f"GIT_CONFIG_KEY_{i}"], ortam[f"GIT_CONFIG_VALUE_{i}"] = a, d
     ortam["GIT_CONFIG_COUNT"] = str(n + len(GIT_SERT))
+
+
+def git_komut_sertlestir(ortam: dict) -> None:
+    """Kairo'nun git/worktree cagrilari icin ek sertlestirme (pager/ssh/protocol)."""
+    git_sertlestir(ortam)
+    n = int(ortam.get("GIT_CONFIG_COUNT", "0") or 0)
+    mevcut = {ortam.get(f"GIT_CONFIG_KEY_{i}") for i in range(n)}
+    for a, d in GIT_KOMUT_SERT.items():
+        if a not in mevcut:
+            ortam[f"GIT_CONFIG_KEY_{n}"], ortam[f"GIT_CONFIG_VALUE_{n}"] = a, d
+            n += 1
+    ortam["GIT_CONFIG_COUNT"] = str(n)
+    ortam.setdefault("GIT_TERMINAL_PROMPT", "0")
 
 
 def git_kilitle(kok: Path, sid: str) -> None:
