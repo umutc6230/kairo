@@ -37,6 +37,7 @@ KAYIT: dict[str, tuple[str, str, bool, str]] = {
     "xai": ("xAI (Grok)", "https://api.x.ai/v1", True, "XAI_API_KEY"),
     "cerebras": ("Cerebras", "https://api.cerebras.ai/v1", True, "CEREBRAS_API_KEY"),
     "together": ("Together AI", "https://api.together.xyz/v1", True, "TOGETHER_API_KEY"),
+    "nvidia": ("NVIDIA NIM", "https://integrate.api.nvidia.com/v1", True, "NVIDIA_API_KEY"),
     "lmstudio": ("LM Studio (yerel)", "http://127.0.0.1:1234/v1", False, ""),
     "ozel": ("Özel (OpenAI uyumlu)", "", False, ""),
 }
