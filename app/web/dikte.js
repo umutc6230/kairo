@@ -5,6 +5,11 @@ import { $, api, bildir } from "./ortak.js";
 
 const ORNEK_HIZI = 16000;
 let kayit = null; // { akis, baglam, islemci, parcalar, bas, sayac, zamanAsimi, maxSn }
+let sesliMod = false;
+
+export function sesliModAcik() {
+  return sesliMod;
+}
 
 function wavKodla(parcalar, hiz) {
   const uzunluk = parcalar.reduce((t, p) => t + p.length, 0);
@@ -53,6 +58,9 @@ function escIptal(e) {
 }
 
 async function baslat() {
+  if (typeof window !== "undefined" && "speechSynthesis" in window) {
+    window.speechSynthesis.cancel();
+  }
   let d;
   try { d = await api("/api/dikte/durum"); } catch (e) { bildir(e.message, "hata"); return; }
   if (!d.kullanilabilir) { durumuUygula(d); bildir(d.neden, "uyari"); return; }
@@ -99,6 +107,9 @@ async function bitir() {
     g.value = g.value.slice(0, bas) + ek + g.value.slice(g.selectionEnd ?? bas);
     g.dispatchEvent(new Event("input", { bubbles: true }));
     g.focus();
+    if (sesliMod && (r.metin || "").trim()) {
+      document.dispatchEvent(new CustomEvent("dikte-gonder"));
+    }
   } catch (e) {
     bildir(e.message, "hata");
   } finally {
@@ -117,6 +128,20 @@ export async function dikteDurumuYenile() {
 }
 
 export function dikteKur() {
+  const sm = $("#btn-sesli-mod");
+  if (sm) {
+    if (!("speechSynthesis" in window) && (!navigator.mediaDevices?.getUserMedia || !window.AudioContext)) {
+      sm.hidden = true;
+    } else {
+      sm.onclick = () => {
+        sesliMod = !sesliMod;
+        sm.classList.toggle("aktif", sesliMod);
+        sm.setAttribute("aria-pressed", String(sesliMod));
+        if (!sesliMod && "speechSynthesis" in window) window.speechSynthesis.cancel();
+        bildir(sesliMod ? "Sesli sohbet modu açık." : "Sesli sohbet modu kapalı.", "bilgi", 1800);
+      };
+    }
+  }
   const b = $("#btn-dikte");
   if (!navigator.mediaDevices?.getUserMedia || !window.AudioContext) {
     b.hidden = true; // tarayıcı mikrofon desteklemiyor: düğme gösterilmez

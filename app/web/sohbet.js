@@ -12,6 +12,7 @@ import { kacir, md } from "./md.js";
 import { prKartlariKur } from "./pr_kart.js";
 import { DURUM_ETIKET, gorevDurumlari, oturumDurumu } from "./oturum_durumu.js";
 import { t } from "./i18n.js";
+import { sesliModAcik } from "./dikte.js";
 import { dosyaAc } from "./sagpanel.js";
 import {
   $, $$, api, bildir, canliSayac, durum, el, istatistikCipleri, modal, modelAdi, modelProfil, onayla, sayi, sseOku,
@@ -108,6 +109,7 @@ function altOturumKarti(o, kap) {
 
 export function sohbetKur(cb) {
   geriCagri = cb;
+  document.addEventListener("dikte-gonder", () => gonder());
   kaydirmaTakibiKur();
   prKartlariKur();
   const yolTik = (e) => {
@@ -960,6 +962,7 @@ export async function gonder() {
         case "bitti":
           yanit.bitir(o.mesaj.istatistik, o.mesaj.zaman, o.mesaj);
           if (durum.ayarlar?.bildirim_yanit) masaustuBildirimi("Kairo yanıtladı", (o.mesaj.metin || "").slice(0, 140));
+          if (sesliModAcik() && (o.mesaj?.metin || "").trim()) yanit.el.querySelector(".sesli-oku")?.click();
           break;
       }
     }

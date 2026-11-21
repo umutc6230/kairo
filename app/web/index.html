@@ -72,6 +72,7 @@
                 <button class="ikon-btn" id="btn-ek" title="Dosya ekle: resim, PDF, ses, metin" aria-label="Dosya ekle" data-ikon="arti"></button>
                 <textarea id="girdi" rows="1" placeholder="Ne üzerinde çalışalım?" aria-label="Mesaj" aria-keyshortcuts="Control+L"></textarea>
                 <button class="ikon-btn" id="btn-dikte" title="Sesle yaz" aria-label="Sesle yaz" aria-pressed="false" data-ikon="mikrofon"></button>
+                <button class="ikon-btn" id="btn-sesli-mod" title="Sesli sohbet modu: dikte bitince otomatik gönder ve cevabı sesli oku" aria-label="Sesli sohbet modu" aria-pressed="false" data-ikon="hoparlor"></button>
                 <button class="gonder" id="btn-gonder" title="Gönder (Enter)" aria-label="Gönder" data-ikon="yukari" disabled></button>
                 <div id="dikte-durum" class="dikte-durum" role="status" aria-live="polite" hidden></div>
               </div>
@@ -349,7 +350,7 @@
       </aside>
       <aside id="sag-panel" class="yan-panel sag-panel" aria-label="Oturum paneli">
         <button class="sp-bolum sp-acilir" data-bolum="ortam" aria-expanded="true">Ortam <span class="sp-ok" data-ikon="asagi"></span></button>
-        <div class="sp-satir"><span data-ikon="ekran"></span><span class="sp-ad" id="sp-bilgisayar">Bu bilgisayar</span><button class="ikon-btn kucuk-ikon" id="sp-ayar" title="Ayarlar" data-ikon="disli"></button></div>
+        <div class="sp-satir"><span data-ikon="ekran"></span><span class="sp-ad" id="sp-bilgisayar">Bu bilgisayar</span><button class="ikon-btn kucuk-ikon" id="sp-maliyet" title="Maliyet ve tasarruf" aria-label="Maliyet ve tasarruf" data-ikon="analitik"></button><button class="ikon-btn kucuk-ikon" id="sp-ayar" title="Ayarlar" data-ikon="disli"></button></div>
         <button class="sp-satir sp-tik" id="sp-proje"><span data-ikon="klasor"></span><span class="sp-ad" id="sp-proje-metni">Proje seç</span><span class="soluk kucuk sp-yol" id="sp-proje-yol"></span></button>
         <div class="sp-satir" id="sp-dal-satir" hidden><span data-ikon="dal"></span><span class="sp-ad" id="sp-dal"></span><span class="soluk kucuk" id="sp-worktree" hidden>Worktree</span></div>
         <label class="sp-satir"><span data-ikon="uzak"></span><span class="sp-ad">Uzak erişim</span><span class="anahtar"><input type="checkbox" id="sp-uzak"><span></span></span></label>

@@ -55,6 +55,7 @@ const P = {
   dis: '<path d="M7 7h10v10M7 17 17 7"/>',
   paylas: '<path d="M4 12v7a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-7"/><path d="m16 6-4-4-4 4M12 2v13"/>', // kutudan yukari ok (yaygin Paylas)
   model: '<rect x="4" y="4" width="16" height="16" rx="2"/><rect x="9" y="9" width="6" height="6"/><path d="M9 1v3M15 1v3M9 20v3M15 20v3M20 9h3M20 14h3M1 9h3M1 14h3"/>',
+  analitik: '<path d="M4 20V14M10 20V8M16 20V4M21 20H3"/>',
 };
 
 // Kairo karakteri: kucuk piksel baykus (turkuaz).

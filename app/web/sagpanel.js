@@ -2,7 +2,7 @@
 import { t } from "./i18n.js";
 import { ikon, ikonlariYerlestir } from "./ikonlar.js";
 import { kacir } from "./md.js";
-import { $, api, baglayiciDurumu, bildir, durum, el, modal } from "./ortak.js";
+import { $, api, baglayiciDurumu, bildir, durum, el, modal, sayi } from "./ortak.js";
 
 const PANEL_ANAHTAR = "kairo.sagPanel";
 const DOSYA_ANAHTAR = "kairo.dosyaPanel";
@@ -409,6 +409,73 @@ async function degisikliklerYenile() {
 }
 
 const DOLAR = (x) => `$${Number(x).toFixed(Math.abs(Number(x)) < 10 ? 2 : 0)}`;
+const DOLAR4 = (x) => `$${Number(x || 0).toFixed(4)}`;
+
+export async function maliyetPanosuAc() {
+  let d;
+  try {
+    d = await api("/api/maliyet/analitik");
+  } catch (e) {
+    bildir(e.message, "hata");
+    return;
+  }
+  const t = d.tasarruf || {};
+  const seri = d.gunluk_seri || [];
+  const maxUsd = Math.max(...seri.map((s) => Number(s.maliyet_usd || 0)), 0.0001);
+  const seriHtml = seri
+    .map((s) => {
+      const val = Number(s.maliyet_usd || 0);
+      const yuzde = val > 0 ? Math.max(8, Math.round((val / maxUsd) * 100)) : 4;
+      const etiket = `${s.tarih}: ${DOLAR4(val)} (${s.gorev} görev)`;
+      return `<div class="maliyet-sutun" title="${kacir(etiket)}">
+        <div class="maliyet-cubuk" style="height:${yuzde}%"></div>
+        <span class="maliyet-gun">${kacir((s.tarih || "").slice(5))}</span>
+      </div>`;
+    })
+    .join("");
+  const modelSatirlari = (d.modeller || [])
+    .map(
+      (m) => `<tr>
+        <td><code>${kacir(m.model)}</code></td>
+        <td><span class="rozet ${m.yerel ? "yesil" : ""}">${m.yerel ? "yerel" : "bulut"}</span></td>
+        <td class="sayi">${kacir(sayi(m.cagri || 0, 0))}</td>
+        <td class="sayi">${kacir(sayi(m.token || 0, 0))}</td>
+        <td class="sayi">${kacir(sayi(m.onbellek_token || 0, 0))}</td>
+        <td class="sayi">${kacir(DOLAR4(m.maliyet_usd))}</td>
+      </tr>`
+    )
+    .join("");
+  const projeSatirlari = (d.projeler || [])
+    .map(
+      (p) => `<tr>
+        <td><code>${kacir(p.proje_id)}</code></td>
+        <td class="sayi">${kacir(sayi(p.gorev || 0, 0))}</td>
+        <td class="sayi">${kacir(sayi(p.token || 0, 0))}</td>
+        <td class="sayi">${kacir(DOLAR4(p.maliyet_usd))}</td>
+      </tr>`
+    )
+    .join("");
+
+  const html = `<div class="maliyet-pano">
+    ${d.butce_asildi ? '<div class="uyari-kutu kucuk">Günlük bulut bütçe sınırı aşıldı; yeni sohbetler otomatik yerel modele yönlendirilir.</div>' : ""}
+    <div class="maliyet-kartlar">
+      <div class="maliyet-kart"><span class="mk-etiket">Bugün</span><span class="mk-deger">${kacir(DOLAR4(d.bugun_usd))}</span><span class="mk-alt">${d.gunluk_butce_usd > 0 ? `Bütçe: ${kacir(DOLAR(d.gunluk_butce_usd))} (%${kacir(d.butce_yuzde)})` : "Sınırsız bütçe"}</span></div>
+      <div class="maliyet-kart"><span class="mk-etiket">Son 7 gün</span><span class="mk-deger">${kacir(DOLAR4(d.son_7_gun_usd))}</span><span class="mk-alt">Toplam: ${kacir(DOLAR4(d.toplam_usd))}</span></div>
+      <div class="maliyet-kart"><span class="mk-etiket">Son 30 gün</span><span class="mk-deger">${kacir(DOLAR4(d.son_30_gun_usd))}</span><span class="mk-alt">${kacir(sayi((t.yerel_gorev || 0) + (t.bulut_gorev || 0), 0))} görev</span></div>
+      <div class="maliyet-kart"><span class="mk-etiket">Önbellek tasarrufu</span><span class="mk-deger">%${kacir(t.onbellek_orani ?? 0)}</span><span class="mk-alt">${kacir(sayi(t.onbellek_token || 0, 0))} / ${kacir(sayi(t.toplam_token || 0, 0))} token</span></div>
+      <div class="maliyet-kart"><span class="mk-etiket">Yerel kullanım oranı</span><span class="mk-deger">%${kacir(t.yerel_orani ?? 0)}</span><span class="mk-alt">${kacir(t.yerel_gorev || 0)} yerel · ${kacir(t.bulut_gorev || 0)} bulut</span></div>
+    </div>
+    <div><div class="soluk kucuk" style="margin-bottom:4px">Son 7 gün harcama grafiği</div><div class="maliyet-grafik">${seriHtml}</div></div>
+    <div><div class="soluk kucuk" style="margin-bottom:4px">Model başına döküm</div>
+      ${modelSatirlari ? `<table class="maliyet-tablo"><thead><tr><th>Model</th><th>Tür</th><th class="sayi">Çağrı</th><th class="sayi">Token</th><th class="sayi">Önbellek</th><th class="sayi">Maliyet</th></tr></thead><tbody>${modelSatirlari}</tbody></table>` : '<div class="soluk kucuk">Henüz model kaydı yok.</div>'}
+    </div>
+    <div><div class="soluk kucuk" style="margin-bottom:4px">Proje başına döküm</div>
+      ${projeSatirlari ? `<table class="maliyet-tablo"><thead><tr><th>Proje</th><th class="sayi">Görev</th><th class="sayi">Token</th><th class="sayi">Maliyet</th></tr></thead><tbody>${projeSatirlari}</tbody></table>` : '<div class="soluk kucuk">Henüz proje kaydı yok.</div>'}
+    </div>
+  </div>`;
+
+  modal({ baslik: "Maliyet ve tasarruf panosu", icerik: html, genis: true, dugmeler: [{ metin: "Kapat" }] });
+}
 
 // Kenar cubugu kullanim kutusu: OpenRouter kalan limiti/bakiyesi (anahtar sunucuda; buraya yalniz tutarlar gelir)
 export async function orLimitYenile() {
@@ -430,12 +497,17 @@ function kenarKullanimCiz(l, kalan) {
     ${yuzde != null ? `<div class="kk-satir"><span class="soluk">Anahtar limiti</span><div class="kk-cubuk" role="progressbar" aria-label="Anahtar limiti kullanımı" aria-valuenow="${yuzde}" aria-valuemin="0" aria-valuemax="100"><span style="width:${yuzde}%"></span></div><span class="soluk">%${yuzde}</span></div>` : ""}
     ${l.bakiye != null ? `<div class="kk-satir"><span class="soluk">Hesap bakiyesi</span><span class="kk-bosluk"></span><span>${DOLAR(l.bakiye)}</span></div>` : ""}
     ${l.uyari ? `<div class="soluk kucuk">${kacir(l.uyari)}</div>` : ""}`;
+  k.classList.add("tiklanabilir");
+  k.title = "Maliyet ve tasarruf panosunu aç";
+  k.onclick = () => maliyetPanosuAc();
   k.hidden = false;
 }
 
 export function sagPanelKur({ baglayiciAc, ayarAc, degisiklikAc }) {
   baglamPopKur();
   $("#sp-ayar").onclick = ayarAc;
+  const spMaliyet = $("#sp-maliyet");
+  if (spMaliyet) spMaliyet.onclick = () => maliyetPanosuAc();
   baglayiciAcGeri = baglayiciAc;
   degisiklikAcGeri = degisiklikAc;
   setInterval(() => { if (!document.hidden) degisikliklerYenile(); }, 10000);

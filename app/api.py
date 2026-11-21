@@ -101,7 +101,7 @@ from app.services.testler import (
 from app.services.uyanik import Uyanik
 from app.services.uzantilar import ONIZLEME_CSP, UzantiYoneticisi
 from app.services.yerel_llm import DUSUNME_SECENEKLERI, MODELLER, YerelLLM
-from app.services.yonlendirici import gunluk_maliyet_usd
+from app.services.yonlendirici import gunluk_maliyet_usd, maliyet_analitigi
 
 UPLOAD_PARCA_BAYT = 1024 * 1024  # upload akisinda tek seferde okunan parca
 OTURUM_BASLIGI = "x-yas-oturum"  # loopback API'de oturum kimligi (A1.9)
@@ -2776,6 +2776,10 @@ def uygulama_olustur(
             "gunluk_butce_usd": sinir,
             "asildi": bool(sinir > 0 and bugun >= sinir),
         }
+
+    @app.get("/api/maliyet/analitik")
+    async def maliyet_analitik() -> dict:
+        return maliyet_analitigi(run_deposu, ayarlar.oku())
 
     @app.post("/api/projeler/{alan_id}/kok")
     async def proje_kok_ekle(alan_id: str, istek: YolIstegi) -> dict:
