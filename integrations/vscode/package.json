@@ -45,6 +45,11 @@
           "type": "string",
           "default": "",
           "description": "X-YAS-Oturum oturum anahtari (gerekirse)."
+        },
+        "kairo.baglantiDosyasi": {
+          "type": "string",
+          "default": "",
+          "description": "Calisan Kairo'nun yazdigi baglanti.json yolu (bos: otomatik kesif)."
         }
       }
     }

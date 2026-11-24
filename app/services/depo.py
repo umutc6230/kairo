@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import os
 import tempfile
+import time
 from pathlib import Path
 from typing import Any
 
@@ -17,7 +18,14 @@ def json_yaz(yol: Path, veri: Any) -> None:
     try:
         with os.fdopen(fd, "w", encoding="utf-8") as f:
             json.dump(veri, f, ensure_ascii=False, indent=1)
-        os.replace(gecici, yol)
+        for deneme in range(6):
+            try:
+                os.replace(gecici, yol)
+                break
+            except PermissionError:
+                if deneme == 5:
+                    raise
+                time.sleep(0.015 * (deneme + 1))
     except BaseException:
         Path(gecici).unlink(missing_ok=True)
         raise

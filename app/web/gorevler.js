@@ -19,9 +19,34 @@ function bildirimGerekirse(r) {
   else if (["onay_bekliyor", "karar_bekliyor"].includes(r.durum) && a.bildirim_onay) masaustuBildirimi("Onay bekleniyor", ad);
   else if (BITMIS.has(r.durum) && /^\[(rutin|zamanlanmis)/.test(r.hedef || "") && a.bildirim_zamanlama) masaustuBildirimi(`Rutin: ${(DURUM_TR[r.durum] || [r.durum])[0]}`, ad);
 }
+// Claude Code izin koprusu: CLI'nin bekleyen arac onaylari ("cc:" onekli) modal kart olarak sorulur
+const gosterilenCc = new Set();
+function ccOnayKarti(o) {
+  gosterilenCc.add(o.id);
+  if (durum.ayarlar?.bildirim_onay) masaustuBildirimi("Claude Code onay istiyor", o.arac.slice(3));
+  const karar = (onay, kapsam = "tek") => async (kapat) => {
+    try { await api(`/api/onaylar/${o.id}`, { method: "POST", govde: { onayla: onay, kapsam } }); } catch (e) { bildir(e.message, "hata"); }
+    kapat();
+  };
+  modal({
+    baslik: "Claude Code izin istiyor",
+    icerik: `<p><b>${kacir(o.arac.slice(3))}</b> (${kacir(o.yan_etki)})</p><pre class="kod">${kacir(o.ozet || "")}</pre>`,
+    dugmeler: [
+      { metin: "Reddet", eylem: karar(false) },
+      { metin: "Bu oturumda hep izin ver", eylem: karar(true, "sohbet") },
+      { metin: "İzin ver", tur: "ana", eylem: karar(true) },
+    ],
+  });
+}
+
 export function gorevBildirimIzle() {
   const tur = async () => {
     try { (await api("/api/gorevler")).gorevler.forEach(bildirimGerekirse); } catch { /* sessiz */ }
+    try {
+      (await api("/api/onaylar")).onaylar
+        .filter((o) => o.karar === "bekliyor" && o.arac?.startsWith("cc:") && !gosterilenCc.has(o.id))
+        .forEach(ccOnayKarti);
+    } catch { /* sessiz */ }
   };
   tur();
   setInterval(tur, 6000);

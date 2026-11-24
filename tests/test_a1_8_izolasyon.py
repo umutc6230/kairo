@@ -25,7 +25,7 @@ def alan(tmp_path: Path) -> CalismaAlani:
 
 def _karar(motor: PolitikaMotoru, alan: CalismaAlani, yan_etki: YanEtki):
     return motor.degerlendir(
-        Istek(arac="x", yan_etki=yan_etki, yol=alan.kokler[0], komut="pytest"), alan
+        Istek(arac="x", yan_etki=yan_etki, yol=alan.kokler[0], komut="python betik.py"), alan
     )
 
 

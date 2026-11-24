@@ -221,3 +221,146 @@ async def test_sonraki_oneri_etiket_ve_tekrar_temizlenir(istemci, app) -> None:
 def test_ollama_baglami_ajan_talimatina_yeter() -> None:
     # canli: 16K bagamda talimat 12K + arac 5.7K sigmadi, gorev 0 adimda basarisiz oldu
     assert ol.ollama_baglam(16384) == 32768 and ol.ollama_baglam(65536) == 65536
+
+
+def test_ollama_baglam_asimi_turkce_hata() -> None:
+    govde = (
+        '{"error":{"message":"request (21547 tokens) exceeds the available context size '
+        '(4096 tokens), try increasing it","type":"invalid_request_error"}}'
+    )
+    with pytest.raises(ol.OllamaHatasi) as e:
+        ol.OllamaLLM._hata_firlat(400, govde)
+    mesaj = str(e.value)
+    assert "21547" in mesaj and "4096" in mesaj and "32768" in mesaj and "Context length" in mesaj
+
+
+async def test_ollama_yetenek_yedek_baglam_ve_baslatma_kontrolu() -> None:
+    def show_baglamsiz(istek: httpx.Request) -> httpx.Response:
+        if istek.url.path == "/api/version":
+            return httpx.Response(200, json={"version": "0.40.0"})
+        if istek.url.path == "/api/show":
+            return httpx.Response(200, json={"capabilities": ["tools"], "model_info": {}})
+        return httpx.Response(404)
+
+    o = ol.Ollama(
+        lambda: "http://127.0.0.1:11435",
+        lambda: 32768,
+        transport=httpx.MockTransport(show_baglamsiz),
+    )
+    await o.detay("bos-baglam")
+    assert o.yetenekler["bos-baglam"]["baglam"] == 32768
+
+    def kapali(_istek: httpx.Request) -> httpx.Response:
+        raise httpx.ConnectError("kapali")
+
+    o2 = ol.Ollama(
+        lambda: "http://127.0.0.1:11435",
+        lambda: 32768,
+        transport=httpx.MockTransport(kapali),
+    )
+    cagrildi = False
+
+    async def sahte_baslat() -> dict:
+        nonlocal cagrildi
+        cagrildi = True
+        return {}
+
+    o2.baslat = sahte_baslat  # type: ignore[method-assign]
+    yet = await o2.yetenek("m", baslat=False)
+    assert not cagrildi and yet["baglam"] == 32768
+
+
+async def test_api_ollama_model_yetenegi_onbellek_bosken_8192ye_dusmez(
+    tmp_path, skill_klasoru, llm_dizin, sunucu, monkeypatch
+) -> None:
+    from app.api import uygulama_olustur
+    from app.services.ayarlar import AyarDeposu
+    from app.services.skiller import SkillDeposu
+    from app.services.yerel_llm import YerelLLM
+
+    def fabrika(**kw) -> YerelLLM:
+        return YerelLLM(transport=httpx.MockTransport(sunucu), **kw)
+
+    def kur(veri_ad: str, transport: httpx.MockTransport):
+        v = tmp_path / veri_ad
+        v.mkdir()
+        depo = SkillDeposu(v, [("claude", skill_klasoru), ("uygulama", v / "skills")])
+        uyg = uygulama_olustur(v, fabrika, depo, ollama_transport=transport, gecit=False)
+        AyarDeposu(v).guncelle(
+            {
+                "llm_dizin": str(llm_dizin),
+                "saglayici": "ollama",
+                "ollama_model": "lfm3:1.7b",
+                "baglam_token": 32768,
+                "dusunme": "derin",
+            }
+        )
+        return uyg
+
+    # Durum A: Ollama kapaliyken bile baglam 8192'ye kirpilmaz
+    def kapali(_istek: httpx.Request) -> httpx.Response:
+        raise httpx.ConnectError("kapali")
+
+    uyg_a = kur("v_a", httpx.MockTransport(kapali))
+    async with httpx.AsyncClient(
+        transport=httpx.ASGITransport(app=uyg_a),
+        base_url="http://127.0.0.1",
+        headers={"X-YAS-Oturum": uyg_a.state.oturum_anahtari},
+    ) as c:
+        r = await c.get("/api/model/yetenek")
+        assert r.status_code == 200 and r.json()["baglam"] == 32768
+
+    # Durum B: Sahte Ollama acikken /api/show onbellege alinir: baglam 32768, dusunme True
+    kayit: list = []
+    uyg_b = kur("v_b", _sahte_ollama(kayit))
+    proje = tmp_path / "proje"
+    proje.mkdir()
+    async with httpx.AsyncClient(
+        transport=httpx.ASGITransport(app=uyg_b),
+        base_url="http://127.0.0.1",
+        headers={"X-YAS-Oturum": uyg_b.state.oturum_anahtari},
+    ) as c:
+        r = await c.get("/api/model/yetenek")
+        d = r.json()
+        assert r.status_code == 200 and d["baglam"] == 32768 and d["dusunme"] is True
+
+        # Durum D: dusunme="derin" iken POST /api/gorevler on kontrolu gecer;
+        # baglam_token degisince ollama.durdur() cagrilir
+        await c.post("/api/projeler", json={"yol": str(proje), "ad": "p"})
+        gorev = await c.post("/api/gorevler", json={"hedef": "selam"})
+        assert gorev.status_code == 200
+
+        # ayar_yaz icinde ollama.durdur() cagrisini dogrula
+        durdur_sayisi = 0
+        from app.services.ollama import Ollama
+
+        gercek_durdur = Ollama.durdur
+
+        def casus_durdur(self):
+            nonlocal durdur_sayisi
+            durdur_sayisi += 1
+            gercek_durdur(self)
+
+        monkeypatch.setattr(Ollama, "durdur", casus_durdur)
+        ayar_r = await c.put("/api/ayarlar", json={"baglam_token": 16384})
+        assert ayar_r.status_code == 200 and durdur_sayisi == 1
+
+    # Durum C: Modelin kendi siniri 4096 ise gercek sinira saygi duyulur
+    def kucuk_model(istek: httpx.Request) -> httpx.Response:
+        if istek.url.path == "/api/version":
+            return httpx.Response(200, json={"version": "0.40.0"})
+        if istek.url.path == "/api/show":
+            return httpx.Response(
+                200,
+                json={"capabilities": ["tools"], "model_info": {"x.context_length": 4096}},
+            )
+        return httpx.Response(404)
+
+    uyg_c = kur("v_c", httpx.MockTransport(kucuk_model))
+    async with httpx.AsyncClient(
+        transport=httpx.ASGITransport(app=uyg_c),
+        base_url="http://127.0.0.1",
+        headers={"X-YAS-Oturum": uyg_c.state.oturum_anahtari},
+    ) as c:
+        r = await c.get("/api/model/yetenek")
+        assert r.status_code == 200 and r.json()["baglam"] == 4096

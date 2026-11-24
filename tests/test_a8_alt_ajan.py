@@ -237,7 +237,7 @@ def test_cli_uygulayici_alt_ajani_abonelik_cli_ile_calistirir(tmp_path) -> None:
     runner.cli_tam_yetki = lambda: True
     cagrilar: list = []
 
-    async def sahte_cli(saglayici, mesaj, klasor, *, oturum, tam_yetki, model, canli):
+    async def sahte_cli(saglayici, mesaj, klasor, *, oturum, tam_yetki, model, canli, izin=None):
         cagrilar.append((saglayici, klasor, tam_yetki, model, "a.txt yaz" in mesaj))
         return CliSonuc(durum="basarili", ozet="a.txt yazildi", maliyet_usd=0.0)
 
@@ -433,7 +433,7 @@ def test_cli_uygulayici_git_farki_dogrulama_ve_oturum_devami(tmp_path) -> None:
     runner.cli_tam_yetki = lambda: False
     gelen: list = []
 
-    async def sahte_cli(saglayici, mesaj, klasor, *, oturum, tam_yetki, model, canli):
+    async def sahte_cli(saglayici, mesaj, klasor, *, oturum, tam_yetki, model, canli, izin=None):
         gelen.append(oturum)
         if "yaz" in mesaj:
             (klasor / "yeni.txt").write_text("x", encoding="utf-8")

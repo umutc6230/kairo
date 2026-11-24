@@ -69,7 +69,7 @@ def durum() -> dict:
 
 def komut_kur(
     saglayici: str, mesaj: str, klasor: Path, *, oturum: str = "", tam_yetki: bool = False,
-    ek_sistem: str = "", model: str = "",
+    ek_sistem: str = "", model: str = "", izin_koprusu: bool = False,
 ) -> list[str]:  # fmt: skip
     if saglayici == "claude":
         exe = claude_yolu()
@@ -77,6 +77,10 @@ def komut_kur(
             raise RuntimeError("Claude Code CLI bulunamadi (npm i -g @anthropic-ai/claude-code).")
         k = [exe, "-p", mesaj, "--output-format", "stream-json", "--verbose",
              "--permission-mode", "bypassPermissions" if tam_yetki else "acceptEdits"]  # fmt: skip
+        if izin_koprusu and not tam_yetki:  # headless izin sorusu Kairo onay kartina gider
+            from app.agent import cc_izin
+
+            k += ["--settings", cc_izin.ayar_json()]
         if ek_sistem:
             k += ["--append-system-prompt", ek_sistem]
         if oturum:
@@ -185,14 +189,22 @@ def olay_isle(saglayici: str, e: dict, s: CliSonuc) -> None:
 async def calistir(
     saglayici: str, mesaj: str, klasor: Path, *, oturum: str = "", tam_yetki: bool = False,
     ek_sistem: str = "", model: str = "", canli: list[str] | None = None,
+    izin: dict[str, str] | None = None,
 ) -> CliSonuc:  # fmt: skip
-    """CLI'yi calistirir; ilerleme `canli` listesine akar. Iptal edilirse surec agaci oldurulur."""
+    """CLI'yi calistirir; ilerleme `canli` listesine akar. Iptal edilirse surec agaci oldurulur.
+    izin: {url, anahtar, baglam} verilirse Claude Code izinleri Kairo onay motoruna sorulur."""
     s = CliSonuc(log=canli if canli is not None else [])
     komut = komut_kur(saglayici, mesaj, klasor, oturum=oturum, tam_yetki=tam_yetki,
-                      ek_sistem=ek_sistem, model=model)  # fmt: skip
+                      ek_sistem=ek_sistem, model=model, izin_koprusu=bool(izin))  # fmt: skip
+    ortam = ortam_allowlist()
+    if izin:
+        from app.agent import cc_izin
+
+        ortam |= {cc_izin.URL_ORTAM: izin["url"], cc_izin.ANAHTAR_ORTAM: izin["anahtar"],
+                  cc_izin.BAGLAM_ORTAM: izin.get("baglam", "")}  # fmt: skip
     klasor.mkdir(parents=True, exist_ok=True)
     surec = await asyncio.create_subprocess_exec(
-        *komut, cwd=str(klasor), env=ortam_allowlist(), stdin=subprocess.DEVNULL,
+        *komut, cwd=str(klasor), env=ortam, stdin=subprocess.DEVNULL,
         stdout=subprocess.PIPE, stderr=subprocess.PIPE, limit=8 * 1024 * 1024,
         creationflags=subprocess.CREATE_NO_WINDOW if sys.platform == "win32" else 0,
     )  # fmt: skip

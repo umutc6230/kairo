@@ -7,6 +7,7 @@ Tek istemci (YerelLLM'in OpenAI uyumlu akisi) hepsini karsilar; model kimligi
 
 from __future__ import annotations
 
+import ipaddress
 import os
 import time
 from pathlib import Path
@@ -16,6 +17,7 @@ from urllib.parse import urlsplit
 import httpx
 from loguru import logger
 
+from app.agent.policy import yerel_host_mu
 from app.services import dpapi
 from app.services.depo import json_oku, json_yaz
 from app.services.openrouter import ONBELLEK_SN, maskele
@@ -69,12 +71,39 @@ def hata_mesaji(ad: str, durum: int, govde: str) -> SaglayiciHatasi:
     )
 
 
+_REASONING_ONEK: dict[str, tuple[str, ...]] = {
+    "openai": ("o1", "o3", "o4", "gpt-5"),
+    "xai": ("grok-3-mini", "grok-4"),
+    "gemini": ("gemini-2.5", "gemini-3"),
+    "deepseek": ("deepseek-reasoner", "r1"),
+}
+_REASONING_ESLE = {"dusuk": "low", "dengeli": "medium", "derin": "high"}
+
+
+def _reasoning_destekli(sid: str, model: str) -> bool:
+    m = (model or "").strip().lower()
+    if not m:
+        return False
+    onekler = _REASONING_ONEK.get(sid, ())
+    return any(o in m for o in onekler) or "thinking" in m
+
+
 class UyumluLLM(YerelLLM):
     """Sunucu sureci yok; govdeye yalniz standart OpenAI alanlari gider."""
 
-    def __init__(self, ad: str, adres: str, anahtar: str, model: str, *, transport: Any = None):
+    def __init__(
+        self,
+        ad: str,
+        adres: str,
+        anahtar: str,
+        model: str,
+        *,
+        sid: str = "",
+        transport: Any = None,
+    ):
         super().__init__(adres=adres, model=model, transport=transport, cokunce_kapat=False)
         self.ad = ad
+        self.sid = sid
         if anahtar:
             self._istemci.headers["Authorization"] = f"Bearer {anahtar}"
 
@@ -97,19 +126,37 @@ class UyumluLLM(YerelLLM):
         govde = super()._govde(mesajlar, seviye, max_tokens, **ek)
         govde.pop("chat_template_kwargs", None)
         govde.pop("thinking_budget_tokens", None)
-        # shortcut: dusunme seviyesi gonderilmez (reasoning_effort'u reddeden saglayici/modeller
-        # var); modelin varsayilani kullanilir. Model basina destek bilgisi gelince ac.
+        eff = _REASONING_ESLE.get(str(seviye or "").strip().lower())
+        if eff and _reasoning_destekli(self.sid, self.model):
+            govde["reasoning_effort"] = eff
         return govde
 
     def _hata_firlat(self, durum: int, govde: str) -> None:  # type: ignore[override]
         raise hata_mesaji(self.ad, durum, govde)
 
 
-def _ozel_adres_dogrula(adres: str) -> str:
+def _ozel_adres_dogrula(adres: str, sid: str = "ozel") -> str:
     adres = adres.strip().rstrip("/")
     u = urlsplit(adres)
-    if u.scheme not in ("http", "https") or not u.netloc or u.username or u.password:
+    if (
+        u.scheme not in ("http", "https")
+        or not u.netloc
+        or u.username
+        or u.password
+        or u.query
+        or u.fragment
+    ):
         raise SaglayiciHatasi("Base URL http(s)://alan/... biçiminde olmalı.")
+    host = (u.hostname or "").strip().lower()
+    if sid == "lmstudio" and not yerel_host_mu(host):
+        raise SaglayiciHatasi("LM Studio adresi yalnızca yerel (127.0.0.1 / localhost) olabilir.")
+    if sid == "ozel":
+        try:
+            ip = ipaddress.ip_address(host)
+            if ip.is_link_local or ip.is_unspecified or ip.is_multicast:
+                raise SaglayiciHatasi("Bu IP adresine bağlanılamaz.")
+        except ValueError:
+            pass
     return adres
 
 
@@ -166,7 +213,7 @@ class SaglayiciDeposu:
         if adres or sid == "ozel":
             if sid not in ("ozel", "lmstudio"):
                 raise SaglayiciHatasi("Bu sağlayıcının adresi değiştirilemez.")
-            g["adres"] = _ozel_adres_dogrula(adres)
+            g["adres"] = _ozel_adres_dogrula(adres, sid)
         d[sid] = g
         json_yaz(self.yol, d)
         return self.durum()
@@ -234,7 +281,7 @@ class SaglayiciDeposu:
         if p is None:
             raise SaglayiciHatasi(f"Model kimliği <sağlayıcı>:<model> olmalı: {model}")
         ad, adres, a = self._hazir(p[0])
-        return UyumluLLM(ad, adres, a, p[1], transport=self.transport)
+        return UyumluLLM(ad, adres, a, p[1], sid=p[0], transport=self.transport)
 
     async def test(self, model: str) -> dict:
         """Uygulamanin gercek bicimiyle (arac tanimli) kisa istek."""

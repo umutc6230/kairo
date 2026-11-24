@@ -107,8 +107,28 @@ function altOturumKarti(o, kap) {
   return kart;
 }
 
+export async function editorBaglamYenile() {
+  const cip = $("#editor-baglam-cip");
+  if (!cip) return;
+  try {
+    const b = await api("/api/editor/baglam");
+    if (!b?.var || !b.dosya) { cip.hidden = true; cip.innerHTML = ""; return; }
+    const ad = String(b.dosya).split(/[\\/]/).pop() || b.dosya;
+    const aralik = `L${b.satir_baslangic || 1}-L${b.satir_bitis || 1}`;
+    cip.innerHTML = `<span class="eb-kaynak">${kacir(b.kaynak || "vscode")}</span><span class="eb-dosya" title="${kacir(b.dosya)}">${kacir(ad)} (${kacir(aralik)})</span><button type="button" class="eb-kapat" title="Editör bağlamını kaldır" aria-label="Editör bağlamını kaldır">×</button>`;
+    cip.querySelector(".eb-kapat").onclick = async () => {
+      try { await api("/api/editor/baglam", { method: "DELETE" }); } catch { /* sessiz */ }
+      cip.hidden = true;
+      cip.innerHTML = "";
+    };
+    cip.hidden = false;
+  } catch { /* sessiz */ }
+}
+
 export function sohbetKur(cb) {
   geriCagri = cb;
+  editorBaglamYenile();
+  window.addEventListener("focus", editorBaglamYenile);
   document.addEventListener("dikte-gonder", () => gonder());
   document.addEventListener("kart-yenile", (e) => {
     const istem = (e.detail?.istem || "").trim();

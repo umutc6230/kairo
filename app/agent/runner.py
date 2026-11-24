@@ -647,6 +647,21 @@ class AgentRunner:
         # "cli:<saglayici>" modelli gorevler abonelik CLI'ina gider; tam yetki ayarini api baglar
         self.cli_tam_yetki: Callable[[], bool] = lambda: False
         self.cli_calistir = cli_ajan.calistir  # testte sahte calistirici takilir
+        # Claude Code izin koprusu {url, anahtar, baglam}; api baglar (cc_izin)
+        self.cli_izin: Callable[[str], dict | None] = lambda _baglam: None
+        # Gizli proje / gunluk butce yonlendiricisi (api baglar):
+        # (istenen, proje_id) -> (secilen, uyari)
+        self.model_denetle: Callable[[str, str], tuple[str, str | None]] | None = None
+
+    def _etkin_model(self, run: Run, istenen: str) -> tuple[str, bool]:
+        if self.model_denetle is None:
+            return istenen, False
+        secilen, uyari = self.model_denetle(istenen, run.proje_id)
+        if uyari:
+            if uyari not in run.guncellemeler:
+                run.guncellemeler.append(uyari)
+            return secilen, True
+        return istenen, False
 
     # ---------------------------------------------------------------- kontrol
     def calisiyor_mu(self, run_id: str) -> bool:
@@ -971,8 +986,13 @@ class AgentRunner:
         bas = time.monotonic() - run.kullanim.sure_sn
         try:
             if run.model.startswith(CLI_ONEK):
-                await self._cli_ile_calistir(run)
-                return
+                secilen, yonlendi = self._etkin_model(run, run.model)
+                if yonlendi and not secilen.startswith(CLI_ONEK):
+                    run.model = secilen
+                    run.model_sabit = True
+                else:
+                    await self._cli_ile_calistir(run)
+                    return
             # Arac baglami MCP sunucularini baslatabilir (soguk acilis dakikalar surebilir):
             # olay dongusunu kilitlememek icin is parcaciginda hazirlanir
             jeton = AKTIF_RUN.set(run_id)  # koordinasyon: baglam bu gorev adina kaydolur
@@ -1245,6 +1265,7 @@ class AgentRunner:
             s = await self.cli_calistir(
                 saglayici, mesaj, Path(kok), oturum=oturum, tam_yetki=self.cli_tam_yetki(),
                 model=model[0] if model else "", canli=run.guncellemeler,
+                izin=self.cli_izin(run.id),
             )  # fmt: skip
         except RuntimeError as e:  # CLI kurulu degil
             run.durum, run.hata = RunDurum.basarisiz, str(e)
@@ -1363,7 +1384,8 @@ class AgentRunner:
                 # shortcut: baglam butcesi ve yetenek hala aktif modele gore; modeller cok
                 # farkliysa self.yetenek(run.model) ile genislet
                 ozel = (run.ajan_id or run.model_sabit) and run.model
-                baglanti = self.llm(run.model) if ozel else self.llm()
+                secilen, yonlendi = self._etkin_model(run, run.model if ozel else "")
+                baglanti = self.llm(secilen) if ((ozel or yonlendi) and secilen) else self.llm()
                 async with kilit, baglanti as llm:
                     with span("kairo.model", run=run.id, model=getattr(llm, "model", "")) as iz:
                         secim = await llm.sohbet(

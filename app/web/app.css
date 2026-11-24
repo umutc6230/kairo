@@ -1274,3 +1274,8 @@ a.sp-satir { text-decoration: none; }
 .maliyet-tablo th, .maliyet-tablo td { text-align: left; padding: 6px 8px; border-bottom: 1px solid var(--cizgi); }
 .maliyet-tablo th { color: var(--soluk); font-weight: 500; }
 .maliyet-tablo td.sayi { text-align: right; font-variant-numeric: tabular-nums; }
+.editor-baglam-cip { display: inline-flex; align-items: center; gap: 6px; margin: 6px 8px 0; padding: 3px 8px; border: 1px solid var(--cizgi); border-radius: 999px; background: var(--yuzey); color: var(--metin); font-size: 12px; max-width: calc(100% - 16px); }
+.editor-baglam-cip .eb-kaynak { color: var(--vurgu); font-weight: 600; text-transform: uppercase; font-size: 10.5px; }
+.editor-baglam-cip .eb-dosya { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.editor-baglam-cip .eb-kapat { background: none; border: 0; color: var(--soluk); cursor: pointer; font-size: 14px; line-height: 1; padding: 0 2px; }
+.editor-baglam-cip .eb-kapat:hover { color: var(--metin); }
