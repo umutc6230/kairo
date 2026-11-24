@@ -1,11 +1,39 @@
 "use strict";
 
+const fs = require("fs");
+const os = require("os");
+const path = require("path");
 const vscode = require("vscode");
+
+function baglantiOku(cfg) {
+  const kok = vscode.workspace.workspaceFolders?.[0]?.uri?.fsPath || "";
+  const adaylar = [
+    String(cfg.get("baglantiDosyasi", "") || "").trim(),
+    process.env.KAIRO_VERI_DIZINI ? path.join(process.env.KAIRO_VERI_DIZINI, "baglanti.json") : "",
+    path.join(os.homedir(), "Desktop", "Portable Programlar", "Kairo", "data", "baglanti.json"),
+    kok ? path.join(kok, "data", "baglanti.json") : "",
+  ].filter(Boolean);
+  for (const yol of adaylar) {
+    try {
+      if (fs.existsSync(yol)) {
+        const d = JSON.parse(fs.readFileSync(yol, "utf8"));
+        if (d && d.url) return d;
+      }
+    } catch {
+      // okunamayan/yarim dosyayi atla
+    }
+  }
+  return null;
+}
 
 function ayarlar() {
   const cfg = vscode.workspace.getConfiguration("kairo");
-  const url = String(cfg.get("url", "http://127.0.0.1:8765") || "").replace(/\/+$/, "");
-  const anahtar = String(cfg.get("oturumAnahtari", "") || "").trim();
+  const bag = baglantiOku(cfg);
+  const urlInsp = cfg.inspect ? cfg.inspect("url") : null;
+  const ozelUrl = urlInsp && (urlInsp.globalValue || urlInsp.workspaceValue);
+  const hamUrl = ozelUrl || (bag && bag.url) || cfg.get("url", "http://127.0.0.1:8765");
+  const url = String(hamUrl || "").replace(/\/+$/, "");
+  const anahtar = String(cfg.get("oturumAnahtari", "") || (bag && bag.oturum_anahtari) || "").trim();
   return { url, anahtar };
 }
 

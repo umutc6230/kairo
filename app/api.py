@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import contextlib
+import hmac
 import json
 import os
 import platform
@@ -84,7 +85,7 @@ from app.services.oneriler import oneriler as oneriler_hesapla
 from app.services.openrouter import OpenRouterDeposu
 from app.services.oturumlar import Mesaj, OturumDeposu
 from app.services.pluginler import PluginDeposu
-from app.services.saglayicilar import SaglayiciDeposu
+from app.services.saglayicilar import SaglayiciDeposu, _reasoning_destekli
 from app.services.saglayicilar import ayir as saglayici_ayir
 from app.services.skiller import SKILL_KAYDET_ARACI, SkillDeposu
 from app.services.sohbet import VARSAYILAN_ALAN_ID, MesajIstegi, SohbetServisi, tahmini_token
@@ -102,7 +103,7 @@ from app.services.testler import (
 from app.services.uyanik import Uyanik
 from app.services.uzantilar import ONIZLEME_CSP, UzantiYoneticisi
 from app.services.yerel_llm import DUSUNME_SECENEKLERI, MODELLER, YerelLLM
-from app.services.yonlendirici import gunluk_maliyet_usd, maliyet_analitigi
+from app.services.yonlendirici import gunluk_maliyet_usd, maliyet_analitigi, model_sec
 
 UPLOAD_PARCA_BAYT = 1024 * 1024  # upload akisinda tek seferde okunan parca
 OTURUM_BASLIGI = "x-yas-oturum"  # loopback API'de oturum kimligi (A1.9)
@@ -143,6 +144,13 @@ class EditorBaglamIstegi(BaseModel):
 class ModellerIstegi(BaseModel):
     koordinator_model: str = Field(default="", max_length=200)
     uygulayici_model: str = Field(default="", max_length=200)
+
+
+class CcIzinIstegi(BaseModel):
+    arac: str = Field(max_length=200)
+    girdi: dict = {}
+    klasor: str = Field(default="", max_length=1000)
+    baglam: str = Field(default="", max_length=200)
 
 
 class OnayIstegi(BaseModel):
@@ -558,21 +566,37 @@ def uygulama_olustur(
         """model: projenin koordinator modeli (bos: aktif model). MODELLER disi = uzak."""
         a = ayarlar.oku()
         model = model or (a.aktif_model if a.saglayici in ("ollama", "uyumlu") else "")
-        if saglayici_ayir(model):
-            # shortcut: /models yetenek vermiyor; buyuk saglayicilarin sohbet modelleri arac
-            # destekler varsayilir, baglam listede varsa oradan.
+        if p := saglayici_ayir(model):
+            sid, mid = p
             m = saglayicilar.model_bilgisi(model) or {}
+            ml = mid.lower()
+            goruntu = any(
+                k in ml
+                for k in (
+                    "gpt-4o",
+                    "gpt-4.1",
+                    "gpt-5",
+                    "claude-3",
+                    "claude-4",
+                    "gemini",
+                    "vision",
+                    "-vl",
+                    "pixtral",
+                )
+            )
             return ModelYetenegi(
-                model=model, saglayici="uyumlu", araclar=True, json_cikti=True, goruntu=False,
-                baglam=int(m.get("baglam") or 32768), dusunme=False, tokenizer="tahmin",
+                model=model, saglayici="uyumlu", araclar=True, json_cikti=True, goruntu=goruntu,
+                baglam=int(m.get("baglam") or 32768), dusunme=_reasoning_destekli(sid, mid),
+                tokenizer="tahmin",
                 not_="Yetenekler varsayılan; model araç desteklemiyorsa hata verir.",
             )  # fmt: skip
         if model.startswith("ollama:"):
             y = ollama.yetenekler.get(model.removeprefix("ollama:")) or {}
+            hedef = ollama_baglam(a.baglam_token)
             return ModelYetenegi(
                 model=model, saglayici="ollama", araclar=y.get("araclar", True),
                 json_cikti=True, goruntu=y.get("goruntu", False),
-                baglam=min(y.get("baglam", 8192), ollama_baglam(a.baglam_token)),
+                baglam=min(y["baglam"], hedef) if y.get("baglam") else hedef,
                 dusunme=y.get("dusunme", False), tokenizer="tahmin",
             )  # fmt: skip
         if model and model not in MODELLER:
@@ -584,6 +608,12 @@ def uygulama_olustur(
             openrouter.eksik_modeli_getir(a.or_model)
             return uzak_yetenek(a.or_model, openrouter.liste_yolu)
         return yerel_yetenek(a.model, a.baglam_token)
+
+    async def _ollama_yetenek_hazirla(model: str = "", *, baslat: bool = True) -> None:
+        a = ayarlar.oku()
+        hedef = model or (a.aktif_model if a.saglayici == "ollama" else "")
+        if hedef.startswith("ollama:"):
+            await ollama.yetenek(hedef.removeprefix("ollama:"), baslat=baslat)
 
     def onay_durumu(onay_id: str) -> str:
         return next(
@@ -605,6 +635,8 @@ def uygulama_olustur(
     async def gorev_baglami(run: Run) -> tuple[str, list, dict]:
         secim = run.skill_adi
         ayar = ayarlar.oku()
+        hedef_model = run.model if run.model_sabit or run.ajan_id else ayar.aktif_model
+        await _ollama_yetenek_hazirla(hedef_model)
         if (
             run.calisma_koku
             and run.dal
@@ -667,6 +699,24 @@ def uygulama_olustur(
     ajan.paralel_model = lambda: ayarlar.oku().saglayici == "openrouter"
     ajan.uygulayici_model = lambda proje_id="": gorev_alani(proje_id).uygulayici_model
     ajan.cli_tam_yetki = lambda: ayarlar.oku().cli_tam_yetki
+
+    def _cc_izin(baglam: str) -> dict | None:
+        """Claude Code PreToolUse hook'unun Kairo'ya donus adresi (main.py port'u baglar)."""
+        adres = getattr(app.state, "izin_adresi", "")
+        if not adres:
+            return None
+        return {"url": adres, "anahtar": app.state.cc_izin_anahtari, "baglam": baglam}
+
+    ajan.cli_izin = _cc_izin
+    sohbet.cli_izin = lambda b: _cc_izin(f"sohbet:{b}")
+
+    def _ajan_model_denetle(istenen: str, proje_id: str) -> tuple[str, str | None]:
+        a = ayarlar.oku()
+        alan = gorev_alani(proje_id)
+        hedef = istenen or a.aktif_model
+        return model_sec(hedef, a, alan, gunluk_maliyet_usd(run_deposu, oturumlar))
+
+    ajan.model_denetle = _ajan_model_denetle
 
     def _proje_modeli(rol: str) -> dict:
         """Aktif projenin 'koordinator' / 'uygulayici' modeli; secilmemisse aktif model."""
@@ -756,7 +806,7 @@ def uygulama_olustur(
             return await cli_ajan.calistir(
                 a.saglayici, oge.metin, ajan_deposu.klasor(a), oturum=a.cli_oturum,
                 tam_yetki=ayarlar.oku().tam_yetki, ek_sistem=ek, model=a.model,
-                canli=cli_canli[a.id],
+                canli=cli_canli[a.id], izin=_cc_izin(f"ajan:{a.id}"),
             )  # fmt: skip
 
         cli_isleri[a.id] = asyncio.create_task(calis())
@@ -996,7 +1046,7 @@ def uygulama_olustur(
     sohbet.goruntu_var = lambda: model_yetenegi(sohbet.aktif_alan().koordinator_model).goruntu
     sohbet.model_baglami = lambda: model_yetenegi(sohbet.aktif_alan().koordinator_model).baglam
     sohbet.openrouter = openrouter
-    sohbet.gunluk_maliyet = lambda: gunluk_maliyet_usd(run_deposu)
+    sohbet.gunluk_maliyet = lambda: gunluk_maliyet_usd(run_deposu, oturumlar)
 
     async def _is_baslat(is_: sa.IsEmri) -> None:
         """Bir atama: ilk atamada worktree + dal olusur; sonrakiler ayni dalda onceki ozetle."""
@@ -1274,6 +1324,7 @@ def uygulama_olustur(
             raise UygulamaHatasi(
                 "GIT_YOK: Is emri ayri dalda calisir; proje bir git deposu olmali."
             )
+        await _ollama_yetenek_hazirla()
         dogrula(model_yetenegi(), araclar_gerekli=True, dusunme=ayarlar.oku().dusunme)
         baslik = istek.baslik.strip() or istek.gorev.strip().splitlines()[0][:80]
         is_ = superajan_deposu.olustur(baslik, istek.gorev, kok, istek.kaynak,
@@ -1489,6 +1540,9 @@ def uygulama_olustur(
     app.state.sohbet = sohbet
     app.state.agecidi = agecidi
     app.state.oturum_anahtari = oturum_anahtari = secrets.token_urlsafe(24)
+    # Claude Code hook'unun jetonu: YALNIZ /api/cc-izin'de gecer (karar sorar, onay veremez);
+    # ana oturum anahtari alt surec ortamina hic girmez
+    app.state.cc_izin_anahtari = cc_izin_anahtari = secrets.token_urlsafe(32)
     app.state.politika = politika
 
     @app.middleware("http")
@@ -1528,7 +1582,14 @@ def uygulama_olustur(
             and not yol.startswith("/api/webhook/")
             and yol != "/api/mcp/oauth/geri"  # tek kullanimlik state ile korunur
         )  # fmt: skip
-        if korunan and istek.headers.get(OTURUM_BASLIGI) != oturum_anahtari:
+        gelen = istek.headers.get(OTURUM_BASLIGI)
+        if (
+            yol == "/api/cc-izin"
+            and istek.method == "POST"
+            and hmac.compare_digest(gelen or "", cc_izin_anahtari)
+        ):
+            return await sonraki(istek)
+        if korunan and gelen != oturum_anahtari:
             return JSONResponse(
                 {"hata": "Oturum anahtari gecersiz; uygulamayi yeniden acin."}, status_code=403
             )
@@ -1577,6 +1638,7 @@ def uygulama_olustur(
 
     editor_baglam: dict[str, Any] = {}
     app.state.editor_baglam = editor_baglam
+    sohbet.editor_baglam = lambda: dict(editor_baglam) if editor_baglam else {}
 
     @app.post("/api/editor/baglam")
     async def editor_baglam_kaydet(istek: EditorBaglamIstegi) -> dict:
@@ -1686,6 +1748,8 @@ def uygulama_olustur(
                 await agecidi.baslat(yeni.sunucu_port)
             else:
                 await agecidi.durdur()
+        if once.baglam_token != yeni.baglam_token or once.ollama_adres != yeni.ollama_adres:
+            ollama.durdur()
         return yeni.model_dump()
 
     @app.get("/api/sunucu")
@@ -2379,6 +2443,7 @@ def uygulama_olustur(
     # ---- model yetenegi (A4.7) ----
     @app.get("/api/model/yetenek")
     async def model_yetenek() -> dict:
+        await _ollama_yetenek_hazirla(baslat=False)
         return model_yetenegi().model_dump()
 
     @app.patch("/api/oturumlar/{oturum_id}")
@@ -2827,7 +2892,7 @@ def uygulama_olustur(
 
     @app.get("/api/maliyet/durum")
     async def maliyet_durum() -> dict:
-        bugun = gunluk_maliyet_usd(run_deposu)
+        bugun = gunluk_maliyet_usd(run_deposu, oturumlar)
         sinir = ayarlar.oku().gunluk_butce_usd
         return {
             "bugun_usd": bugun,
@@ -2918,6 +2983,43 @@ def uygulama_olustur(
         politika.onaylar.kural_sil(onay_id)
         return {"kurallar": politika.onaylar.kurallar()}
 
+    @app.post("/api/cc-izin")
+    async def cc_izin_karar(istek: CcIzinIstegi) -> dict:
+        """Claude Code hook'u: izin/ret hemen; 'sor' ise onay karti acilir, karar beklenir."""
+        from app.agent import cc_izin
+        from app.agent.policy import BAGLAM, islem_anahtari, islem_hashi
+
+        iz = cc_izin.istek_cevir(istek.arac, istek.girdi)
+        kok = [str(Path(istek.klasor).resolve())] if istek.klasor else []
+        alan = CalismaAlani(ad="Claude Code", kokler=kok, mod=Mod.otomatik)
+        sonuc = politika.degerlendir(iz, alan)
+        if sonuc.karar is not Karar.sor:
+            return {"izin": sonuc.izinli, "neden": sonuc.neden}
+        h = islem_hashi(iz, sonuc.cozulmus_yol)
+        jeton = BAGLAM.set(istek.baglam)
+        try:
+            gecerli = politika.onaylar.gecerli_onay(h, islem_anahtari(iz), istek.baglam)
+            if gecerli is not None:
+                politika.onaylar.tuket(gecerli.id)
+                return {"izin": True, "neden": "Onceki onay gecerli."}
+            onay = politika.onaylar.olustur(iz, h)
+        finally:
+            BAGLAM.reset(jeton)
+        karar = "bekliyor"
+        for _ in range(cc_izin.BEKLEME_SN):
+            await asyncio.sleep(1)
+            o = next((x for x in politika.onaylar.gecmis(200) if x["id"] == onay.id), None)
+            karar = o["karar"] if o else "yok"
+            if karar != "bekliyor":
+                break
+        if karar == "onayli":
+            politika.onaylar.tuket(onay.id)
+            return {"izin": True, "neden": "Kullanici onayladi."}
+        if karar == "bekliyor":  # zaman asimi: kart acik kalmasin
+            with contextlib.suppress(YetkiYok):
+                politika.onaylar.karar_ver(onay.id, False)
+        return {"izin": False, "neden": f"Kullanici onaylamadi ({sonuc.neden})"}
+
     @app.post("/api/onaylar/{onay_id}")
     async def onay_karar(onay_id: str, istek: OnayIstegi) -> dict:
         return await _onay_islem(onay_id, istek.onayla, istek.kapsam)
@@ -2927,6 +3029,7 @@ def uygulama_olustur(
     async def gorev_baslat(istek: GorevIstegi) -> dict:
         # proje yoksa hemen Turkce hata; MCP soguk acilisi olay dongusunu kilitlemesin
         await asyncio.to_thread(ajan_baglami, istek.hedef)
+        await _ollama_yetenek_hazirla()
         dogrula(model_yetenegi(), araclar_gerekli=True, dusunme=ayarlar.oku().dusunme)
         izole_kur = None
         if istek.izole:
@@ -3428,8 +3531,10 @@ def uygulama_olustur(
     @app.post("/api/kart-komut")
     async def kart_komut(istek: KartKomutIstegi) -> dict:
         alan = sohbet.aktif_alan()
-        if politika.mod(alan) is Mod.planla:
-            raise YetkiYok("Planla modunda karttan komut calistirilmaz.")
+        if politika.mod(alan) in (Mod.planla, Mod.sohbet):
+            raise YetkiYok("Planla veya Sohbet modunda karttan komut calistirilmaz.")
+        if not alan.izinli_kokler:
+            raise YetkiYok("Etkin calisma alaninda izinli klasor yok.")
         kok = alan.izinli_kokler[0]
         sonuc = politika.degerlendir(
             Istek(arac="kart_komut", yan_etki=YanEtki.komut, yol=str(kok), komut=istek.komut,

@@ -6,6 +6,7 @@ from __future__ import annotations
 import argparse
 import contextlib
 import ctypes
+import os
 import socket
 import sys
 import threading
@@ -20,6 +21,7 @@ from app import URUN_ADI, URUN_SAHIBI, URUN_SAHIBI_GITHUB, URUN_SAHIBI_X, __vers
 from app.api import uygulama_olustur
 from app.config import OrtamAyarlari, veri_dizini
 from app.services.ayarlar import AyarDeposu
+from app.services.depo import json_yaz
 
 YARDIM_SONU = f"Urun sahibi: {URUN_SAHIBI}  |  X: {URUN_SAHIBI_X}  |  GitHub: {URUN_SAHIBI_GITHUB}"
 
@@ -28,6 +30,26 @@ def bos_port() -> int:
     with socket.socket() as s:
         s.bind(("127.0.0.1", 0))
         return s.getsockname()[1]
+
+
+def _baglanti_yaz(dizin: Path, port: int, anahtar: str) -> Path:
+    """VS Code / yerel araclarin calisan Kairo portunu ve oturum anahtarini bulmasi icin."""
+    yol = dizin / "baglanti.json"
+    json_yaz(
+        yol,
+        {
+            "url": f"http://127.0.0.1:{port}",
+            "port": port,
+            "pid": os.getpid(),
+            "oturum_anahtari": anahtar,
+        },
+    )
+    return yol
+
+
+def _baglanti_sil(yol: Path) -> None:
+    with contextlib.suppress(OSError):
+        yol.unlink(missing_ok=True)
 
 
 class PencereApi:
@@ -189,6 +211,14 @@ def main(argv: list[str] | None = None) -> int:
         from app.agent import kum
 
         return kum.main(ham[1:])
+    if ham[:1] == ["--cc-izin"]:  # Claude Code PreToolUse hook'u -> Kairo izin motoru
+        from app.agent import cc_izin
+
+        return cc_izin.main()
+    if ham[:1] == ["--kum-arac-kur"]:  # bir kerelik, yonetici: arac klasorlerine RX
+        from app.agent import kum
+
+        return kum.arac_kur()
     if ham[:1] == ["--kum-kur"]:  # bir kerelik, yonetici: surucu kokune listele izni
         from app.agent import kum
 
@@ -219,6 +249,7 @@ def main(argv: list[str] | None = None) -> int:
         sunucu.should_exit = True
 
     fastapi_app = uygulama_olustur(dizin, kapat=kapat if args.sunucu else None)
+    fastapi_app.state.izin_adresi = f"http://127.0.0.1:{port}/api/cc-izin"  # Claude Code hook'u
     sunucu = uvicorn.Server(
         uvicorn.Config(
             fastapi_app,
@@ -236,51 +267,55 @@ def main(argv: list[str] | None = None) -> int:
             break
         time.sleep(0.05)
     adres = f"http://127.0.0.1:{port}/"
+    baglanti_yolu = _baglanti_yaz(dizin, port, fastapi_app.state.oturum_anahtari)
     logger.info("{} {} acildi: {} (veri: {})", URUN_ADI, __version__, adres, dizin)
 
-    if args.sunucu:
-        logger.info("Pencere yok; yalniz yerel sunucu calisiyor. Kapatmak: Sunucu-Durdur.bat")
-        with contextlib.suppress(KeyboardInterrupt):
-            is_parcacigi.join()
-    elif args.tarayici:
-        webbrowser.open(adres)
-        with contextlib.suppress(KeyboardInterrupt):
-            is_parcacigi.join()
-    else:
-        import webview
+    try:
+        if args.sunucu:
+            logger.info("Pencere yok; yalniz yerel sunucu calisiyor. Kapatmak: Sunucu-Durdur.bat")
+            with contextlib.suppress(KeyboardInterrupt):
+                is_parcacigi.join()
+        elif args.tarayici:
+            webbrowser.open(adres)
+            with contextlib.suppress(KeyboardInterrupt):
+                is_parcacigi.join()
+        else:
+            import webview
 
-        gorev_cubugu_kimligi()
-        api = PencereApi()
-        genislik, yukseklik = pencere_boyutu(webview.screens)
-        api._pencere = webview.create_window(
-            URUN_ADI,
-            adres,
-            width=genislik,
-            height=yukseklik,
-            min_size=(960, 640),
-            frameless=True,
-            easy_drag=False,
-            text_select=True,  # varsayilan False: mesajda secim/kopyalama calismiyordu
-            background_color="#1f1f1e",
-            js_api=api,
-        )
-        api._pencere.events.shown += lambda: pencere_ikonu(api._pencere)
+            gorev_cubugu_kimligi()
+            api = PencereApi()
+            genislik, yukseklik = pencere_boyutu(webview.screens)
+            api._pencere = webview.create_window(
+                URUN_ADI,
+                adres,
+                width=genislik,
+                height=yukseklik,
+                min_size=(960, 640),
+                frameless=True,
+                easy_drag=False,
+                text_select=True,  # varsayilan False: mesajda secim/kopyalama calismiyordu
+                background_color="#1f1f1e",
+                js_api=api,
+            )
+            api._pencere.events.shown += lambda: pencere_ikonu(api._pencere)
 
-        def one_getir() -> None:  # genel kisayol: pencere one gelsin
-            api._pencere.restore()
-            api._pencere.show()
-            with contextlib.suppress(Exception):
-                api._pencere.native.Invoke(
-                    __import__("System").Action(api._pencere.native.Activate)
-                )
+            def one_getir() -> None:  # genel kisayol: pencere one gelsin
+                api._pencere.restore()
+                api._pencere.show()
+                with contextlib.suppress(Exception):
+                    api._pencere.native.Invoke(
+                        __import__("System").Action(api._pencere.native.Activate)
+                    )
 
-        fastapi_app.state.one_getir = one_getir
-        if AyarDeposu(dizin).oku().sistem_tepsisi:
-            from app.services.tepsi import Tepsi
+            fastapi_app.state.one_getir = one_getir
+            if AyarDeposu(dizin).oku().sistem_tepsisi:
+                from app.services.tepsi import Tepsi
 
-            tepsi = Tepsi(URUN_ADI, IKON, one_getir, api._pencere.destroy)
-            api._tepside = tepsi.baslat()
-        webview.start(private_mode=False, storage_path=str(dizin / "webview"))
+                tepsi = Tepsi(URUN_ADI, IKON, one_getir, api._pencere.destroy)
+                api._tepside = tepsi.baslat()
+            webview.start(private_mode=False, storage_path=str(dizin / "webview"))
+    finally:
+        _baglanti_sil(baglanti_yolu)
     if "tepsi" in locals():
         tepsi.kapat()
     sunucu.should_exit = True  # lifespan kapanisi: kendi baslattigimiz model sunucusunu durdurur

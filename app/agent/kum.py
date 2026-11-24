@@ -359,6 +359,60 @@ def kok_kur(proje: str) -> int:
     return 0
 
 
+TUM_PAKETLER = "S-1-15-2-1"  # ALL APPLICATION PACKAGES: Program Files'ta varsayilan olarak RX'li
+ARACLAR = ("python", "py", "node", "npx", "npm", "make", "git", "dotnet", "cargo", "go")
+
+
+def arac_klasorleri(bul=None) -> list[Path]:
+    """PATH'te bulunan gelistirici araclarinin klasorleri. Ev klasoru, onun ustleri ve surucu
+    koku ASLA donmez (genis izin verilmesin); Windows klasoru zaten erisilebilir, atlanir."""
+    import shutil
+
+    bul = bul or shutil.which
+    ev = Path.home().resolve()
+    win = Path(os.environ.get("WINDIR", "C:/Windows")).resolve()
+    sonuc: list[Path] = []
+    for ad in ARACLAR:
+        yol = bul(ad)
+        if not yol:
+            continue
+        k = Path(yol).resolve().parent
+        if k in (ev, win, Path(k.anchor)) or k in ev.parents or win in k.parents:
+            continue
+        if k not in sonuc:
+            sonuc.append(k)
+    return sonuc
+
+
+def arac_kur(calistirici=None) -> int:
+    """Bir kerelik, YONETICI olarak: arac klasorlerine kum havuzu icin okuma+calistirma izni.
+    Yalniz RX verilir (yazma yok); alt klasorlere miras yoluyla yayilir (icacls OI/CI)."""
+    import subprocess
+
+    calistir = calistirici or subprocess.run
+    hata = 0
+    for k in arac_klasorleri():
+        if ";;;AC)" in _sddl(k):  # izin zaten var (Program Files mirasi): dokunma, yonetici isteme
+            print(f"{k}: zaten hazir")
+            continue
+        r = calistir(["icacls", str(k), "/grant", f"*{TUM_PAKETLER}:(OI)(CI)(RX)"],
+                     capture_output=True, text=True)  # fmt: skip
+        print(f"{k}: {'hazir' if r.returncode == 0 else 'HATA ' + (r.stdout + r.stderr).strip()}")
+        hata |= r.returncode != 0
+    # npm/npx realpath icin surucu kokunu lstat eder: yalniz LISTELE, alt agaca YAYILMAZ
+    for kok in {Path(k.anchor) for k in arac_klasorleri()}:
+        if ";;;AC)" in _sddl(kok):
+            print(f"{kok}: zaten hazir")
+            continue
+        try:
+            _ace_ekle(kok, f"(A;;{_LISTELE:#x};;;AC)")
+            print(f"{kok}: hazir (yalniz listeleme)")
+        except OSError as e:
+            print(f"{kok}: HATA {e}")
+            hata = True
+    return 1 if hata else 0
+
+
 def main(a: list[str]) -> int:
     try:
         return calistir(Path(a[0]), Path(a[1]), a[2])

@@ -168,6 +168,14 @@ class OllamaLLM(YerelLLM):
 
     @staticmethod
     def _hata_firlat(durum: int, govde: str) -> None:
+        if durum == 400 and "exceeds the available context size" in govde.lower():
+            m = re.search(r"request\s*\((\d+)\s*tokens?\).*?\((\d+)\s*tokens?\)", govde, re.I)
+            detay = f" (istek {m.group(1)}, açık bağlam {m.group(2)} token)" if m else ""
+            raise OllamaHatasi(
+                f"Ollama modeli küçük bağlamla çalışıyor{detay}. Ollama uygulamasında "
+                "Ayarlar > Context length değerini en az 32768 yapıp Ollama'yı yeniden başlatın "
+                "(veya Kairo'da Bağlam profilini 'Hafif' seçin)."
+            )
         mesaj = {
             404: "Model Ollama'da yok; Modeller > Ollama bölümünden indir.",
             500: f"Ollama hata döndü: {govde[:300]}",
@@ -307,7 +315,7 @@ class Ollama:
         yet = j.get("capabilities") or []
         self.yetenekler[model_ad] = {
             "araclar": "tools" in yet, "goruntu": "vision" in yet,
-            "dusunme": "thinking" in yet, "baglam": int(baglam or 8192),
+            "dusunme": "thinking" in yet, "baglam": int(baglam or self.baglam()),
         }  # fmt: skip
         return {
             "ad": model_ad,
@@ -319,12 +327,24 @@ class Ollama:
             "degisim": j.get("modified_at", ""),
         }
 
-    async def yetenek(self, model_ad: str) -> dict:
+    async def yetenek(self, model_ad: str, *, baslat: bool = True) -> dict:
         if model_ad not in self.yetenekler:
+            if not baslat and not await self.surum():
+                return {
+                    "araclar": True,
+                    "goruntu": False,
+                    "dusunme": False,
+                    "baglam": self.baglam(),
+                }
             try:
                 await self.detay(model_ad)
             except OllamaHatasi:
-                return {"araclar": True, "goruntu": False, "dusunme": False, "baglam": 8192}
+                return {
+                    "araclar": True,
+                    "goruntu": False,
+                    "dusunme": False,
+                    "baglam": self.baglam(),
+                }
         return self.yetenekler[model_ad]
 
     async def sil(self, model_ad: str) -> dict:

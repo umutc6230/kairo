@@ -1954,5 +1954,11 @@
  "Uygulayıcı modeli <code>cli:claude</code> / <code>cli:codex</code> olan projelerde CLI komutları sormadan çalıştırır. Kapalıyken yalnız dosya düzenler. Kairo'nun Tam yetki ayarından ayrıdır.": "In projects whose implementer model is <code>cli:claude</code> / <code>cli:codex</code>, the CLI runs commands without asking. When off it only edits files. Separate from Kairo's Full access setting.",
  "CLI uygulayıcısına tam yetki verilsin mi?": "Give the CLI implementer full access?",
  "Claude Code / Codex, proje klasöründe komutları sana sormadan çalıştıracak. Kairo'nun güvenlik kontrolleri bu CLI'ların içinde çalışmaz.": "Claude Code / Codex will run commands in the project folder without asking you. Kairo's safety checks do not run inside these CLIs.",
- "Bu mini uygulama modeli şu istemle yeniden çağırmak istiyor:": "This mini app wants to call the model again with this prompt:"
+ "Bu mini uygulama modeli şu istemle yeniden çağırmak istiyor:": "This mini app wants to call the model again with this prompt:",
+ "Claude Code izin istiyor": "Claude Code is asking for permission",
+ "Claude Code onay istiyor": "Claude Code needs approval",
+ "Bu oturumda hep izin ver": "Always allow in this session",
+ "İzin ver": "Allow",
+ "Editör bağlamını kaldır": "Clear editor context",
+ "Örn: Her zaman Türkçe cevap ver.\n@~/Documents/brain/BRAIN-POLICY.md": "E.g. Always answer in English.\n@~/Documents/brain/BRAIN-POLICY.md"
 }

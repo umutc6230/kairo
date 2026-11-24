@@ -24,8 +24,8 @@ def bulut_model_mi(model: str) -> bool:
     return not m.startswith(("ollama:", "lmstudio:"))
 
 
-def gunluk_maliyet_usd(run_deposu) -> float:
-    """Bugun baslatilan gorevlerin toplam maliyeti (USD)."""
+def gunluk_maliyet_usd(run_deposu: Any, oturum_deposu: Any = None) -> float:
+    """Bugun baslatilan gorevlerin ve sohbet mesajlarinin toplam maliyeti (USD)."""
     bugun = datetime.now().date().isoformat()
     toplam = 0.0
     for r in run_deposu.liste():
@@ -33,7 +33,36 @@ def gunluk_maliyet_usd(run_deposu) -> float:
             kullanim = getattr(r, "kullanim", None)
             if kullanim is not None:
                 toplam += float(getattr(kullanim, "maliyet_usd", 0.0) or 0.0)
+    if oturum_deposu is not None:
+        for o in oturum_deposu.liste():
+            if not str(o.get("guncelleme", "")).startswith(bugun):
+                continue
+            try:
+                ot = oturum_deposu.getir(o["id"])
+            except Exception:  # noqa: BLE001 - silinmis/bozuk oturum toplami bozmasin
+                continue
+            for m in getattr(ot, "mesajlar", []):
+                if getattr(m, "rol", "") == "asistan" and str(getattr(m, "zaman", "")).startswith(
+                    bugun
+                ):
+                    toplam += float(
+                        (getattr(m, "istatistik", None) or {}).get("maliyet_usd") or 0.0
+                    )
     return round(toplam, 6)
+
+
+def yerel_yedek_model(ayar: KullaniciAyarlari) -> str:
+    """Gizli proje veya butce asiminda kullanilacak yerel model (GGUF, Ollama veya LM Studio)."""
+    sag = getattr(ayar, "saglayici", "yerel")
+    ollama_m = str(getattr(ayar, "ollama_model", "") or "").strip()
+    uyumlu_m = str(getattr(ayar, "uyumlu_model", "") or "").strip()
+    if sag == "ollama" and ollama_m:
+        return f"ollama:{ollama_m}"
+    if sag == "uyumlu" and uyumlu_m.startswith("lmstudio:"):
+        return uyumlu_m
+    if not getattr(ayar, "model", "") and ollama_m:
+        return f"ollama:{ollama_m}"
+    return ayar.model
 
 
 def model_sec(
@@ -43,11 +72,12 @@ def model_sec(
     bugun_usd: float = 0.0,
 ) -> tuple[str, str | None]:
     """Gizlilik ve gunluk butce kurallarina gore etkin modeli ve varsa uyariyi doner."""
+    yerel = yerel_yedek_model(ayar)
     if alan is not None and getattr(alan, "gizli_proje", False) and bulut_model_mi(istenen_model):
         return (
-            ayar.model,
+            yerel,
             f"Gizli proje kurali: bulut modeli ({istenen_model}) yerine "
-            f"yerel model ({ayar.model}) kullaniliyor.",
+            f"yerel model ({yerel}) kullaniliyor.",
         )
     if (
         ayar.gunluk_butce_usd > 0
@@ -55,9 +85,9 @@ def model_sec(
         and bulut_model_mi(istenen_model)
     ):
         return (
-            ayar.model,
+            yerel,
             f"Gunluk butce siniri (${ayar.gunluk_butce_usd:.2f}, harcanan ${bugun_usd:.2f}) "
-            f"asildi: yerel model ({ayar.model}) kullaniliyor.",
+            f"asildi: yerel model ({yerel}) kullaniliyor.",
         )
     return istenen_model, None
 

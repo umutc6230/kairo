@@ -149,6 +149,32 @@ TEHLIKELI_KOMUT = re.compile(
 )
 
 
+# Gelistirici komutlari (Claude Code allowlist'i gibi): guvenilir projede otomatik modda onaysiz.
+# Yalniz TEK komut: zincir/boru/yonlendirme/alt kabuk varsa eslesmez ve onay sorulur.
+# shortcut: test/derleme projedeki kodu calistirir; proje kodu zaten ajanin yazdigi koddur
+# (guvenilir proje + otomatik mod kosulu bu yuzden), daha siki ihtiyacta kum havuzu acilir.
+_KABUK_OZEL = re.compile(r"[;&|<>`\r\n%]|\$\(|\$\{")
+GELISTIRICI_KOMUT = re.compile(
+    r"^\s*(?:"
+    r"(?:python3?|py)\s+-m\s+(?:pytest|unittest|mypy|ruff|compileall)"
+    r"|pytest|ruff\s+(?:check|format)|mypy|tsc|eslint|vitest|jest"
+    r"|npx\s+(?:tsc|eslint|vitest|jest|prettier\s+--check)"
+    r"|(?:npm|pnpm|yarn)\s+(?:test|run\s+(?:test|build|lint|typecheck|check))"
+    r"|node\s+--test"
+    r"|dotnet\s+(?:build|test)|cargo\s+(?:build|test|check|clippy)"
+    r"|go\s+(?:build|test|vet)"
+    r"|git\s+(?:status|diff|log|show)"
+    r"|(?:ls|dir|pwd|where|which)"  # cat/type yok: hassas dosya korumasini asmasin
+    r")(?=\s|$)",
+    re.I,
+)
+
+
+def gelistirici_komutu_mu(komut: str | None) -> bool:
+    k = (komut or "").strip()
+    return bool(k) and not _KABUK_OZEL.search(k) and bool(GELISTIRICI_KOMUT.match(k))
+
+
 class Istek(BaseModel):
     """Izin sorusu. Her giris yolu (UI, CLI, SDK, MCP, alt ajan) ayni istegi uretir."""
 
@@ -604,6 +630,18 @@ class PolitikaMotoru:
                     else "Git dal/commit islemi her zaman onay ister."
                 ),
                 kural="dis_etki" if istek.yan_etki is YanEtki.dis else "git_onay",
+                cozulmus_yol=yol_metni,
+            )
+        if (
+            mod is Mod.otomatik
+            and istek.yan_etki is YanEtki.komut
+            and alan.guven is Guven.guvenilir
+            and gelistirici_komutu_mu(istek.komut)
+        ):
+            return Sonuc(
+                karar=Karar.izin,
+                neden="Guvenilir projede test/derleme/okuma komutu: onaysiz.",
+                kural="gelistirici_komutu",
                 cozulmus_yol=yol_metni,
             )
         if mod is Mod.otomatik and istek.yan_etki is YanEtki.komut and not self.izolasyon().izole:

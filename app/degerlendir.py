@@ -147,6 +147,7 @@ def kos(studio: Any, gorev: dict, proje: Path, sure_siniri: int = KOSU_SURESI) -
     bas = time.monotonic()
     run = studio.gorev(gorev["hedef"], kabul=gorev["kabul"], max_adim=gorev["max_adim"])
     rid, mudahale, ilk_adim, son = run["id"], 0, None, run
+    onaylanan: list[str] = []  # onay kirilimi: hangi arac/komut kullaniciyi durdurdu
     durum = "zaman_asimi"
     while time.monotonic() - bas < sure_siniri:
         son = studio.durum(rid)
@@ -158,6 +159,8 @@ def kos(studio: Any, gorev: dict, proje: Path, sure_siniri: int = KOSU_SURESI) -
                 if a["durum"] == "onay_bekliyor" and a.get("onay_id"):
                     studio.onay(a["onay_id"], True)
                     mudahale += 1
+                    arg = a.get("argumanlar") or {}
+                    onaylanan.append(f"{a.get('arac')}: {str(arg.get('komut') or '')[:60]}")
             # onay ucu bekleyen gorevi kendisi surdurur; ayrica 'devam' yarisa yol acar
         elif d in (
             "karar_bekliyor",
@@ -186,6 +189,7 @@ def kos(studio: Any, gorev: dict, proje: Path, sure_siniri: int = KOSU_SURESI) -
         "kontrol_nedeni": kontrol["neden"][:600],
         "yanlis_basari_beyani": durum == "basarili" and not kontrol["basari"],
         "mudahale": mudahale + (1 if durum == "karar_bekliyor" else 0),
+        "onaylanan": onaylanan,
         "arac_hatasi": sum(1 for a in adimlar if a.get("durum") in ("hata", "reddedildi")),
         "adim": (son.get("kullanim") or {}).get("adim", len(adimlar)),
         "token": (son.get("kullanim") or {}).get("token", 0),
@@ -330,6 +334,12 @@ def main(argv: list[str]) -> int:
     p.add_argument("--sure", type=int, default=KOSU_SURESI, help="Kosu basina saniye siniri")
     p.add_argument("--sakla", action="store_true", help="Kosu klasorlerini silme (inceleme)")
     p.add_argument("--ajan", choices=["kairo", "claude-code"], default="kairo")
+    p.add_argument(
+        "--izolasyon",
+        choices=["yok", "kum"],
+        default="yok",
+        help="Kairo komutlari nerede calisir (kum: AppContainer, ag kapali)",
+    )
     p.add_argument("--cc-butce-usd", type=float, default=3.0, help="Claude Code kosu basi tavan")
     p.add_argument("--cc-model", default="", help="Claude Code modeli (bos: varsayilan)")
     args = p.parse_args(argv)
@@ -349,7 +359,7 @@ def main(argv: list[str]) -> int:
     if (KOK / "data" / "openrouter.json").exists():  # kayitli (DPAPI sifreli) anahtar
         shutil.copy2(KOK / "data" / "openrouter.json", veri_dizini() / "openrouter.json")
     gercek = AyarDeposu(KOK / "data").oku() if (KOK / "data" / "ayarlar.json").exists() else None
-    degisiklik: dict[str, Any] = {"sunucu_acik": False}
+    degisiklik: dict[str, Any] = {"sunucu_acik": False, "izolasyon": args.izolasyon}
     if gercek is not None:  # yerel model klasoru/adresi kullanicinin ayarindan
         degisiklik |= {"llm_dizin": gercek.llm_dizin, "adres": gercek.adres,
                        "otomatik_baslat": True}  # fmt: skip
