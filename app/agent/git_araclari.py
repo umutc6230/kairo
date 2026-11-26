@@ -23,8 +23,8 @@ MAX_CIKTI = 30000
 TIMEOUT = 30
 OKUMA_KOMUTLARI = {
     "status": ["status", "--porcelain=v1", "--branch"],
-    "diff": ["diff", "--no-ext-diff"],
-    "diff_staged": ["diff", "--staged", "--no-ext-diff"],
+    "diff": ["diff", "--no-ext-diff", "--no-textconv"],
+    "diff_staged": ["diff", "--staged", "--no-ext-diff", "--no-textconv"],
     "log": ["log", "--oneline", "-20"],
     "branch": ["branch", "--show-current"],
     "dallar": ["branch", "--list"],
@@ -105,7 +105,9 @@ class GitAraclari:
         if not d.get("repo"):
             return {"repo": False}
         # dock'taki diff ile ayni kapsam (git diff): satira tiklaninca ayni degisiklik gorunur
-        _, cikti = _calistir(["diff", "--numstat"], Path(d["klasor"]))
+        _, cikti = _calistir(
+            ["diff", "--no-ext-diff", "--no-textconv", "--numstat"], Path(d["klasor"])
+        )
         ekle = sil = 0
         for satir in cikti.splitlines():
             p = satir.split("\t")

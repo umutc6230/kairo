@@ -232,12 +232,20 @@ def _git_durum(kok: str) -> dict[str, str] | None:
     """Git'e gore degismis/izlenmeyen dosyalar -> icerik hashi (CLI oncesi/sonrasi farki icin).
     Hash, CLI oncesi zaten degismis dosyanin yeniden degismesini de yakalar (canli: is emri
     devaminda ayni dosyaya ekleme 'degismedi' sanilmisti). Git deposu degilse None."""
+    from app.agent import kum
+    from app.agent.dosyalar import ortam_allowlist
+
+    ortam = ortam_allowlist()
+    kum.git_komut_sertlestir(ortam)
     try:
         r = subprocess.run(
-            ["git", "status", "--porcelain", "--untracked-files=all", "-z"], cwd=kok,
-            capture_output=True, timeout=30,
+            ["git", "--no-optional-locks", "status", "--porcelain", "--untracked-files=all", "-z"],
+            cwd=kok,
+            capture_output=True,
+            timeout=30,
+            env=ortam,
             creationflags=subprocess.CREATE_NO_WINDOW if sys.platform == "win32" else 0,
-        )  # fmt: skip
+        )
     except (OSError, subprocess.SubprocessError):
         return None
     if r.returncode != 0:
@@ -685,8 +693,12 @@ class AgentRunner:
         uygulayici_model: str = "",
         proje_id: str = "",
     ) -> Run:
-        if self.yetenek is not None:  # aracsiz modelle gorev baslamaz (acik hata)
-            dogrula(self.yetenek(), araclar_gerekli=True)
+        if self.yetenek is not None and not model.startswith(CLI_ONEK):
+            hedef_m = model if (model_sabit or ajan_id) and model else ""
+            if hedef_m and self.profil_yetenegi is not None:
+                dogrula(self.profil_yetenegi(hedef_m), araclar_gerekli=True)
+            else:
+                dogrula(self.yetenek(), araclar_gerekli=True)
         if not hedef.strip():
             raise UygulamaHatasi("Gorev hedefi bos olamaz.")
         run = Run(
@@ -1320,15 +1332,24 @@ class AgentRunner:
             )
         return a
 
-    def _baglam(self, run: Run) -> int:
-        if self.profil_yetenegi and run.profil_adi and run.model_sabit and run.model:
-            return self.profil_yetenegi(run.model).baglam
+    def _hedef_model(self, run: Run) -> tuple[str, bool, bool]:
+        """Gorevin bu turda kullanacagi (model_id, ozel_mi, yonlendi_mi) bilgisini doner."""
+        ozel = bool((run.ajan_id or run.model_sabit) and run.model)
+        secilen, yonlendi = self._etkin_model(run, run.model if ozel else "")
+        return secilen, ozel, yonlendi
+
+    def _baglam(self, run: Run, hedef_model: str = "") -> int:
+        m = hedef_model or (run.model if (run.ajan_id or run.model_sabit) and run.model else "")
+        if m and not m.startswith(CLI_ONEK) and self.profil_yetenegi is not None:
+            return self.profil_yetenegi(m).baglam
         return self.yetenek().baglam if self.yetenek else VARSAYILAN_BAGLAM
 
-    def _baglami_hazirla(self, run: Run, sistem: str, semalar: list[dict]) -> bool:
+    def _baglami_hazirla(
+        self, run: Run, sistem: str, semalar: list[dict], hedef_model: str = ""
+    ) -> bool:
         """Butceyi hesaplar; gerekirse ozetler, sonra eski arac sonuclarini kisaltir.
         Hala sigmiyorsa istegi KORLEMESINE gondermez: gorev basarisiz olur (A0.6, A4.1)."""
-        baglam = self._baglam(run)
+        baglam = self._baglam(run, hedef_model)
         sabit = tahmini_token(sistem) + tahmini_token(json.dumps(semalar, ensure_ascii=False))
         # talimat + araclar buyukse cevap payi kuculur (min 1K): mesajlara en az 4K kalsin
         cevap = cevap_tokeni(baglam)
@@ -1365,9 +1386,11 @@ class AgentRunner:
     async def _model(self, run: Run, sistem: str, semalar: list[dict]) -> dict | None:
         from app.services.yerel_llm import ModelCevapHatasi, SunucuKapali
 
+        secilen, ozel, yonlendi = self._hedef_model(run)
+        hedef_baglam_modeli = secilen if (ozel or yonlendi) else ""
         sistem_metni = f"{SISTEM}\n\n{RAPOR_TALIMATI}\n\n{sistem}".strip()
         onceki_ozet = run.ozet_sayisi
-        if not self._baglami_hazirla(run, sistem_metni, semalar):
+        if not self._baglami_hazirla(run, sistem_metni, semalar, hedef_baglam_modeli):
             return None
         if run.ozet_sayisi > onceki_ozet and self.hooks is not None:
             await asyncio.to_thread(
@@ -1380,11 +1403,9 @@ class AgentRunner:
         for deneme in range(GECICI_HATA_DENEME + 1):
             try:
                 kilit = contextlib.nullcontext() if self.paralel_model() else self._kilit
-                # kalici ajanin / projenin (model_sabit) kendi modeli olabilir; digeri aktif model
-                # shortcut: baglam butcesi ve yetenek hala aktif modele gore; modeller cok
-                # farkliysa self.yetenek(run.model) ile genislet
-                ozel = (run.ajan_id or run.model_sabit) and run.model
-                secilen, yonlendi = self._etkin_model(run, run.model if ozel else "")
+                if deneme > 0:
+                    secilen, ozel, yonlendi = self._hedef_model(run)
+                    hedef_baglam_modeli = secilen if (ozel or yonlendi) else ""
                 baglanti = self.llm(secilen) if ((ozel or yonlendi) and secilen) else self.llm()
                 async with kilit, baglanti as llm:
                     with span("kairo.model", run=run.id, model=getattr(llm, "model", "")) as iz:
@@ -1392,7 +1413,8 @@ class AgentRunner:
                             gonderilen,
                             tools=semalar,
                             **({"dusunme": run.profil_effort} if run.profil_effort else {}),
-                            max_tokens=run.baglam.get("cevap") or cevap_tokeni(self._baglam(run)),
+                            max_tokens=run.baglam.get("cevap")
+                            or cevap_tokeni(self._baglam(run, hedef_baglam_modeli)),
                         )
                         run.son_model = getattr(llm, "model", "") or ""
                         kullanim = getattr(llm, "son_kullanim", None)

@@ -105,6 +105,10 @@ def komut_kur(
         istem = f"{ek_sistem}\n\n---\n{mesaj}" if ek_sistem and not oturum else mesaj
         k = [exe, "-p", istem, "--output-format", "stream-json", "--add-dir", str(klasor)]
         k += ["--dangerously-skip-permissions"] if tam_yetki else ["--mode", "accept-edits"]
+        if izin_koprusu and not tam_yetki:
+            from app.agent import cc_izin
+
+            k += ["--settings", cc_izin.ayar_json()]
         if oturum:
             k += ["--conversation", oturum]
         if model:
@@ -192,51 +196,63 @@ async def calistir(
     izin: dict[str, str] | None = None,
 ) -> CliSonuc:  # fmt: skip
     """CLI'yi calistirir; ilerleme `canli` listesine akar. Iptal edilirse surec agaci oldurulur.
-    izin: {url, anahtar, baglam} verilirse Claude Code izinleri Kairo onay motoruna sorulur."""
+    izin: {url, anahtar, baglam} verilirse CLI izinleri Kairo onay motoruna sorulur."""
+    import tempfile
+
     s = CliSonuc(log=canli if canli is not None else [])
     komut = komut_kur(saglayici, mesaj, klasor, oturum=oturum, tam_yetki=tam_yetki,
                       ek_sistem=ek_sistem, model=model, izin_koprusu=bool(izin))  # fmt: skip
     ortam = ortam_allowlist()
+    codex_gecici: tempfile.TemporaryDirectory[str] | None = None
     if izin:
         from app.agent import cc_izin
 
         ortam |= {cc_izin.URL_ORTAM: izin["url"], cc_izin.ANAHTAR_ORTAM: izin["anahtar"],
                   cc_izin.BAGLAM_ORTAM: izin.get("baglam", "")}  # fmt: skip
+        if saglayici == "codex" and not tam_yetki:
+            codex_gecici = tempfile.TemporaryDirectory(prefix="kairo-codex-izin-")
+            cc_izin.codex_home_hazirla(Path(codex_gecici.name))
+            ortam["CODEX_HOME"] = codex_gecici.name
     klasor.mkdir(parents=True, exist_ok=True)
-    surec = await asyncio.create_subprocess_exec(
-        *komut, cwd=str(klasor), env=ortam, stdin=subprocess.DEVNULL,
-        stdout=subprocess.PIPE, stderr=subprocess.PIPE, limit=8 * 1024 * 1024,
-        creationflags=subprocess.CREATE_NO_WINDOW if sys.platform == "win32" else 0,
-    )  # fmt: skip
-    hata_metni: list[str] = []
-
-    async def stderr_oku() -> None:
-        assert surec.stderr is not None
-        async for b in surec.stderr:
-            hata_metni.append(b.decode("utf-8", "replace"))
-            del hata_metni[:-40]
-
-    eh = asyncio.create_task(stderr_oku())
     try:
-        assert surec.stdout is not None
-        async with asyncio.timeout(ZAMAN_ASIMI):
-            async for b in surec.stdout:
-                try:
-                    olay_isle(saglayici, json.loads(b), s)
-                except ValueError:
-                    continue
-            await surec.wait()
-    except (asyncio.CancelledError, TimeoutError):
-        _oldur(surec.pid)
-        s.durum, s.ozet = "iptal", s.ozet or "Iptal edildi ya da zaman asimi."
-        raise
+        surec = await asyncio.create_subprocess_exec(
+            *komut, cwd=str(klasor), env=ortam, stdin=subprocess.DEVNULL,
+            stdout=subprocess.PIPE, stderr=subprocess.PIPE, limit=8 * 1024 * 1024,
+            creationflags=subprocess.CREATE_NO_WINDOW if sys.platform == "win32" else 0,
+        )  # fmt: skip
+        hata_metni: list[str] = []
+
+        async def stderr_oku() -> None:
+            assert surec.stderr is not None
+            async for b in surec.stderr:
+                hata_metni.append(b.decode("utf-8", "replace"))
+                del hata_metni[:-40]
+
+        eh = asyncio.create_task(stderr_oku())
+        try:
+            assert surec.stdout is not None
+            async with asyncio.timeout(ZAMAN_ASIMI):
+                async for b in surec.stdout:
+                    try:
+                        olay_isle(saglayici, json.loads(b), s)
+                    except ValueError:
+                        continue
+                await surec.wait()
+        except (asyncio.CancelledError, TimeoutError):
+            _oldur(surec.pid)
+            s.durum, s.ozet = "iptal", s.ozet or "Iptal edildi ya da zaman asimi."
+            raise
+        finally:
+            eh.cancel()
+        if surec.returncode and s.durum != "basarisiz" and not s.ozet:
+            s.durum = "basarisiz"
+        if s.durum == "basarisiz" and not s.ozet:
+            s.ozet = ("CLI hata verdi: " + "".join(hata_metni)[-600:]).strip()
+        return s
     finally:
-        eh.cancel()
-    if surec.returncode and s.durum != "basarisiz" and not s.ozet:
-        s.durum = "basarisiz"
-    if s.durum == "basarisiz" and not s.ozet:
-        s.ozet = ("CLI hata verdi: " + "".join(hata_metni)[-600:]).strip()
-    return s
+        if codex_gecici is not None:
+            with contextlib.suppress(OSError):
+                codex_gecici.cleanup()
 
 
 GORSEL_TURLERI = {".png": "image/png", ".jpg": "image/jpeg", ".jpeg": "image/jpeg",
