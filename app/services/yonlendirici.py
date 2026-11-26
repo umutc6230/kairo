@@ -4,7 +4,9 @@ bulut model isteklerini yerel modele yonlendirir.
 
 from __future__ import annotations
 
+import time
 from datetime import datetime, timedelta
+from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 from app.services.yerel_llm import MODELLER
@@ -12,6 +14,24 @@ from app.services.yerel_llm import MODELLER
 if TYPE_CHECKING:
     from app.agent.workspaces import CalismaAlani
     from app.services.ayarlar import KullaniciAyarlari
+
+_GUNLUK_ONBELLEK: dict[tuple[int, int], tuple[tuple[Any, ...], float]] = {}
+
+
+def _dizin_imzasi(dizin: Path | None) -> tuple[int, float]:
+    """Klasordeki JSON dosyalarinin (adet, en_son_mtime_ns) imzasi: degismediyse disk okunmaz."""
+    if dizin is None or not dizin.is_dir():
+        return (0, 0.0)
+    adet = 0
+    en_yeni = 0
+    try:
+        for g in dizin.iterdir():
+            if g.suffix == ".json" and not g.name.startswith("."):
+                adet += 1
+                en_yeni = max(en_yeni, g.stat().st_mtime_ns)
+    except OSError:
+        return (-1, time.monotonic() if "time" in globals() else 0.0)
+    return (adet, float(en_yeni))
 
 
 def bulut_model_mi(model: str) -> bool:
@@ -27,6 +47,19 @@ def bulut_model_mi(model: str) -> bool:
 def gunluk_maliyet_usd(run_deposu: Any, oturum_deposu: Any = None) -> float:
     """Bugun baslatilan gorevlerin ve sohbet mesajlarinin toplam maliyeti (USD)."""
     bugun = datetime.now().date().isoformat()
+    run_dizin = getattr(run_deposu, "dizin", None)
+    ot_dizin = getattr(oturum_deposu, "dizin", None) if oturum_deposu is not None else None
+    anahtar = (id(run_deposu), id(oturum_deposu))
+    imza: tuple[Any, ...] | None = None
+    if isinstance(run_dizin, Path) and (oturum_deposu is None or isinstance(ot_dizin, Path)):
+        r_imza = _dizin_imzasi(run_dizin)
+        o_imza = _dizin_imzasi(ot_dizin) if ot_dizin is not None else (0, 0.0)
+        if r_imza[0] >= 0 and o_imza[0] >= 0:
+            imza = (bugun, str(run_dizin), r_imza, str(ot_dizin or ""), o_imza)
+            kayitli = _GUNLUK_ONBELLEK.get(anahtar)
+            if kayitli is not None and kayitli[0] == imza:
+                return kayitli[1]
+
     toplam = 0.0
     for r in run_deposu.liste():
         if str(getattr(r, "olusturma", "")).startswith(bugun):
@@ -48,7 +81,12 @@ def gunluk_maliyet_usd(run_deposu: Any, oturum_deposu: Any = None) -> float:
                     toplam += float(
                         (getattr(m, "istatistik", None) or {}).get("maliyet_usd") or 0.0
                     )
-    return round(toplam, 6)
+    sonuc = round(toplam, 6)
+    if imza is not None:
+        if len(_GUNLUK_ONBELLEK) > 32:
+            _GUNLUK_ONBELLEK.clear()
+        _GUNLUK_ONBELLEK[anahtar] = (imza, sonuc)
+    return sonuc
 
 
 def yerel_yedek_model(ayar: KullaniciAyarlari) -> str:

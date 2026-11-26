@@ -155,16 +155,25 @@ class KumAdaptoru:
         from app.agent import kum
 
         ok = kum.destekli()
+        arac = (
+            kum.arac_durumu() if ok else {"hazir": False, "eksik_klasorler": [], "eksik_kokler": []}
+        )
+        eksik = [*arac["eksik_klasorler"], *arac["eksik_kokler"]]
+        ek_not = (
+            f" Eksik arac/kok izni ({len(eksik)}): yonetici PowerShell'de "
+            "`python -m app --kum-arac-kur` calistirin."
+            if ok and eksik
+            else ""
+        )
         return {
             "ad": self.ad,
             "izole": ok,
             "kullanilabilir": ok,
+            "araclar_hazir": arac["hazir"],
+            "eksik_izinler": eksik,
             "not": (
                 "Windows AppContainer: ag kapali, yalniz proje klasorune yazilir, kullanici "
-                "profili kapali. Kullanici klasorune kurulu araclar calismayabilir. "
-                "`dir`/PowerShell surucu kokunu okuyamazsa bir kez yonetici olarak: "
-                "Kairo.exe --kum-kur <proje klasoru>; python/node bulunamazsa bir kez yonetici "
-                "olarak: Kairo.exe --kum-arac-kur"
+                "profili kapali." + ek_not
                 if ok
                 else "Windows AppContainer yalniz Windows 8+ uzerinde var."
             ),

@@ -188,6 +188,10 @@ GIT_SERT = {
 GIT_KOMUT_SERT = {
     "core.pager": "cat",
     "core.sshCommand": "false",
+    "core.editor": "false",
+    "core.gitProxy": "false",
+    "diff.external": "",
+    "protocol.ext.allow": "never",
     "protocol.file.allow": "user",
 }
 SERT_AKTIF = False  # KumAdaptoru olusunca True: ortam_allowlist sertlestirmeyi ekler
@@ -307,9 +311,23 @@ def calistir(kok: Path, cwd: Path, komut: str) -> int:
     si.StartupInfo.hStdError = _miras(k, k.GetStdHandle(-12))
     si.lpAttributeList = ctypes.cast(liste, ctypes.c_void_p)
 
-    gecici = kok / ".kairo-kum-tmp"  # AppContainer kullanici TEMP'ine yazamaz
+    gecici = kok / ".kairo-kum-tmp"  # AppContainer kullanici TEMP ve profilini okuyamaz/yazamaz
     gecici.mkdir(exist_ok=True)
-    ortam = {**os.environ, "TEMP": str(gecici), "TMP": str(gecici)}
+    appdata = gecici / "AppData"
+    (appdata / "Roaming").mkdir(parents=True, exist_ok=True)
+    (appdata / "Local").mkdir(parents=True, exist_ok=True)
+    ortam = {
+        **os.environ,
+        "TEMP": str(gecici),
+        "TMP": str(gecici),
+        "USERPROFILE": str(gecici),
+        "HOME": str(gecici),
+        "APPDATA": str(appdata / "Roaming"),
+        "LOCALAPPDATA": str(appdata / "Local"),
+        "NPM_CONFIG_CACHE": str(gecici / "npm-cache"),
+        "DOTNET_CLI_HOME": str(gecici),
+        "DOTNET_SKIP_FIRST_TIME_EXPERIENCE": "1",
+    }
     blok = ctypes.create_unicode_buffer("\0".join(f"{a}={d}" for a, d in ortam.items()) + "\0\0")
     satir = ctypes.create_unicode_buffer(f'cmd.exe /d /s /c "{komut}"')
     pi = _PROCESS_INFORMATION()
@@ -382,6 +400,32 @@ def arac_klasorleri(bul=None) -> list[Path]:
         if k not in sonuc:
             sonuc.append(k)
     return sonuc
+
+
+def arac_durumu(bul=None) -> dict:
+    """Arac klasorleri ve surucu kokunun AppContainer okuma/listeleme ACL hazirligini doner."""
+    if not destekli():
+        return {"hazir": False, "eksik_klasorler": [], "eksik_kokler": []}
+    klasorler = arac_klasorleri(bul)
+    eksik_klasorler: list[str] = []
+    for k in klasorler:
+        try:
+            if ";;;AC)" not in _sddl(k):
+                eksik_klasorler.append(str(k))
+        except OSError:
+            eksik_klasorler.append(str(k))
+    eksik_kokler: list[str] = []
+    for kok in sorted({Path(k.anchor) for k in klasorler}):
+        try:
+            if ";;;AC)" not in _sddl(kok):
+                eksik_kokler.append(str(kok))
+        except OSError:
+            eksik_kokler.append(str(kok))
+    return {
+        "hazir": not eksik_klasorler and not eksik_kokler,
+        "eksik_klasorler": eksik_klasorler,
+        "eksik_kokler": eksik_kokler,
+    }
 
 
 def arac_kur(calistirici=None) -> int:
